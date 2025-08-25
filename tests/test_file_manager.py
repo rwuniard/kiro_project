@@ -482,3 +482,650 @@ class TestFileManagerCoverageEnhancement:
             )
             
             assert result is False
+
+
+class TestFileManagerEmptyFolderDetection:
+    """Test cases for empty folder detection functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        # Create temporary directories for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = Path(self.temp_dir) / "source"
+        self.saved_folder = Path(self.temp_dir) / "saved"
+        self.error_folder = Path(self.temp_dir) / "error"
+        
+        # Create the directories
+        self.source_folder.mkdir(parents=True)
+        self.saved_folder.mkdir(parents=True)
+        self.error_folder.mkdir(parents=True)
+        
+        # Initialize FileManager
+        self.file_manager = FileManager(
+            str(self.source_folder),
+            str(self.saved_folder),
+            str(self.error_folder)
+        )
+    
+    def teardown_method(self):
+        """Clean up test fixtures after each test method."""
+        # Remove temporary directory and all contents
+        shutil.rmtree(self.temp_dir)
+    
+    def test_is_folder_empty_truly_empty_folder(self):
+        """Test empty folder detection for a completely empty folder."""
+        empty_folder = self.source_folder / "empty"
+        empty_folder.mkdir()
+        
+        result = self.file_manager._is_folder_empty(empty_folder)
+        
+        assert result is True
+    
+    def test_is_folder_empty_folder_with_file(self):
+        """Test empty folder detection for folder containing a file."""
+        folder_with_file = self.source_folder / "with_file"
+        folder_with_file.mkdir()
+        
+        # Add a file to the folder
+        test_file = folder_with_file / "test.txt"
+        test_file.write_text("content")
+        
+        result = self.file_manager._is_folder_empty(folder_with_file)
+        
+        assert result is False
+    
+    def test_is_folder_empty_folder_with_empty_subfolders(self):
+        """Test empty folder detection for folder with only empty subfolders."""
+        folder_with_empty_subs = self.source_folder / "with_empty_subs"
+        folder_with_empty_subs.mkdir()
+        
+        # Create empty subfolders
+        (folder_with_empty_subs / "empty1").mkdir()
+        (folder_with_empty_subs / "empty2").mkdir()
+        (folder_with_empty_subs / "nested" / "empty3").mkdir(parents=True)
+        
+        result = self.file_manager._is_folder_empty(folder_with_empty_subs)
+        
+        assert result is True
+    
+    def test_is_folder_empty_folder_with_file_in_subfolder(self):
+        """Test empty folder detection for folder with file in subfolder."""
+        folder_with_nested_file = self.source_folder / "with_nested_file"
+        folder_with_nested_file.mkdir()
+        
+        # Create nested structure with file
+        nested_folder = folder_with_nested_file / "level1" / "level2"
+        nested_folder.mkdir(parents=True)
+        
+        # Add file in nested folder
+        nested_file = nested_folder / "nested.txt"
+        nested_file.write_text("nested content")
+        
+        result = self.file_manager._is_folder_empty(folder_with_nested_file)
+        
+        assert result is False
+    
+    def test_is_folder_empty_mixed_empty_and_non_empty_subfolders(self):
+        """Test empty folder detection with mix of empty and non-empty subfolders."""
+        mixed_folder = self.source_folder / "mixed"
+        mixed_folder.mkdir()
+        
+        # Create empty subfolder
+        (mixed_folder / "empty_sub").mkdir()
+        
+        # Create non-empty subfolder
+        non_empty_sub = mixed_folder / "non_empty_sub"
+        non_empty_sub.mkdir()
+        (non_empty_sub / "file.txt").write_text("content")
+        
+        result = self.file_manager._is_folder_empty(mixed_folder)
+        
+        assert result is False
+    
+    def test_is_folder_empty_nonexistent_folder(self):
+        """Test empty folder detection for non-existent folder."""
+        nonexistent_folder = self.source_folder / "nonexistent"
+        
+        result = self.file_manager._is_folder_empty(nonexistent_folder)
+        
+        assert result is False
+    
+    def test_is_folder_empty_file_instead_of_folder(self):
+        """Test empty folder detection when path points to a file."""
+        test_file = self.source_folder / "test_file.txt"
+        test_file.write_text("content")
+        
+        result = self.file_manager._is_folder_empty(test_file)
+        
+        assert result is False
+    
+    def test_is_folder_empty_permission_error(self):
+        """Test empty folder detection with permission error."""
+        test_folder = self.source_folder / "permission_test"
+        test_folder.mkdir()
+        
+        # Mock iterdir to raise PermissionError
+        with patch.object(Path, 'iterdir', side_effect=PermissionError("Access denied")):
+            result = self.file_manager._is_folder_empty(test_folder)
+            
+            assert result is False
+    
+    def test_check_folder_contents_recursive_deeply_nested_empty(self):
+        """Test recursive folder content checking with deeply nested empty structure."""
+        deep_folder = self.source_folder / "deep"
+        deep_folder.mkdir()
+        
+        # Create deeply nested empty structure
+        current = deep_folder
+        for i in range(5):
+            current = current / f"level{i}"
+            current.mkdir()
+        
+        result = self.file_manager._check_folder_contents_recursive(deep_folder)
+        
+        assert result is True
+    
+    def test_check_folder_contents_recursive_deeply_nested_with_file(self):
+        """Test recursive folder content checking with file at deep level."""
+        deep_folder = self.source_folder / "deep_with_file"
+        deep_folder.mkdir()
+        
+        # Create deeply nested structure with file at the end
+        current = deep_folder
+        for i in range(3):
+            current = current / f"level{i}"
+            current.mkdir()
+        
+        # Add file at deepest level
+        (current / "deep_file.txt").write_text("deep content")
+        
+        result = self.file_manager._check_folder_contents_recursive(deep_folder)
+        
+        assert result is False
+    
+    def test_check_folder_contents_recursive_permission_error(self):
+        """Test recursive folder content checking with permission error."""
+        test_folder = self.source_folder / "recursive_permission_test"
+        test_folder.mkdir()
+        
+        # Mock iterdir to raise PermissionError
+        with patch.object(Path, 'iterdir', side_effect=PermissionError("Access denied")):
+            result = self.file_manager._check_folder_contents_recursive(test_folder)
+            
+            assert result is False
+    
+    def test_check_folder_contents_recursive_os_error(self):
+        """Test recursive folder content checking with OS error."""
+        test_folder = self.source_folder / "recursive_os_error_test"
+        test_folder.mkdir()
+        
+        # Mock iterdir to raise OSError
+        with patch.object(Path, 'iterdir', side_effect=OSError("Disk error")):
+            result = self.file_manager._check_folder_contents_recursive(test_folder)
+            
+            assert result is False
+    
+    def test_is_folder_empty_complex_nested_structure(self):
+        """Test empty folder detection with complex nested structure."""
+        complex_folder = self.source_folder / "complex"
+        complex_folder.mkdir()
+        
+        # Create complex structure with multiple levels and empty folders
+        (complex_folder / "branch1" / "subbranch1").mkdir(parents=True)
+        (complex_folder / "branch1" / "subbranch2").mkdir(parents=True)
+        (complex_folder / "branch2" / "deep" / "deeper").mkdir(parents=True)
+        (complex_folder / "branch3").mkdir()
+        
+        # All folders are empty, so should return True
+        result = self.file_manager._is_folder_empty(complex_folder)
+        
+        assert result is True
+        
+        # Now add a file deep in the structure
+        (complex_folder / "branch2" / "deep" / "deeper" / "hidden.txt").write_text("hidden")
+        
+        # Should now return False
+        result = self.file_manager._is_folder_empty(complex_folder)
+        
+        assert result is False   
+ 
+    def test_cleanup_empty_folders_single_empty_folder(self):
+        """Test cleanup of a single empty folder after file removal."""
+        # Create nested structure with file
+        nested_folder = self.source_folder / "level1" / "level2"
+        nested_folder.mkdir(parents=True)
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal by deleting it
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should remove both level2 and level1 folders
+        assert len(removed_folders) == 2
+        
+        # Use resolved paths for comparison to handle symlinks/aliases
+        removed_paths = [Path(p).resolve() for p in removed_folders]
+        assert nested_folder.resolve() in removed_paths
+        assert nested_folder.parent.resolve() in removed_paths
+        
+        # Verify folders were actually removed
+        assert not nested_folder.exists()
+        assert not nested_folder.parent.exists()
+        
+        # Source folder should still exist
+        assert self.source_folder.exists()
+    
+    def test_cleanup_empty_folders_stops_at_non_empty_folder(self):
+        """Test cleanup stops when encountering a non-empty folder."""
+        # Create nested structure
+        level1 = self.source_folder / "level1"
+        level2 = level1 / "level2"
+        level3 = level2 / "level3"
+        level3.mkdir(parents=True)
+        
+        # Add files to different levels
+        (level1 / "keep.txt").write_text("keep this")
+        test_file = level3 / "remove.txt"
+        test_file.write_text("remove this")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should only remove level3 and level2, but not level1 (has keep.txt)
+        assert len(removed_folders) == 2
+        
+        # Use resolved paths for comparison
+        removed_paths = [Path(p).resolve() for p in removed_folders]
+        assert level3.resolve() in removed_paths
+        assert level2.resolve() in removed_paths
+        assert level1.resolve() not in removed_paths
+        
+        # Verify correct folders were removed
+        assert not level3.exists()
+        assert not level2.exists()
+        assert level1.exists()  # Should still exist because it has keep.txt
+        assert (level1 / "keep.txt").exists()
+    
+    def test_cleanup_empty_folders_stops_at_source_root(self):
+        """Test cleanup never removes the source root folder."""
+        # Create file directly in source folder
+        test_file = self.source_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should not remove any folders (source root is protected)
+        assert len(removed_folders) == 0
+        
+        # Source folder should still exist
+        assert self.source_folder.exists()
+    
+    def test_cleanup_empty_folders_with_empty_subfolders(self):
+        """Test cleanup behavior when parent folder has empty sibling folders."""
+        # Create complex nested structure
+        level1 = self.source_folder / "level1"
+        level2 = level1 / "level2"
+        level3 = level2 / "level3"
+        level3.mkdir(parents=True)
+        
+        # Create empty sibling folders
+        (level2 / "empty_sibling1").mkdir()
+        (level2 / "empty_sibling2").mkdir()
+        
+        # Add file only at deepest level
+        test_file = level3 / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should only remove level3, but not level2 (has empty siblings) or level1
+        # This is correct behavior - we don't remove folders that have existing empty subfolders
+        assert len(removed_folders) == 1
+        
+        # Use resolved paths for comparison
+        removed_paths = [Path(p).resolve() for p in removed_folders]
+        assert level3.resolve() in removed_paths
+        
+        # Verify only level3 was removed, level2 still exists with its empty siblings
+        assert not level3.exists()
+        assert level2.exists()
+        assert (level2 / "empty_sibling1").exists()
+        assert (level2 / "empty_sibling2").exists()
+    
+    def test_cleanup_empty_folders_permission_error(self):
+        """Test cleanup handles permission errors gracefully."""
+        # Create nested structure
+        nested_folder = self.source_folder / "protected" / "subfolder"
+        nested_folder.mkdir(parents=True)
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Mock rmdir to raise PermissionError on first call
+        original_rmdir = Path.rmdir
+        call_count = 0
+        
+        def mock_rmdir(self):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise PermissionError("Access denied")
+            return original_rmdir(self)
+        
+        with patch.object(Path, 'rmdir', mock_rmdir):
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should stop at first permission error
+        assert len(removed_folders) == 0
+        
+        # Folders should still exist due to permission error
+        assert nested_folder.exists()
+    
+    def test_cleanup_empty_folders_file_outside_source(self):
+        """Test cleanup handles files outside source folder safely."""
+        # Create file outside source folder
+        external_file = Path(self.temp_dir) / "external" / "file.txt"
+        external_file.parent.mkdir()
+        external_file.write_text("content")
+        
+        # Run cleanup on external file
+        removed_folders = self.file_manager.cleanup_empty_folders(str(external_file))
+        
+        # Should not remove any folders
+        assert len(removed_folders) == 0
+        
+        # External folder should still exist
+        assert external_file.parent.exists()
+    
+    def test_cleanup_empty_folders_deeply_nested_structure(self):
+        """Test cleanup with deeply nested folder structure."""
+        # Create deeply nested structure
+        current = self.source_folder
+        for i in range(5):
+            current = current / f"level{i}"
+            current.mkdir()
+        
+        # Add file at deepest level
+        test_file = current / "deep.txt"
+        test_file.write_text("deep content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should remove all 5 levels
+        assert len(removed_folders) == 5
+        
+        # Verify all nested folders were removed
+        level0 = self.source_folder / "level0"
+        assert not level0.exists()
+        
+        # Source folder should still exist
+        assert self.source_folder.exists()
+    
+    def test_cleanup_empty_folders_os_error_during_cleanup(self):
+        """Test cleanup handles OS errors during folder removal."""
+        # Create nested structure
+        nested_folder = self.source_folder / "error_test" / "subfolder"
+        nested_folder.mkdir(parents=True)
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Mock rmdir to raise OSError
+        with patch.object(Path, 'rmdir', side_effect=OSError("Disk error")):
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should handle error gracefully
+        assert len(removed_folders) == 0
+    
+    def test_is_path_under_source_valid_path(self):
+        """Test path validation for paths under source folder."""
+        nested_path = self.source_folder / "sub" / "nested"
+        nested_path.mkdir(parents=True)
+        
+        result = self.file_manager._is_path_under_source(nested_path, self.source_folder)
+        
+        assert result is True
+    
+    def test_is_path_under_source_external_path(self):
+        """Test path validation for paths outside source folder."""
+        external_path = Path(self.temp_dir) / "external"
+        external_path.mkdir()
+        
+        result = self.file_manager._is_path_under_source(external_path, self.source_folder)
+        
+        assert result is False
+    
+    def test_is_path_under_source_source_folder_itself(self):
+        """Test path validation for source folder itself."""
+        result = self.file_manager._is_path_under_source(self.source_folder, self.source_folder)
+        
+        assert result is True
+    
+    def test_cleanup_empty_folders_exception_handling(self):
+        """Test cleanup handles unexpected exceptions gracefully."""
+        nested_folder = self.source_folder / "exception_test"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Mock Path.resolve to raise an exception early in the process
+        original_resolve = Path.resolve
+        def mock_resolve(self):
+            if "exception_test" in str(self):
+                raise Exception("Unexpected error during path resolution")
+            return original_resolve(self)
+        
+        with patch.object(Path, 'resolve', side_effect=mock_resolve):
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should handle exception gracefully
+        assert len(removed_folders) == 0
+    
+    def test_cleanup_empty_folders_source_root_protection(self):
+        """Test that source root folder is never removed even if empty."""
+        # Create file directly in source root
+        test_file = self.source_folder / "root_file.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup - should not remove source root even though it's empty
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should not remove any folders (source root is protected)
+        assert len(removed_folders) == 0
+        
+        # Source folder should still exist
+        assert self.source_folder.exists()
+    
+    def test_cleanup_empty_folders_symlink_handling(self):
+        """Test cleanup handles symlinks correctly."""
+        # Create nested structure
+        nested_folder = self.source_folder / "symlink_test"
+        nested_folder.mkdir()
+        
+        # Create symlink to external file
+        external_file = Path(self.temp_dir) / "external.txt"
+        external_file.write_text("external")
+        
+        symlink_path = nested_folder / "symlink.txt"
+        try:
+            symlink_path.symlink_to(external_file)
+        except OSError:
+            # Skip test if symlinks not supported
+            pytest.skip("Symlinks not supported on this system")
+        
+        # Create regular file in same folder
+        test_file = nested_folder / "regular.txt"
+        test_file.write_text("content")
+        
+        # Remove regular file, leaving only symlink
+        test_file.unlink()
+        
+        # Run cleanup - folder should not be removed because it contains symlink
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should not remove folder because symlink is considered content
+        assert len(removed_folders) == 0
+        assert nested_folder.exists()
+        assert symlink_path.exists()
+    
+    def test_cleanup_empty_folders_concurrent_file_creation(self):
+        """Test cleanup behavior when rmdir fails due to concurrent file creation."""
+        # Create nested structure
+        nested_folder = self.source_folder / "concurrent_test"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Mock rmdir to simulate concurrent file creation (directory not empty error)
+        original_rmdir = Path.rmdir
+        def mock_rmdir(self):
+            if "concurrent_test" in str(self):
+                raise OSError("Directory not empty")  # Simulate concurrent file creation
+            return original_rmdir(self)
+        
+        with patch.object(Path, 'rmdir', mock_rmdir):
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should handle the race condition gracefully - no folders removed due to concurrent creation
+        assert len(removed_folders) == 0
+    
+    def test_cleanup_empty_folders_nested_permission_errors(self):
+        """Test cleanup with permission errors at different nesting levels."""
+        # Create deeply nested structure
+        level1 = self.source_folder / "perm1"
+        level2 = level1 / "perm2"
+        level3 = level2 / "perm3"
+        level3.mkdir(parents=True)
+        
+        test_file = level3 / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Mock rmdir to fail on level2 but succeed on level3
+        original_rmdir = Path.rmdir
+        def mock_rmdir(self):
+            if "perm2" in str(self) and "perm3" not in str(self):
+                raise PermissionError("Access denied to level2")
+            return original_rmdir(self)
+        
+        with patch.object(Path, 'rmdir', mock_rmdir):
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should only remove level3, stop at level2 due to permission error
+        assert len(removed_folders) == 1
+        cleaned_paths = [Path(p).resolve() for p in removed_folders]
+        assert level3.resolve() in cleaned_paths
+        
+        # Verify level3 was removed but level2 and level1 still exist
+        assert not level3.exists()
+        assert level2.exists()
+        assert level1.exists()
+    
+    def test_cleanup_empty_folders_very_long_path(self):
+        """Test cleanup with very long nested path structure."""
+        # Create very deeply nested structure (10 levels)
+        current = self.source_folder
+        for i in range(10):
+            current = current / f"very_long_path_level_{i:02d}"
+            current.mkdir()
+        
+        test_file = current / "deep_file.txt"
+        test_file.write_text("very deep content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should remove all 10 levels
+        assert len(removed_folders) == 10
+        
+        # Verify all levels were removed
+        check_path = self.source_folder / "very_long_path_level_00"
+        assert not check_path.exists()
+    
+    def test_cleanup_empty_folders_special_characters_in_path(self):
+        """Test cleanup with special characters in folder names."""
+        # Create folders with special characters
+        special_folder = self.source_folder / "folder with spaces" / "folder-with-dashes" / "folder_with_underscores"
+        special_folder.mkdir(parents=True)
+        
+        test_file = special_folder / "test file.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Run cleanup
+        removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+        
+        # Should remove all 3 levels with special characters
+        assert len(removed_folders) == 3
+        
+        # Verify folders were actually removed
+        assert not special_folder.exists()
+        assert not special_folder.parent.exists()
+        assert not special_folder.parent.parent.exists()
+    
+    def test_cleanup_empty_folders_readonly_folder(self):
+        """Test cleanup behavior with read-only folders."""
+        # Create nested structure
+        nested_folder = self.source_folder / "readonly_test"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("content")
+        
+        # Simulate file removal
+        test_file.unlink()
+        
+        # Make folder read-only (this might cause rmdir to fail)
+        try:
+            nested_folder.chmod(0o444)  # Read-only
+            
+            # Run cleanup
+            removed_folders = self.file_manager.cleanup_empty_folders(str(test_file))
+            
+            # Behavior depends on system - might succeed or fail
+            # Just verify it doesn't crash
+            assert isinstance(removed_folders, list)
+            
+        finally:
+            # Restore permissions for cleanup
+            try:
+                nested_folder.chmod(0o755)
+            except:
+                pass

@@ -7,6 +7,7 @@ A Python application that monitors a configurable source folder for new files, p
 - **Real-time File Monitoring**: Uses file system events to detect new files immediately
 - **Configurable Folders**: Source, saved, and error folders configurable via environment variables
 - **Folder Structure Preservation**: Maintains original directory structure when moving files
+- **Automatic Folder Cleanup**: Removes empty folders after successful file processing
 - **Comprehensive Error Handling**: Graceful error handling with detailed logging
 - **Retry Logic**: Automatic retry for transient file system errors
 - **Detailed Logging**: Both console and file logging with configurable levels
@@ -144,11 +145,60 @@ Monitoring folder: /path/to/source
 Application is running. Press Ctrl+C to stop.
 ```
 
+### Processing Output Examples
+
+When files are processed, you'll see console output and log entries:
+
+**Successful Processing with Folder Cleanup:**
+```
+Processed file: project1/data/document.txt
+2025-01-15 10:30:15 - INFO - Successfully processed file: project1/data/document.txt
+2025-01-15 10:30:15 - INFO - Cleaned up empty folder: project1/data
+2025-01-15 10:30:15 - INFO - Cleaned up empty folder: project1
+```
+
+**Processing with Cleanup Warning:**
+```
+Processed file: shared/temp/file.txt
+2025-01-15 10:30:20 - INFO - Successfully processed file: shared/temp/file.txt
+2025-01-15 10:30:20 - WARNING - Could not remove empty folder /path/to/source/shared/temp: Permission denied
+```
+
 ### File Processing Behavior
 
 - **Successful Processing**: Files are moved to the `SAVED_FOLDER` with preserved directory structure
 - **Failed Processing**: Files are moved to the `ERROR_FOLDER` with an accompanying `.log` file containing error details
 - **Directory Structure**: Original folder hierarchy is maintained in both saved and error destinations
+- **Automatic Cleanup**: Empty folders are automatically removed after successful file processing
+
+#### Folder Cleanup Details
+
+The application automatically cleans up empty folders after successfully processing files:
+
+- **Empty Folder Detection**: Checks if folders contain no files or only empty subfolders
+- **Recursive Cleanup**: Removes empty parent folders up to the source root
+- **Safety Measures**: Never removes the source root folder, even if empty
+- **Error Handling**: Gracefully handles permission errors during folder removal
+- **Logging**: All folder cleanup operations are logged at INFO level
+
+**Example Cleanup Behavior:**
+```
+Source structure before processing:
+source/
+├── project1/
+│   ├── data/
+│   │   └── file.txt
+│   └── empty_folder/
+└── project2/
+    └── archive/
+        └── old_file.txt
+
+After processing file.txt and old_file.txt:
+source/
+├── project1/
+│   └── empty_folder/  # Not removed (was already empty)
+└── # project2/ removed (became empty after processing)
+```
 
 ### Stopping the Application
 
@@ -339,6 +389,18 @@ mkdir -p /path/to/source /path/to/saved /path/to/error
 - **Large files**: The application loads files into memory for processing
 - **Many files**: Processing many files simultaneously can increase memory usage
 - **Solution**: Monitor file sizes and consider implementing streaming for large files
+
+#### 4. Folder Cleanup Issues
+- **Permission Errors**: If folder cleanup fails due to permissions, check folder ownership and access rights
+- **Folders Not Removed**: Only empty folders are removed; folders with hidden files or system files will remain
+- **Network Drives**: Folder cleanup may behave differently on network-mounted drives
+- **Check Logs**: Folder cleanup operations and any errors are logged at INFO/WARNING levels
+
+**Folder Cleanup Log Messages:**
+```
+INFO - Cleaned up empty folder: project1/data
+WARNING - Could not remove empty folder /path/to/folder: Permission denied
+```
 
 ### Getting Help
 

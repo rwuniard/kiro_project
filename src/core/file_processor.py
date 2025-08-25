@@ -52,6 +52,12 @@ class ProcessingResult:
     file_path: str
     error_message: Optional[str] = None
     processing_time: float = 0.0
+    cleaned_folders: List[str] = None
+    
+    def __post_init__(self):
+        """Initialize cleaned_folders as empty list if None."""
+        if self.cleaned_folders is None:
+            self.cleaned_folders = []
 
 
 class FileProcessor:
@@ -124,7 +130,7 @@ class FileProcessor:
             )
             
             # Move to saved folder on success with retry logic
-            self._execute_with_retry(
+            cleaned_folders = self._execute_with_retry(
                 self._move_to_saved_with_validation, 
                 "File movement to saved folder", 
                 file_path
@@ -140,13 +146,20 @@ class FileProcessor:
             relative_path = self.file_manager.get_relative_path(file_path) or os.path.basename(file_path)
             self.logger.log_info(f"Successfully processed file: {relative_path}")
             
+            # Log folder cleanup if any folders were removed
+            if cleaned_folders:
+                for folder in cleaned_folders:
+                    folder_relative = self.file_manager.get_relative_path(folder) or os.path.basename(folder)
+                    self.logger.log_info(f"Cleaned up empty folder: {folder_relative}")
+            
             # Print to screen as required
             print(f"Processed file: {relative_path}")
             
             return ProcessingResult(
                 success=True,
                 file_path=file_path,
-                processing_time=processing_time
+                processing_time=processing_time,
+                cleaned_folders=cleaned_folders
             )
             
         except Exception as e:
@@ -219,12 +232,15 @@ class FileProcessor:
         except PermissionError as e:
             raise PermissionError(f"Cannot access file: {e}")
     
-    def _move_to_saved_with_validation(self, file_path: str) -> None:
+    def _move_to_saved_with_validation(self, file_path: str) -> List[str]:
         """
-        Move file to saved folder with validation.
+        Move file to saved folder with validation and cleanup empty folders.
         
         Args:
             file_path: Path to file to move
+            
+        Returns:
+            List[str]: List of cleaned folder paths
             
         Raises:
             RuntimeError: If move operation fails
@@ -232,6 +248,10 @@ class FileProcessor:
         move_success = self.file_manager.move_to_saved(file_path)
         if not move_success:
             raise RuntimeError("Failed to move file to saved folder")
+        
+        # Cleanup empty folders after successful move
+        cleaned_folders = self.file_manager.cleanup_empty_folders(file_path)
+        return cleaned_folders
     
     def _move_to_error_with_validation(self, file_path: str) -> None:
         """

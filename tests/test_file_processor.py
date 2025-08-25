@@ -1044,3 +1044,226 @@ class TestFileProcessorAdditionalCoverage:
         
         with pytest.raises(RuntimeError, match="Failed to move file to error folder"):
             file_processor._move_to_error_with_validation("/test/file.txt")
+
+
+class TestFileProcessorFolderCleanupIntegration:
+    """Integration tests for folder cleanup functionality with file processing."""
+    
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        # Create temporary directories for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = Path(self.temp_dir) / "source"
+        self.saved_folder = Path(self.temp_dir) / "saved"
+        self.error_folder = Path(self.temp_dir) / "error"
+        
+        # Create the directories
+        self.source_folder.mkdir(parents=True)
+        self.saved_folder.mkdir(parents=True)
+        self.error_folder.mkdir(parents=True)
+        
+        # Create real services
+        self.file_manager = FileManager(
+            str(self.source_folder),
+            str(self.saved_folder),
+            str(self.error_folder)
+        )
+        self.error_handler = ErrorHandler(str(self.error_folder))
+        self.logger_service = LoggerService()
+        
+        # Create FileProcessor with real services
+        self.file_processor = FileProcessor(
+            self.file_manager,
+            self.error_handler,
+            self.logger_service
+        )
+    
+    def teardown_method(self):
+        """Clean up test fixtures after each test method."""
+        # Remove temporary directory and all contents
+        import shutil
+        shutil.rmtree(self.temp_dir)
+    
+    def test_process_file_with_folder_cleanup_single_level(self):
+        """Test file processing with folder cleanup for single level structure."""
+        # Create nested structure with file
+        nested_folder = self.source_folder / "level1"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("test content")
+        
+        # Process the file
+        with patch('builtins.print'):  # Suppress print output
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was successful
+        assert result.success is True
+        assert result.file_path == str(test_file)
+        
+        # Verify folder cleanup occurred
+        assert len(result.cleaned_folders) == 1
+        cleaned_paths = [Path(p).resolve() for p in result.cleaned_folders]
+        assert nested_folder.resolve() in cleaned_paths
+        
+        # Verify folder was actually removed
+        assert not nested_folder.exists()
+        
+        # Verify source folder still exists
+        assert self.source_folder.exists()
+        
+        # Verify file was moved to saved folder
+        saved_file = self.saved_folder / "level1" / "test.txt"
+        assert saved_file.exists()
+    
+    def test_process_file_with_folder_cleanup_multiple_levels(self):
+        """Test file processing with folder cleanup for multiple level structure."""
+        # Create deeply nested structure with file
+        nested_path = self.source_folder / "level1" / "level2" / "level3"
+        nested_path.mkdir(parents=True)
+        test_file = nested_path / "deep_test.txt"
+        test_file.write_text("deep content")
+        
+        # Process the file
+        with patch('builtins.print'):  # Suppress print output
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was successful
+        assert result.success is True
+        
+        # Verify folder cleanup occurred for all levels
+        assert len(result.cleaned_folders) == 3
+        
+        # Verify all nested folders were removed
+        assert not nested_path.exists()
+        assert not nested_path.parent.exists()
+        assert not nested_path.parent.parent.exists()
+        
+        # Verify source folder still exists
+        assert self.source_folder.exists()
+    
+    def test_process_file_with_folder_cleanup_stops_at_non_empty(self):
+        """Test folder cleanup stops when encountering non-empty folder."""
+        # Create nested structure
+        level1 = self.source_folder / "level1"
+        level2 = level1 / "level2"
+        level2.mkdir(parents=True)
+        
+        # Add files to different levels
+        (level1 / "keep.txt").write_text("keep this")
+        test_file = level2 / "remove.txt"
+        test_file.write_text("remove this")
+        
+        # Process the file
+        with patch('builtins.print'):  # Suppress print output
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was successful
+        assert result.success is True
+        
+        # Verify only level2 was cleaned up (level1 has keep.txt)
+        assert len(result.cleaned_folders) == 1
+        cleaned_paths = [Path(p).resolve() for p in result.cleaned_folders]
+        assert level2.resolve() in cleaned_paths
+        
+        # Verify level2 was removed but level1 still exists
+        assert not level2.exists()
+        assert level1.exists()
+        assert (level1 / "keep.txt").exists()
+    
+    def test_process_file_with_no_folder_cleanup_needed(self):
+        """Test file processing when no folder cleanup is needed."""
+        # Create file directly in source folder
+        test_file = self.source_folder / "root_test.txt"
+        test_file.write_text("root content")
+        
+        # Process the file
+        with patch('builtins.print'):  # Suppress print output
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was successful
+        assert result.success is True
+        
+        # Verify no folder cleanup occurred (can't remove source root)
+        assert len(result.cleaned_folders) == 0
+        
+        # Verify source folder still exists
+        assert self.source_folder.exists()
+    
+    def test_process_file_folder_cleanup_logging(self):
+        """Test that folder cleanup operations are logged at INFO level."""
+        # Create nested structure with file
+        nested_folder = self.source_folder / "logged_cleanup"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("test content")
+        
+        # Mock the logger to capture log calls
+        with patch.object(self.logger_service, 'log_info') as mock_log_info, \
+             patch('builtins.print'):  # Suppress print output
+            
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was successful
+        assert result.success is True
+        assert len(result.cleaned_folders) == 1
+        
+        # Verify logging calls were made
+        log_calls = [call.args[0] for call in mock_log_info.call_args_list]
+        
+        # Should have logs for file processing and folder cleanup
+        assert any("Successfully processed file" in call for call in log_calls)
+        assert any("Cleaned up empty folder" in call for call in log_calls)
+    
+    def test_process_file_with_folder_cleanup_permission_error(self):
+        """Test file processing when folder cleanup encounters permission error."""
+        # Create nested structure with file
+        nested_folder = self.source_folder / "permission_test"
+        nested_folder.mkdir()
+        test_file = nested_folder / "test.txt"
+        test_file.write_text("test content")
+        
+        # Mock rmdir to raise PermissionError
+        original_rmdir = Path.rmdir
+        def mock_rmdir(self):
+            if "permission_test" in str(self):
+                raise PermissionError("Access denied")
+            return original_rmdir(self)
+        
+        with patch.object(Path, 'rmdir', mock_rmdir), \
+             patch('builtins.print'):  # Suppress print output
+            
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing was still successful (cleanup failure doesn't fail processing)
+        assert result.success is True
+        
+        # Verify no folders were cleaned up due to permission error
+        assert len(result.cleaned_folders) == 0
+        
+        # Verify folder still exists due to permission error
+        assert nested_folder.exists()
+    
+    def test_process_file_error_case_no_folder_cleanup(self):
+        """Test that folder cleanup doesn't occur when file processing fails."""
+        # Create nested structure with file
+        nested_folder = self.source_folder / "error_test"
+        nested_folder.mkdir()
+        test_file = nested_folder / "empty.txt"
+        test_file.write_text("")  # Empty file will cause processing to fail
+        
+        # Process the file (should fail due to empty content)
+        with patch('builtins.print'):  # Suppress print output
+            result = self.file_processor.process_file(str(test_file))
+        
+        # Verify processing failed
+        assert result.success is False
+        
+        # Verify no folder cleanup occurred (only happens on successful processing)
+        assert len(result.cleaned_folders) == 0
+        
+        # Verify folder still exists
+        assert nested_folder.exists()
+        
+        # Verify file was moved to error folder
+        error_file = self.error_folder / "error_test" / "empty.txt"
+        assert error_file.exists()

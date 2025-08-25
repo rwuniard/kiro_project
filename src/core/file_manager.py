@@ -256,3 +256,124 @@ class FileManager:
                     except Exception:
                         pass
                 raise copy_error from e
+    
+    def _is_folder_empty(self, folder_path: Path) -> bool:
+        """
+        Check if a folder contains no files or non-empty subfolders.
+        
+        A folder is considered empty when:
+        - It contains no files (regular files, not directories)
+        - It contains no subdirectories with files
+        - It may contain empty subdirectories (which will also be removed)
+        
+        Args:
+            folder_path: Path to the folder to check
+            
+        Returns:
+            bool: True if folder is empty, False otherwise
+        """
+        try:
+            if not folder_path.exists() or not folder_path.is_dir():
+                return False
+            
+            return self._check_folder_contents_recursive(folder_path)
+            
+        except (OSError, PermissionError) as e:
+            self.logger.warning(f"Could not check if folder is empty {folder_path}: {e}")
+            return False
+    
+    def _check_folder_contents_recursive(self, folder_path: Path) -> bool:
+        """
+        Recursively check if a folder and all its subfolders are empty of files.
+        
+        Args:
+            folder_path: Path to the folder to check recursively
+            
+        Returns:
+            bool: True if folder contains no files (may contain empty subfolders), False otherwise
+        """
+        try:
+            for item in folder_path.iterdir():
+                if item.is_file():
+                    # Found a file, folder is not empty
+                    return False
+                elif item.is_dir():
+                    # Check subdirectory recursively
+                    if not self._check_folder_contents_recursive(item):
+                        # Subdirectory contains files, so this folder is not empty
+                        return False
+            
+            # No files found in this folder or any subfolders
+            return True
+            
+        except (OSError, PermissionError) as e:
+            self.logger.warning(f"Could not check folder contents {folder_path}: {e}")
+            # If we can't check, assume it's not empty to be safe
+            return False
+    
+    def cleanup_empty_folders(self, original_file_path: str) -> List[str]:
+        """
+        Recursively removes empty folders starting from the file's original directory
+        up to the source folder root, stopping when a non-empty folder is encountered.
+        
+        Args:
+            original_file_path: Path to the original file that was moved
+            
+        Returns:
+            List[str]: List of removed folder paths for logging purposes
+        """
+        removed_folders = []
+        
+        try:
+            # Start with the folder that contained the file
+            current_folder = Path(original_file_path).parent.resolve()
+            source_folder_resolved = self.source_folder.resolve()
+            
+            # Safety check: ensure we're working within the source folder
+            if not self._is_path_under_source(current_folder, source_folder_resolved):
+                self.logger.warning(f"File path {original_file_path} is not under source folder, skipping cleanup")
+                return removed_folders
+            
+            # Recursively check and remove empty folders up to source root
+            while (current_folder != source_folder_resolved and 
+                   current_folder != current_folder.parent):
+                
+                if self._is_folder_empty(current_folder):
+                    try:
+                        current_folder.rmdir()
+                        removed_folders.append(str(current_folder))
+                        self.logger.info(f"Removed empty folder: {current_folder}")
+                        
+                        # Move to parent folder for next iteration
+                        current_folder = current_folder.parent.resolve()
+                        
+                    except (OSError, PermissionError) as e:
+                        # Log warning and stop cleanup
+                        self.logger.warning(f"Could not remove empty folder {current_folder}: {e}")
+                        break
+                else:
+                    # Folder not empty, stop cleanup
+                    self.logger.debug(f"Folder {current_folder} is not empty, stopping cleanup")
+                    break
+            
+        except Exception as e:
+            self.logger.error(f"Error during folder cleanup for {original_file_path}: {e}")
+        
+        return removed_folders
+    
+    def _is_path_under_source(self, path: Path, source_folder: Path) -> bool:
+        """
+        Check if a path is under the source folder.
+        
+        Args:
+            path: Path to check
+            source_folder: Source folder path
+            
+        Returns:
+            bool: True if path is under source folder, False otherwise
+        """
+        try:
+            path.resolve().relative_to(source_folder)
+            return True
+        except ValueError:
+            return False
