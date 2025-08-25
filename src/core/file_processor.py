@@ -6,14 +6,43 @@ integrating with FileManager for file movement and ErrorHandler for error handli
 """
 
 import os
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 
-from services.logger_service import LoggerService
-from core.file_manager import FileManager
-from services.error_handler import ErrorHandler
+from src.services.logger_service import LoggerService
+from src.core.file_manager import FileManager
+from src.services.error_handler import ErrorHandler
+
+
+class ErrorType(Enum):
+    """Classification of error types for retry logic."""
+    TRANSIENT = "transient"  # Temporary errors that might resolve with retry
+    PERMANENT = "permanent"  # Errors that won't resolve with retry
+    UNKNOWN = "unknown"     # Unclassified errors
+
+
+class RetryConfig:
+    """Configuration for retry logic."""
+    
+    def __init__(self, max_attempts: int = 3, base_delay: float = 1.0, 
+                 max_delay: float = 10.0, backoff_multiplier: float = 2.0):
+        """
+        Initialize retry configuration.
+        
+        Args:
+            max_attempts: Maximum number of retry attempts
+            base_delay: Initial delay between retries in seconds
+            max_delay: Maximum delay between retries in seconds
+            backoff_multiplier: Multiplier for exponential backoff
+        """
+        self.max_attempts = max_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.backoff_multiplier = backoff_multiplier
 
 
 @dataclass
@@ -31,10 +60,11 @@ class FileProcessor:
     
     Handles file reading, processing, and coordination with FileManager
     and ErrorHandler for appropriate file movement and error logging.
+    Includes comprehensive error handling with retry logic for transient errors.
     """
     
     def __init__(self, file_manager: FileManager, error_handler: ErrorHandler, 
-                 logger_service: LoggerService):
+                 logger_service: LoggerService, retry_config: Optional[RetryConfig] = None):
         """
         Initialize FileProcessor with required services.
         
@@ -42,14 +72,25 @@ class FileProcessor:
             file_manager: FileManager instance for file operations
             error_handler: ErrorHandler instance for error logging
             logger_service: LoggerService instance for application logging
+            retry_config: Optional retry configuration for transient errors
         """
         self.file_manager = file_manager
         self.error_handler = error_handler
         self.logger = logger_service
+        self.retry_config = retry_config or RetryConfig()
+        
+        # Track processing statistics
+        self.stats = {
+            'total_processed': 0,
+            'successful': 0,
+            'failed_permanent': 0,
+            'failed_after_retry': 0,
+            'retries_attempted': 0
+        }
         
     def process_file(self, file_path: str) -> ProcessingResult:
         """
-        Process a single file with error handling and appropriate file movement.
+        Process a single file with comprehensive error handling and retry logic.
         
         Args:
             file_path: Absolute path to the file to process
@@ -58,28 +99,42 @@ class FileProcessor:
             ProcessingResult: Result of the processing operation
         """
         start_time = datetime.now()
+        self.stats['total_processed'] += 1
         
         try:
-            # Validate file exists and is accessible
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"File not found: {file_path}")
+            # Validate file exists and is accessible (with retry for transient issues)
+            self._execute_with_retry(
+                self._validate_file_access, 
+                "File validation", 
+                file_path
+            )
             
-            if not os.path.isfile(file_path):
-                raise ValueError(f"Path is not a file: {file_path}")
+            # Read file content with retry logic
+            content = self._execute_with_retry(
+                self._read_file_content, 
+                "File reading", 
+                file_path
+            )
             
-            # Read file content
-            content = self._read_file_content(file_path)
+            # Perform processing with retry logic
+            self._execute_with_retry(
+                self._perform_processing, 
+                "File processing", 
+                content, file_path
+            )
             
-            # Perform processing
-            self._perform_processing(content, file_path)
-            
-            # Move to saved folder on success
-            move_success = self.file_manager.move_to_saved(file_path)
-            if not move_success:
-                raise RuntimeError("Failed to move file to saved folder")
+            # Move to saved folder on success with retry logic
+            self._execute_with_retry(
+                self._move_to_saved_with_validation, 
+                "File movement to saved folder", 
+                file_path
+            )
             
             # Calculate processing time
             processing_time = (datetime.now() - start_time).total_seconds()
+            
+            # Update statistics
+            self.stats['successful'] += 1
             
             # Log success
             relative_path = self.file_manager.get_relative_path(file_path) or os.path.basename(file_path)
@@ -98,20 +153,38 @@ class FileProcessor:
             # Calculate processing time even for failures
             processing_time = (datetime.now() - start_time).total_seconds()
             
+            # Classify error for statistics
+            error_type = self._classify_error(e)
+            if error_type == ErrorType.PERMANENT:
+                self.stats['failed_permanent'] += 1
+            else:
+                self.stats['failed_after_retry'] += 1
+            
             error_message = f"Failed to process file {file_path}: {str(e)}"
             
-            # Log the error
-            self.logger.log_error(error_message, e)
+            # Log the error with classification
+            self.logger.log_error(f"{error_message} (Error type: {error_type.value})", e)
             
-            # Create error log file
-            self.error_handler.create_error_log(file_path, str(e), e)
-            
-            # Move to error folder
+            # Create error log file (with retry for transient file system issues)
             try:
-                self.file_manager.move_to_error(file_path)
+                self._execute_with_retry(
+                    self.error_handler.create_error_log,
+                    "Error log creation",
+                    file_path, str(e), e
+                )
+            except Exception as log_error:
+                self.logger.log_error(f"Failed to create error log: {log_error}")
+            
+            # Move to error folder (with retry for transient file system issues)
+            try:
+                self._execute_with_retry(
+                    self._move_to_error_with_validation,
+                    "File movement to error folder",
+                    file_path
+                )
             except Exception as move_error:
-                # If we can't move to error folder, log but don't fail completely
-                self.logger.log_error(f"Failed to move file to error folder: {move_error}")
+                # If we can't move to error folder after retries, log but continue
+                self.logger.log_error(f"Failed to move file to error folder after retries: {move_error}")
             
             return ProcessingResult(
                 success=False,
@@ -119,6 +192,60 @@ class FileProcessor:
                 error_message=error_message,
                 processing_time=processing_time
             )
+    
+    def _validate_file_access(self, file_path: str) -> None:
+        """
+        Validate that a file exists and is accessible.
+        
+        Args:
+            file_path: Path to validate
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            ValueError: If path is not a file
+            PermissionError: If file is not accessible
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        if not os.path.isfile(file_path):
+            raise ValueError(f"Path is not a file: {file_path}")
+        
+        # Test read access
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # Just test that we can open the file
+                pass
+        except PermissionError as e:
+            raise PermissionError(f"Cannot access file: {e}")
+    
+    def _move_to_saved_with_validation(self, file_path: str) -> None:
+        """
+        Move file to saved folder with validation.
+        
+        Args:
+            file_path: Path to file to move
+            
+        Raises:
+            RuntimeError: If move operation fails
+        """
+        move_success = self.file_manager.move_to_saved(file_path)
+        if not move_success:
+            raise RuntimeError("Failed to move file to saved folder")
+    
+    def _move_to_error_with_validation(self, file_path: str) -> None:
+        """
+        Move file to error folder with validation.
+        
+        Args:
+            file_path: Path to file to move
+            
+        Raises:
+            RuntimeError: If move operation fails
+        """
+        move_success = self.file_manager.move_to_error(file_path)
+        if not move_success:
+            raise RuntimeError("Failed to move file to error folder")
     
     def _read_file_content(self, file_path: str) -> str:
         """
@@ -185,3 +312,114 @@ class FileProcessor:
         
         # Additional processing logic can be added here
         # For now, we just validate the file was readable and has content
+    
+    def _classify_error(self, exception: Exception) -> ErrorType:
+        """
+        Classify an error to determine if it's worth retrying.
+        
+        Args:
+            exception: The exception to classify
+            
+        Returns:
+            ErrorType: Classification of the error
+        """
+        # Transient errors that might resolve with retry
+        transient_errors = (
+            OSError,  # Temporary file system issues
+            PermissionError,  # Might be temporary file locks
+            FileNotFoundError,  # File might appear after brief delay
+        )
+        
+        # Permanent errors that won't resolve with retry
+        permanent_errors = (
+            UnicodeDecodeError,  # File encoding issues
+            ValueError,  # Business logic validation errors
+        )
+        
+        if isinstance(exception, transient_errors):
+            # Additional checks for specific transient conditions
+            if isinstance(exception, PermissionError):
+                # Some permission errors might be temporary (file locks)
+                return ErrorType.TRANSIENT
+            elif isinstance(exception, OSError):
+                # Check specific OS error codes
+                if hasattr(exception, 'errno'):
+                    # Common transient OS errors
+                    transient_errno = [2, 5, 11, 13, 16, 26]  # ENOENT, EIO, EAGAIN, EACCES, EBUSY, ETXTBSY
+                    if exception.errno in transient_errno:
+                        return ErrorType.TRANSIENT
+                return ErrorType.TRANSIENT
+            elif isinstance(exception, FileNotFoundError):
+                return ErrorType.TRANSIENT
+        
+        if isinstance(exception, permanent_errors):
+            return ErrorType.PERMANENT
+        
+        # Default to unknown for unclassified errors
+        return ErrorType.UNKNOWN
+    
+    def _execute_with_retry(self, operation: Callable, operation_name: str, 
+                           *args, **kwargs) -> Any:
+        """
+        Execute an operation with retry logic for transient errors.
+        
+        Args:
+            operation: The operation to execute
+            operation_name: Name of the operation for logging
+            *args: Arguments to pass to the operation
+            **kwargs: Keyword arguments to pass to the operation
+            
+        Returns:
+            Result of the operation
+            
+        Raises:
+            Exception: The last exception if all retries fail
+        """
+        last_exception = None
+        delay = self.retry_config.base_delay
+        
+        for attempt in range(self.retry_config.max_attempts):
+            try:
+                return operation(*args, **kwargs)
+                
+            except Exception as e:
+                last_exception = e
+                error_type = self._classify_error(e)
+                
+                # Don't retry permanent errors
+                if error_type == ErrorType.PERMANENT:
+                    self.logger.log_error(
+                        f"{operation_name} failed with permanent error on attempt {attempt + 1}: {str(e)}"
+                    )
+                    raise e
+                
+                # Don't retry on the last attempt
+                if attempt == self.retry_config.max_attempts - 1:
+                    self.logger.log_error(
+                        f"{operation_name} failed after {self.retry_config.max_attempts} attempts: {str(e)}"
+                    )
+                    break
+                
+                # Log retry attempt
+                self.stats['retries_attempted'] += 1
+                self.logger.log_info(
+                    f"{operation_name} failed on attempt {attempt + 1} ({error_type.value} error), "
+                    f"retrying in {delay:.1f}s: {str(e)}"
+                )
+                
+                # Wait before retry with exponential backoff
+                time.sleep(delay)
+                delay = min(delay * self.retry_config.backoff_multiplier, self.retry_config.max_delay)
+        
+        # All retries exhausted
+        if last_exception:
+            raise last_exception
+    
+    def get_processing_stats(self) -> Dict[str, int]:
+        """
+        Get processing statistics.
+        
+        Returns:
+            Dictionary containing processing statistics
+        """
+        return self.stats.copy()

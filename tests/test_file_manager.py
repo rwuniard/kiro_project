@@ -211,11 +211,13 @@ class TestFileManager:
         
         assert relative_path is None
     
+    @patch('shutil.copy2')
     @patch('shutil.move')
-    def test_move_to_saved_file_operation_error(self, mock_move):
-        """Test error handling when file move operation fails."""
-        # Mock shutil.move to raise an exception
+    def test_move_to_saved_file_operation_error(self, mock_move, mock_copy2):
+        """Test error handling when both atomic move and copy fallback fail."""
+        # Mock both shutil.move and shutil.copy2 to raise exceptions
         mock_move.side_effect = OSError("Permission denied")
+        mock_copy2.side_effect = OSError("Permission denied")
         
         # Create test file
         test_file = self.source_folder / "test.txt"
@@ -229,11 +231,13 @@ class TestFileManager:
         # Original file should still exist since move failed
         assert test_file.exists()
     
+    @patch('shutil.copy2')
     @patch('shutil.move')
-    def test_move_to_error_file_operation_error(self, mock_move):
-        """Test error handling when error file move operation fails."""
-        # Mock shutil.move to raise an exception
+    def test_move_to_error_file_operation_error(self, mock_move, mock_copy2):
+        """Test error handling when both atomic move and copy fallback fail."""
+        # Mock both shutil.move and shutil.copy2 to raise exceptions
         mock_move.side_effect = OSError("Disk full")
+        mock_copy2.side_effect = OSError("Disk full")
         
         # Create test file
         test_file = self.source_folder / "test.txt"

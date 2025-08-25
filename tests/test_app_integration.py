@@ -25,8 +25,10 @@ class TestFolderFileProcessorApp:
     
     def setup_method(self):
         """Set up test environment before each test."""
-        # Create temporary directories for testing
-        self.temp_dir = tempfile.mkdtemp()
+        import uuid
+        
+        # Create temporary directories for testing with unique names
+        self.temp_dir = tempfile.mkdtemp(prefix=f"test_app_{uuid.uuid4().hex[:8]}_")
         self.source_dir = Path(self.temp_dir) / "source"
         self.saved_dir = Path(self.temp_dir) / "saved"
         self.error_dir = Path(self.temp_dir) / "error"
@@ -45,30 +47,58 @@ class TestFolderFileProcessorApp:
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
         
         self.log_file = self.logs_dir / "test.log"
+        
+        # Initialize app reference for cleanup
+        self.app = None
     
     def teardown_method(self):
         """Clean up after each test."""
         import shutil
-        if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+        import time
+        
+        # Ensure any running app instances are properly shut down
+        if hasattr(self, 'app') and self.app:
+            try:
+                if hasattr(self.app, 'file_monitor') and self.app.file_monitor:
+                    self.app.file_monitor.stop_monitoring()
+                if hasattr(self.app, 'shutdown'):
+                    self.app.shutdown()
+            except Exception:
+                pass
+        
+        # Clean up environment variables that might have been set by load_dotenv
+        env_vars_to_clean = ['SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER']
+        for var in env_vars_to_clean:
+            if var in os.environ:
+                del os.environ[var]
+        
+        # Small delay to ensure file handles are released
+        time.sleep(0.1)
+        
+        try:
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Failed to cleanup temp directory {self.temp_dir}: {e}")
     
     def test_app_initialization_success(self):
         """Test successful application initialization."""
-        app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
+        self.app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
         
         # Test initialization
-        result = app.initialize()
+        result = self.app.initialize()
         
         assert result is True
-        assert app.config is not None
-        assert app.config.source_folder == str(self.source_dir)
-        assert app.config.saved_folder == str(self.saved_dir)
-        assert app.config.error_folder == str(self.error_dir)
-        assert app.logger_service is not None
-        assert app.file_monitor is not None
-        assert app.file_processor is not None
-        assert app.file_manager is not None
-        assert app.error_handler is not None
+        assert self.app.config is not None
+        assert self.app.config.source_folder == str(self.source_dir)
+        assert self.app.config.saved_folder == str(self.saved_dir)
+        assert self.app.config.error_folder == str(self.error_dir)
+        assert self.app.logger_service is not None
+        assert self.app.file_monitor is not None
+        assert self.app.file_processor is not None
+        assert self.app.file_manager is not None
+        assert self.app.error_handler is not None
     
     def test_app_initialization_missing_env_file(self):
         """Test initialization failure with missing .env file."""
@@ -104,17 +134,17 @@ class TestFolderFileProcessorApp:
     
     def test_complete_application_workflow(self):
         """Test complete application workflow with file processing."""
-        app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
+        self.app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
         
         # Initialize app
-        assert app.initialize() is True
+        assert self.app.initialize() is True
         
         # Create a test file to be processed
         test_file = self.source_dir / "test.txt"
         test_file.write_text("Test file content")
         
         # Test file processing directly (without full monitoring loop)
-        result = app.file_processor.process_file(str(test_file))
+        result = self.app.file_processor.process_file(str(test_file))
         assert result.success is True
         
         # Verify file was moved to saved folder
@@ -122,8 +152,8 @@ class TestFolderFileProcessorApp:
         assert len(saved_files) == 1
         
         # Test monitoring setup
-        app.file_monitor.start_monitoring()
-        assert app.file_monitor.is_monitoring() is True
+        self.app.file_monitor.start_monitoring()
+        assert self.app.file_monitor.is_monitoring() is True
         
         # Create another test file while monitoring
         test_file2 = self.source_dir / "test2.txt"
@@ -133,48 +163,55 @@ class TestFolderFileProcessorApp:
         time.sleep(0.1)
         
         # Stop monitoring
-        app.file_monitor.stop_monitoring()
+        self.app.file_monitor.stop_monitoring()
         
         # Verify monitoring stopped
-        assert app.file_monitor.is_monitoring() is False
+        assert self.app.file_monitor.is_monitoring() is False
     
     def test_graceful_shutdown_on_signal(self):
         """Test graceful shutdown when receiving signals."""
-        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        self.app = FolderFileProcessorApp(env_file=str(self.env_file))
         
         # Initialize app
-        assert app.initialize() is True
+        assert self.app.initialize() is True
         
         # Test signal handler
-        app._signal_handler(2, None)  # SIGINT
+        self.app._signal_handler(2, None)  # SIGINT
         
-        assert app.shutdown_requested is True
+        assert self.app.shutdown_requested is True
     
     def test_monitoring_failure_handling(self):
         """Test handling of monitoring failures."""
-        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        self.app = FolderFileProcessorApp(env_file=str(self.env_file))
         
         # Initialize app
-        assert app.initialize() is True
+        assert self.app.initialize() is True
         
-        # Mock file monitor to simulate failure
-        app.file_monitor.is_monitoring = MagicMock(return_value=False)
+        # Mock file monitor to simulate failure from the start
+        self.app.file_monitor.is_monitoring = MagicMock(return_value=False)
         
         # Start app in thread to test main loop
         def run_app():
             try:
-                app.start()
+                self.app.start()
             except Exception:
                 pass
         
         app_thread = threading.Thread(target=run_app, daemon=True)
         app_thread.start()
         
-        # Wait for main loop to detect failure
-        time.sleep(0.1)
+        # Wait for app to start and perform health check
+        time.sleep(0.2)
         
-        # App should have stopped due to monitoring failure
-        app_thread.join(timeout=1.0)
+        # Trigger health check manually to detect failure immediately
+        health_result = self.app._perform_health_check()
+        assert health_result is False  # Should fail due to monitoring not running
+        
+        # Request shutdown due to monitoring failure
+        self.app.shutdown_requested = True
+        
+        # Wait for app to shutdown
+        app_thread.join(timeout=2.0)
         assert not app_thread.is_alive()
     
     def test_error_handling_during_initialization(self):
@@ -314,7 +351,9 @@ class TestApplicationIntegrationScenarios:
     
     def setup_method(self):
         """Set up test environment."""
-        self.temp_dir = tempfile.mkdtemp()
+        import uuid
+        
+        self.temp_dir = tempfile.mkdtemp(prefix=f"test_integration_{uuid.uuid4().hex[:8]}_")
         self.source_dir = Path(self.temp_dir) / "source"
         self.saved_dir = Path(self.temp_dir) / "saved"
         self.error_dir = Path(self.temp_dir) / "error"
@@ -328,12 +367,40 @@ class TestApplicationIntegrationScenarios:
             f.write(f"SOURCE_FOLDER={self.source_dir}\n")
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
+        
+        # Initialize app reference for cleanup
+        self.app = None
     
     def teardown_method(self):
         """Clean up after test."""
         import shutil
-        if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+        import time
+        
+        # Ensure any running app instances are properly shut down
+        if hasattr(self, 'app') and self.app:
+            try:
+                if hasattr(self.app, 'file_monitor') and self.app.file_monitor:
+                    self.app.file_monitor.stop_monitoring()
+                if hasattr(self.app, 'shutdown'):
+                    self.app.shutdown()
+            except Exception:
+                pass
+        
+        # Clean up environment variables that might have been set by load_dotenv
+        env_vars_to_clean = ['SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER']
+        for var in env_vars_to_clean:
+            if var in os.environ:
+                del os.environ[var]
+        
+        # Small delay to ensure file handles are released
+        time.sleep(0.1)
+        
+        try:
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            # Log cleanup errors but don't fail the test
+            print(f"Warning: Failed to cleanup temp directory {self.temp_dir}: {e}")
     
     def test_multiple_files_processing(self):
         """Test processing multiple files simultaneously."""

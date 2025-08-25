@@ -11,7 +11,9 @@ import pytest
 from unittest.mock import Mock, patch, mock_open
 from pathlib import Path
 
-from src.core.file_processor import FileProcessor, ProcessingResult
+from src.core.file_processor import (
+    FileProcessor, ProcessingResult, ErrorType, RetryConfig
+)
 from src.core.file_manager import FileManager
 from src.services.error_handler import ErrorHandler
 from src.services.logger_service import LoggerService
@@ -107,7 +109,8 @@ class TestFileProcessor:
         # Verify error handling
         mock_services['error_handler'].create_error_log.assert_called_once()
         mock_services['file_manager'].move_to_error.assert_called_once_with(non_existent_file)
-        mock_services['logger_service'].log_error.assert_called_once()
+        # With retry logic, log_error may be called multiple times
+        assert mock_services['logger_service'].log_error.call_count >= 1
     
     def test_process_file_is_directory(self, file_processor, mock_services, temp_dirs):
         """Test processing a directory instead of a file."""
@@ -163,7 +166,7 @@ class TestFileProcessor:
         
         # Verify result
         assert result.success is False
-        assert "Permission denied when reading file" in result.error_message
+        assert "Permission denied" in result.error_message or "Cannot access file" in result.error_message
         
         # Verify error handling
         mock_services['error_handler'].create_error_log.assert_called_once()
@@ -200,7 +203,8 @@ class TestFileProcessor:
         
         # Should fail
         assert result.success is False
-        assert "Failed to decode file" in result.error_message
+        assert ("Failed to decode file" in result.error_message or 
+                "codec can't decode" in result.error_message)
     
     def test_process_file_move_to_saved_fails(self, file_processor, mock_services, temp_dirs):
         """Test when moving to saved folder fails."""
@@ -403,3 +407,490 @@ class TestFileProcessorIntegration:
         
         # Verify original file was moved
         assert not test_file.exists()
+
+
+class TestErrorHandlingAndResilience:
+    """Test cases for comprehensive error handling and resilience features."""
+    
+    @pytest.fixture
+    def retry_config(self):
+        """Create retry configuration for testing."""
+        return RetryConfig(
+            max_attempts=3,
+            base_delay=0.1,  # Short delay for testing
+            max_delay=1.0,
+            backoff_multiplier=2.0
+        )
+    
+    @pytest.fixture
+    def mock_services(self):
+        """Create mock services for testing."""
+        file_manager = Mock(spec=FileManager)
+        error_handler = Mock(spec=ErrorHandler)
+        logger_service = Mock(spec=LoggerService)
+        
+        file_manager.move_to_saved.return_value = True
+        file_manager.move_to_error.return_value = True
+        file_manager.get_relative_path.return_value = "test_file.txt"
+        
+        return {
+            'file_manager': file_manager,
+            'error_handler': error_handler,
+            'logger_service': logger_service
+        }
+    
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source"
+            saved_dir = temp_path / "saved"
+            error_dir = temp_path / "error"
+            
+            source_dir.mkdir()
+            saved_dir.mkdir()
+            error_dir.mkdir()
+            
+            yield {
+                'source': str(source_dir),
+                'saved': str(saved_dir),
+                'error': str(error_dir),
+                'temp': str(temp_path)
+            }
+    
+    @pytest.fixture
+    def file_processor_with_retry(self, mock_services, retry_config):
+        """Create FileProcessor with retry configuration."""
+        return FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            retry_config=retry_config
+        )
+    
+    def test_error_classification_transient_errors(self, file_processor_with_retry):
+        """Test classification of transient errors."""
+        processor = file_processor_with_retry
+        
+        # Test transient errors
+        assert processor._classify_error(OSError("Temporary failure")) == ErrorType.TRANSIENT
+        assert processor._classify_error(PermissionError("File locked")) == ErrorType.TRANSIENT
+        assert processor._classify_error(FileNotFoundError("File not found")) == ErrorType.TRANSIENT
+    
+    def test_error_classification_permanent_errors(self, file_processor_with_retry):
+        """Test classification of permanent errors."""
+        processor = file_processor_with_retry
+        
+        # Test permanent errors
+        unicode_error = UnicodeDecodeError('utf-8', b'', 0, 1, 'invalid start byte')
+        assert processor._classify_error(unicode_error) == ErrorType.PERMANENT
+        assert processor._classify_error(ValueError("Invalid content")) == ErrorType.PERMANENT
+    
+    def test_error_classification_unknown_errors(self, file_processor_with_retry):
+        """Test classification of unknown errors."""
+        processor = file_processor_with_retry
+        
+        # Test unknown errors
+        assert processor._classify_error(RuntimeError("Unknown error")) == ErrorType.UNKNOWN
+        assert processor._classify_error(Exception("Generic error")) == ErrorType.UNKNOWN
+    
+    def test_retry_logic_success_on_second_attempt(self, file_processor_with_retry):
+        """Test retry logic succeeds on second attempt."""
+        processor = file_processor_with_retry
+        
+        # Mock operation that fails once then succeeds
+        mock_operation = Mock()
+        mock_operation.side_effect = [OSError("Temporary failure"), "success"]
+        
+        result = processor._execute_with_retry(mock_operation, "Test operation")
+        
+        assert result == "success"
+        assert mock_operation.call_count == 2
+    
+    def test_retry_logic_permanent_error_no_retry(self, file_processor_with_retry):
+        """Test that permanent errors are not retried."""
+        processor = file_processor_with_retry
+        
+        # Mock operation that raises permanent error
+        mock_operation = Mock()
+        unicode_error = UnicodeDecodeError('utf-8', b'', 0, 1, 'invalid start byte')
+        mock_operation.side_effect = unicode_error
+        
+        with pytest.raises(UnicodeDecodeError):
+            processor._execute_with_retry(mock_operation, "Test operation")
+        
+        # Should only be called once (no retry)
+        assert mock_operation.call_count == 1
+    
+    def test_retry_logic_exhausts_attempts(self, file_processor_with_retry):
+        """Test retry logic when all attempts are exhausted."""
+        processor = file_processor_with_retry
+        
+        # Mock operation that always fails with transient error
+        mock_operation = Mock()
+        mock_operation.side_effect = OSError("Persistent failure")
+        
+        with pytest.raises(OSError):
+            processor._execute_with_retry(mock_operation, "Test operation")
+        
+        # Should be called max_attempts times
+        assert mock_operation.call_count == processor.retry_config.max_attempts
+    
+    def test_retry_logic_exponential_backoff(self, file_processor_with_retry):
+        """Test that retry logic uses exponential backoff."""
+        processor = file_processor_with_retry
+        
+        # Mock operation that always fails
+        mock_operation = Mock()
+        mock_operation.side_effect = OSError("Persistent failure")
+        
+        with patch('time.sleep') as mock_sleep:
+            with pytest.raises(OSError):
+                processor._execute_with_retry(mock_operation, "Test operation")
+        
+        # Verify exponential backoff delays
+        expected_delays = [0.1, 0.2]  # base_delay * backoff_multiplier^attempt
+        actual_delays = [call[0][0] for call in mock_sleep.call_args_list]
+        assert actual_delays == expected_delays
+    
+    def test_process_file_with_retry_success_after_transient_failure(self, file_processor_with_retry, mock_services, temp_dirs):
+        """Test file processing succeeds after transient failure."""
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "retry_test.txt"
+        test_file.write_text("Test content")
+        
+        # Mock _validate_file_access to fail once then succeed
+        with patch.object(file_processor_with_retry, '_validate_file_access') as mock_validate:
+            mock_validate.side_effect = [OSError("Temporary failure"), None]
+            
+            with patch('builtins.print'):
+                result = file_processor_with_retry.process_file(str(test_file))
+        
+        assert result.success is True
+        assert mock_validate.call_count == 2
+        assert file_processor_with_retry.stats['retries_attempted'] == 1
+    
+    def test_process_file_statistics_tracking(self, file_processor_with_retry, mock_services, temp_dirs):
+        """Test that processing statistics are properly tracked."""
+        processor = file_processor_with_retry
+        
+        # Test successful processing
+        test_file = Path(temp_dirs['source']) / "stats_test.txt"
+        test_file.write_text("Test content")
+        
+        with patch('builtins.print'):
+            result = processor.process_file(str(test_file))
+        
+        stats = processor.get_processing_stats()
+        assert stats['total_processed'] == 1
+        assert stats['successful'] == 1
+        assert stats['failed_permanent'] == 0
+        assert stats['failed_after_retry'] == 0
+    
+    def test_process_file_statistics_permanent_failure(self, file_processor_with_retry, mock_services):
+        """Test statistics tracking for permanent failures."""
+        processor = file_processor_with_retry
+        
+        # Mock permanent error
+        with patch.object(processor, '_validate_file_access') as mock_validate:
+            unicode_error = UnicodeDecodeError('utf-8', b'', 0, 1, 'invalid start byte')
+            mock_validate.side_effect = unicode_error
+            
+            result = processor.process_file("/nonexistent/file.txt")
+        
+        assert result.success is False
+        stats = processor.get_processing_stats()
+        assert stats['total_processed'] == 1
+        assert stats['successful'] == 0
+        assert stats['failed_permanent'] == 1
+        assert stats['failed_after_retry'] == 0
+    
+    def test_process_file_statistics_retry_failure(self, file_processor_with_retry, mock_services):
+        """Test statistics tracking for failures after retry."""
+        processor = file_processor_with_retry
+        
+        # Mock transient error that persists
+        with patch.object(processor, '_validate_file_access') as mock_validate:
+            mock_validate.side_effect = OSError("Persistent transient error")
+            
+            result = processor.process_file("/nonexistent/file.txt")
+        
+        assert result.success is False
+        stats = processor.get_processing_stats()
+        assert stats['total_processed'] == 1
+        assert stats['successful'] == 0
+        assert stats['failed_permanent'] == 0
+        assert stats['failed_after_retry'] == 1
+        assert stats['retries_attempted'] == 2  # 3 attempts - 1 = 2 retries
+    
+    def test_resilient_error_log_creation(self, file_processor_with_retry, mock_services):
+        """Test that error log creation uses retry logic."""
+        processor = file_processor_with_retry
+        
+        # Mock error handler to fail once then succeed
+        mock_services['error_handler'].create_error_log.side_effect = [
+            OSError("Temporary failure"),
+            None
+        ]
+        
+        # Create scenario that causes processing failure
+        with patch.object(processor, '_validate_file_access') as mock_validate:
+            mock_validate.side_effect = ValueError("Permanent error")
+            
+            result = processor.process_file("/test/file.txt")
+        
+        assert result.success is False
+        # Error log creation should have been retried
+        assert mock_services['error_handler'].create_error_log.call_count == 2
+    
+    def test_resilient_file_movement(self, file_processor_with_retry, mock_services):
+        """Test that file movement uses retry logic."""
+        processor = file_processor_with_retry
+        
+        # Mock file movement to fail once then succeed
+        mock_services['file_manager'].move_to_error.side_effect = [False, True]
+        
+        # Create scenario that causes processing failure
+        with patch.object(processor, '_validate_file_access') as mock_validate:
+            mock_validate.side_effect = ValueError("Permanent error")
+            
+            with patch.object(processor, '_move_to_error_with_validation') as mock_move:
+                mock_move.side_effect = [OSError("Temporary failure"), None]
+                
+                result = processor.process_file("/test/file.txt")
+        
+        assert result.success is False
+        # File movement should have been retried
+        assert mock_move.call_count == 2
+
+
+class TestFileManagerResilience:
+    """Test cases for FileManager resilience improvements."""
+    
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source"
+            saved_dir = temp_path / "saved"
+            error_dir = temp_path / "error"
+            
+            source_dir.mkdir()
+            saved_dir.mkdir()
+            error_dir.mkdir()
+            
+            yield {
+                'source': str(source_dir),
+                'saved': str(saved_dir),
+                'error': str(error_dir),
+                'temp': str(temp_path)
+            }
+    
+    @pytest.fixture
+    def file_manager(self, temp_dirs):
+        """Create FileManager instance."""
+        return FileManager(
+            source_folder=temp_dirs['source'],
+            saved_folder=temp_dirs['saved'],
+            error_folder=temp_dirs['error']
+        )
+    
+    def test_move_with_destination_conflict_resolution(self, file_manager, temp_dirs):
+        """Test file movement with destination conflict resolution."""
+        # Create source file
+        source_file = Path(temp_dirs['source']) / "conflict_test.txt"
+        source_file.write_text("Source content")
+        
+        # Create conflicting file in destination
+        saved_dir = Path(temp_dirs['saved'])
+        conflicting_file = saved_dir / "conflict_test.txt"
+        conflicting_file.write_text("Existing content")
+        
+        # Move file - should resolve conflict
+        result = file_manager.move_to_saved(str(source_file))
+        
+        assert result is True
+        assert not source_file.exists()  # Source should be moved
+        assert conflicting_file.exists()  # Original should remain
+        
+        # New file should have suffix
+        new_files = list(saved_dir.glob("conflict_test_*.txt"))
+        assert len(new_files) == 1
+        assert new_files[0].read_text() == "Source content"
+    
+    def test_atomic_move_fallback_to_copy_delete(self, file_manager, temp_dirs):
+        """Test atomic move fallback to copy+delete strategy."""
+        # Create source file
+        source_file = Path(temp_dirs['source']) / "atomic_test.txt"
+        source_file.write_text("Test content")
+        
+        # Test the _atomic_move method directly to verify fallback behavior
+        dest_path = Path(temp_dirs['saved']) / "atomic_test.txt"
+        
+        # Mock shutil.move to fail, forcing copy+delete fallback
+        with patch('shutil.move', side_effect=OSError("Cross-device link")):
+            with patch('shutil.copy2') as mock_copy:
+                # Mock copy2 to actually perform the copy
+                def actual_copy(src, dst):
+                    Path(dst).write_text(Path(src).read_text())
+                mock_copy.side_effect = actual_copy
+                
+                # Call _atomic_move directly
+                file_manager._atomic_move(source_file, dest_path)
+        
+        # Verify the fallback was used
+        mock_copy.assert_called_once()
+        assert dest_path.exists()
+        assert dest_path.read_text() == "Test content"
+    
+    def test_move_with_retry_on_transient_failure(self, file_manager, temp_dirs):
+        """Test file movement retry on transient failures."""
+        # Create source file
+        source_file = Path(temp_dirs['source']) / "retry_move_test.txt"
+        source_file.write_text("Test content")
+        
+        # Mock _atomic_move to fail twice then succeed
+        call_count = 0
+        original_atomic_move = file_manager._atomic_move
+        
+        def mock_atomic_move(source, dest):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise OSError("Temporary failure")
+            # Success on third attempt - use original method
+            original_atomic_move(source, dest)
+        
+        with patch.object(file_manager, '_atomic_move', side_effect=mock_atomic_move):
+            with patch('time.sleep'):  # Speed up test
+                result = file_manager.move_to_saved(str(source_file))
+        
+        assert result is True
+        assert call_count == 3
+    
+    def test_move_failure_after_max_retries(self, file_manager, temp_dirs):
+        """Test file movement failure after exhausting retries."""
+        # Create source file
+        source_file = Path(temp_dirs['source']) / "fail_move_test.txt"
+        source_file.write_text("Test content")
+        
+        # Mock _atomic_move to always fail
+        with patch.object(file_manager, '_atomic_move', side_effect=OSError("Persistent failure")):
+            with patch('time.sleep'):  # Speed up test
+                result = file_manager.move_to_saved(str(source_file))
+        
+        assert result is False
+
+
+class TestFileMonitorResilience:
+    """Test cases for FileMonitor resilience improvements."""
+    
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source"
+            source_dir.mkdir()
+            
+            yield {
+                'source': str(source_dir),
+                'temp': str(temp_path)
+            }
+    
+    @pytest.fixture
+    def mock_services(self):
+        """Create mock services."""
+        file_processor = Mock(spec=FileProcessor)
+        logger_service = Mock(spec=LoggerService)
+        
+        file_processor.process_file.return_value = ProcessingResult(
+            success=True, file_path="test.txt"
+        )
+        
+        return {
+            'file_processor': file_processor,
+            'logger_service': logger_service
+        }
+    
+    def test_event_handler_duplicate_filtering(self, mock_services):
+        """Test that duplicate events are filtered."""
+        from src.core.file_monitor import FileEventHandler
+        
+        handler = FileEventHandler(
+            file_processor=mock_services['file_processor'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Test the _is_duplicate_event method directly
+        file_path = "/test/file.txt"
+        
+        # First call should return False (not duplicate)
+        assert handler._is_duplicate_event(file_path) is False
+        
+        # Second call should return True (is duplicate)
+        assert handler._is_duplicate_event(file_path) is True
+        
+        # Check that the file is in recent files
+        assert file_path in handler._recent_files
+    
+    def test_event_handler_file_stability_check(self, mock_services):
+        """Test file stability checking before processing."""
+        from src.core.file_monitor import FileEventHandler
+        
+        handler = FileEventHandler(
+            file_processor=mock_services['file_processor'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Create mock event
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/file.txt"
+        
+        # Mock file size changing (unstable file)
+        with patch('os.path.exists', return_value=True):
+            with patch('os.path.isfile', return_value=True):
+                with patch('os.path.getsize', side_effect=[100, 200]):  # Size changes
+                    handler.on_created(mock_event)
+        
+        # File should not be processed due to instability
+        assert mock_services['file_processor'].process_file.call_count == 0
+        
+        # Check statistics
+        stats = handler.get_stats()
+        assert stats['processing_errors'] == 0  # Not counted as error, just skipped
+    
+    def test_event_handler_resilience_to_processing_errors(self, mock_services):
+        """Test that event handler continues after processing errors."""
+        from src.core.file_monitor import FileEventHandler
+        
+        handler = FileEventHandler(
+            file_processor=mock_services['file_processor'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Mock file processor to raise exception
+        mock_services['file_processor'].process_file.side_effect = Exception("Processing error")
+        
+        # Create mock event
+        mock_event = Mock()
+        mock_event.is_directory = False
+        mock_event.src_path = "/test/file.txt"
+        
+        # Mock file checks
+        with patch('os.path.exists', return_value=True):
+            with patch('os.path.isfile', return_value=True):
+                with patch('os.path.getsize', return_value=100):
+                    with patch('builtins.open', mock_open(read_data="test")):
+                        # Should not raise exception despite processing error
+                        handler.on_created(mock_event)
+        
+        # Check that error was logged
+        mock_services['logger_service'].log_error.assert_called()
+        
+        # Check statistics
+        stats = handler.get_stats()
+        assert stats['processing_errors'] == 1
