@@ -53,6 +53,7 @@ class TestFileProcessor:
         file_manager.move_to_saved.return_value = True
         file_manager.move_to_error.return_value = True
         file_manager.get_relative_path.return_value = "test_file.txt"
+        file_manager.cleanup_empty_folders.return_value = []
         
         return {
             'file_manager': file_manager,
@@ -432,6 +433,7 @@ class TestErrorHandlingAndResilience:
         file_manager.move_to_saved.return_value = True
         file_manager.move_to_error.return_value = True
         file_manager.get_relative_path.return_value = "test_file.txt"
+        file_manager.cleanup_empty_folders.return_value = []  # Return empty list for cleaned folders
         
         return {
             'file_manager': file_manager,

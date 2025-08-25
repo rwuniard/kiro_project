@@ -904,7 +904,7 @@ class TestFileManagerEmptyFolderDetection:
         nested_path = self.source_folder / "sub" / "nested"
         nested_path.mkdir(parents=True)
         
-        result = self.file_manager._is_path_under_source(nested_path, self.source_folder)
+        result = self.file_manager._is_path_under_source(nested_path, self.source_folder.resolve())
         
         assert result is True
     
@@ -919,7 +919,7 @@ class TestFileManagerEmptyFolderDetection:
     
     def test_is_path_under_source_source_folder_itself(self):
         """Test path validation for source folder itself."""
-        result = self.file_manager._is_path_under_source(self.source_folder, self.source_folder)
+        result = self.file_manager._is_path_under_source(self.source_folder.resolve(), self.source_folder.resolve())
         
         assert result is True
     

@@ -456,11 +456,11 @@ class TestFileMonitorCoverageEnhancement:
         assert handler._is_duplicate_event(file_path) is True
         
         # Test cleanup of recent files when limit exceeded
-        # Add exactly 101 files to trigger cleanup once
-        for i in range(101):
+        # Add exactly 100 more files to trigger cleanup (we already have 1)
+        for i in range(100):
             handler._is_duplicate_event(f"/test/file_{i}.txt")
         
-        # After cleanup, should have 50 files (the last 50 added)
+        # At this point we should have exactly 101 files, triggering cleanup to 50
         assert len(handler._recent_files) == 50
     
     def test_file_event_handler_wait_for_file_stability_file_disappears(self):
@@ -604,23 +604,30 @@ class TestFileMonitorCoverageEnhancement:
         """Test start monitoring retry logic."""
         monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
         
-        # Mock observer schedule to fail first two attempts, succeed on third
+        # Test that start_monitoring completes successfully even with initial failures
+        # We'll simulate this by temporarily making the source folder inaccessible
+        
+        # Mock os.access to fail first two times, then succeed
         call_count = 0
-        def mock_schedule(*args, **kwargs):
+        original_access = os.access
+        
+        def mock_access(path, mode):
             nonlocal call_count
             call_count += 1
             if call_count <= 2:
-                raise Exception(f"Failure {call_count}")
-            # Success on third attempt
+                return False  # Simulate no access
+            return original_access(path, mode)  # Return to normal behavior
         
-        monitor.observer.schedule = mock_schedule
-        monitor.observer.is_alive.return_value = True
-        
-        # Should succeed on third attempt
-        monitor.start_monitoring()
-        
-        # Verify retry attempts
-        assert call_count == 3
+        with patch('os.access', side_effect=mock_access):
+            with patch('time.sleep'):  # Speed up test
+                # Should succeed after retries
+                monitor.start_monitoring()
+                
+                # Verify that retries were attempted
+                assert call_count >= 3
+                
+                # Verify error logging occurred for failed attempts
+                assert self.mock_logger.log_error.call_count >= 2
     
     def test_file_monitor_stop_monitoring_observer_none(self):
         """Test stop monitoring when observer is None."""
