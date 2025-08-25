@@ -21,7 +21,7 @@
   - Write unit tests for logging functionality
   - _Requirements: 3.5, 4.5, 5.5_
 
-- [ ] 4. Create file manager for file operations
+- [x] 4. Create file manager for file operations
   - Implement FileManager class for file movement operations
   - Add folder structure preservation logic for both saved and error folders
   - Implement directory creation functionality
