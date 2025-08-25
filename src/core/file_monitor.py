@@ -12,8 +12,8 @@ from typing import Optional
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
 
-from ..services.logger_service import LoggerService
-from .file_processor import FileProcessor
+from services.logger_service import LoggerService
+from core.file_processor import FileProcessor
 
 
 class FileEventHandler(FileSystemEventHandler):

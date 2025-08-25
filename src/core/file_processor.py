@@ -11,9 +11,9 @@ from typing import Optional, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..services.logger_service import LoggerService
-from .file_manager import FileManager
-from ..services.error_handler import ErrorHandler
+from services.logger_service import LoggerService
+from core.file_manager import FileManager
+from services.error_handler import ErrorHandler
 
 
 @dataclass

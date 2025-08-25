@@ -14,22 +14,26 @@ from pathlib import Path
 # Add src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+from app import create_app
+
 
 def main():
     """Main application entry point."""
     print("Folder File Processor starting...")
     
-    # TODO: Initialize configuration manager
-    # TODO: Initialize logging service
-    # TODO: Initialize file processor components
-    # TODO: Start file monitoring
+    # Create application instance
+    app = create_app(env_file='.env', log_file='logs/application.log')
     
-    print("Application setup complete. Ready to process files.")
+    # Run the application
+    exit_code = app.run()
+    
+    return exit_code
 
 
 if __name__ == "__main__":
     try:
-        main()
+        exit_code = main()
+        sys.exit(exit_code)
     except KeyboardInterrupt:
         print("\nApplication stopped by user.")
         sys.exit(0)
