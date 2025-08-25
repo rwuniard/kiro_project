@@ -53,7 +53,8 @@ class ConfigManager:
         for var in self.REQUIRED_ENV_VARS:
             value = os.getenv(var)
             if value:
-                config[var] = value
+                # Expand user home directory (~) and environment variables
+                config[var] = os.path.expanduser(os.path.expandvars(value))
             else:
                 config[var] = ""
         
