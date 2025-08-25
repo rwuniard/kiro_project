@@ -60,15 +60,18 @@ class FileProcessor:
 ```
 
 ### 4. File Manager
-**Purpose:** Handles file operations (move, copy) with folder structure preservation
+**Purpose:** Handles file operations (move, copy) with folder structure preservation and empty folder cleanup
 **Interface:**
 ```python
 class FileManager:
     def __init__(self, source_folder: str, saved_folder: str, error_folder: str)
     def move_to_saved(self, file_path: str) -> bool
     def move_to_error(self, file_path: str) -> bool
+    def cleanup_empty_folders(self, file_path: str) -> None
     def _preserve_folder_structure(self, source_path: str, dest_base: str) -> str
     def _ensure_directory_exists(self, directory: str) -> None
+    def _is_folder_empty(self, folder_path: str) -> bool
+    def _remove_empty_folder_recursive(self, folder_path: str) -> None
 ```
 
 ### 5. Error Handler Service
@@ -113,6 +116,7 @@ class ProcessingResult:
     file_path: str
     error_message: Optional[str] = None
     processing_time: float = 0.0
+    folders_cleaned: List[str] = field(default_factory=list)
 ```
 
 ### Error Log Entry
@@ -132,6 +136,7 @@ class ErrorLogEntry:
 2. **File System Errors:** Permission issues, file not found, disk space
 3. **Processing Errors:** File corruption, encoding issues, business logic failures
 4. **Monitoring Errors:** File system event monitoring failures
+5. **Folder Cleanup Errors:** Permission issues when removing empty folders
 
 ### Error Handling Strategy
 - **Graceful Degradation:** Continue processing other files when one fails
@@ -161,8 +166,9 @@ Additional Context: File size: 1024 bytes, Last modified: 2025-01-23 10:29:12
 - **Configuration Tests:** Environment variable loading, validation, error handling
 - **File Monitor Tests:** Event detection, recursive monitoring, error handling
 - **File Processor Tests:** Content reading, processing logic, error scenarios
-- **File Manager Tests:** File movement, folder creation, structure preservation
+- **File Manager Tests:** File movement, folder creation, structure preservation, empty folder cleanup
 - **Error Handler Tests:** Log file creation, error message formatting
+- **Folder Cleanup Tests:** Empty folder detection, recursive cleanup, permission handling
 - **Integration Tests:** End-to-end workflow testing with temporary directories
 
 ### Test Data Strategy
@@ -187,6 +193,80 @@ Additional Context: File size: 1024 bytes, Last modified: 2025-01-23 10:29:12
 - Use native file system events (inotify on Linux, FSEvents on macOS)
 - Recursive monitoring setup to handle nested directories
 - Efficient event filtering to process only relevant file events
+
+## Folder Cleanup Design
+
+### Empty Folder Detection Algorithm
+The folder cleanup functionality ensures that empty directories are automatically removed after file processing to maintain a clean source folder structure.
+
+#### Cleanup Process Flow
+```
+File Successfully Moved
+         │
+         ▼
+Extract Current Folder Path (where file was located)
+         │
+         ▼
+Check if Current Folder is Empty
+    │           │
+    ▼ (Yes)     ▼ (No)
+Remove Folder   Stop Cleanup
+    │
+    ▼
+Move to Parent Folder
+    │
+    ▼
+Check if Parent Folder is Empty
+    │           │
+    ▼ (Yes)     ▼ (No)
+Remove Parent   Stop Cleanup
+    │
+    ▼
+Continue Recursively Until Non-Empty or Source Root
+```
+
+#### Empty Folder Criteria
+A folder is considered empty when:
+1. Contains no files (regular files, not directories)
+2. Contains no subdirectories with files
+3. May contain empty subdirectories (which will also be removed)
+
+#### Recursive Cleanup Logic
+```python
+def cleanup_empty_folders(self, original_file_path: str) -> List[str]:
+    """
+    Recursively removes empty folders starting from the file's original directory
+    up to the source folder root, stopping when a non-empty folder is encountered.
+    
+    Returns list of removed folder paths for logging purposes.
+    """
+    removed_folders = []
+    # Start with the folder that contained the file
+    current_folder = Path(original_file_path).parent
+    
+    while current_folder != Path(self.source_folder) and current_folder != current_folder.parent:
+        if self._is_folder_empty(current_folder):
+            try:
+                current_folder.rmdir()
+                removed_folders.append(str(current_folder))
+                # Move to parent folder for next iteration
+                current_folder = current_folder.parent
+            except (OSError, PermissionError) as e:
+                # Log warning and stop cleanup
+                self.logger.warning(f"Could not remove empty folder {current_folder}: {e}")
+                break
+        else:
+            # Folder not empty, stop cleanup
+            break
+    
+    return removed_folders
+```
+
+#### Safety Measures
+- **Never remove source root:** Cleanup stops at the configured source folder
+- **Permission handling:** Gracefully handle permission errors without stopping processing
+- **Atomic operations:** Each folder removal is atomic to prevent partial cleanup
+- **Logging:** All folder removals and errors are logged for audit purposes
 
 ## Dependencies
 

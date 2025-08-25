@@ -66,6 +66,18 @@ This feature involves creating a Python application that monitors a configurable
 
 ### Requirement 6
 
+**User Story:** As a developer, I want empty folders to be automatically cleaned up after all files are moved, so that the source folder structure remains clean and organized.
+
+#### Acceptance Criteria
+
+1. WHEN all files in a folder have been successfully moved to the saved folder THEN the application SHALL check if the folder is empty
+2. WHEN a folder contains no files and no subfolders with files THEN the application SHALL remove the empty folder
+3. WHEN removing empty folders THEN the application SHALL recursively check parent folders and remove them if they become empty
+4. WHEN an empty folder is removed THEN the application SHALL log the folder removal at INFO level in the application log
+5. IF a folder cannot be removed due to permissions or system restrictions THEN the application SHALL log a warning but continue processing
+
+### Requirement 7
+
 **User Story:** As a developer, I want comprehensive unit tests that cover all scenarios, so that I can ensure the application works correctly and catch regressions.
 
 #### Acceptance Criteria
@@ -74,3 +86,4 @@ This feature involves creating a Python application that monitors a configurable
 2. WHEN unit tests are executed THEN they SHALL cover all error handling scenarios including file read failures and permission errors
 3. WHEN unit tests are executed THEN they SHALL verify folder structure preservation for both saved and error folders
 4. WHEN unit tests are executed THEN they SHALL test environment variable configuration and error log creation functionality
+5. WHEN unit tests are executed THEN they SHALL test empty folder cleanup functionality including recursive parent folder removal
