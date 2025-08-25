@@ -43,7 +43,7 @@
   - Write unit tests for file processing success and failure scenarios
   - _Requirements: 3.1, 3.4, 3.5, 4.1, 4.5, 5.1, 5.2_
 
-- [ ] 7. Implement file system monitoring
+- [x] 7. Implement file system monitoring
   - Create FileMonitor class using watchdog library
   - Set up recursive file system event monitoring
   - Implement event handler for new file creation
