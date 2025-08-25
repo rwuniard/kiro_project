@@ -1,0 +1,14 @@
+[project]
+name = "kiro-project"
+version = "0.1.0"
+description = "Folder file processor application"
+requires-python = ">=3.12"
+dependencies = [
+    "watchdog==3.0.0",
+    "python-dotenv==1.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
