@@ -894,3 +894,153 @@ class TestFileMonitorResilience:
         # Check statistics
         stats = handler.get_stats()
         assert stats['processing_errors'] == 1
+
+
+class TestFileProcessorAdditionalCoverage:
+    """Additional tests to ensure comprehensive FileProcessor coverage."""
+    
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source"
+            saved_dir = temp_path / "saved"
+            error_dir = temp_path / "error"
+            
+            source_dir.mkdir()
+            saved_dir.mkdir()
+            error_dir.mkdir()
+            
+            yield {
+                'source': str(source_dir),
+                'saved': str(saved_dir),
+                'error': str(error_dir),
+                'temp': str(temp_path)
+            }
+    
+    @pytest.fixture
+    def mock_services(self, temp_dirs):
+        """Create mock services for testing."""
+        file_manager = Mock(spec=FileManager)
+        error_handler = Mock(spec=ErrorHandler)
+        logger_service = Mock(spec=LoggerService)
+        
+        file_manager.move_to_saved.return_value = True
+        file_manager.move_to_error.return_value = True
+        file_manager.get_relative_path.return_value = "test_file.txt"
+        
+        return {
+            'file_manager': file_manager,
+            'error_handler': error_handler,
+            'logger_service': logger_service
+        }
+    
+    @pytest.fixture
+    def file_processor(self, mock_services):
+        """Create FileProcessor instance with mock services."""
+        return FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service']
+        )
+    
+    def test_validate_file_access_permission_error(self, file_processor, temp_dirs):
+        """Test file access validation with permission error."""
+        test_file = Path(temp_dirs['source']) / "permission_test.txt"
+        test_file.write_text("test content")
+        
+        # Mock open to raise PermissionError
+        with patch('builtins.open', side_effect=PermissionError("Permission denied")):
+            with pytest.raises(PermissionError, match="Cannot access file"):
+                file_processor._validate_file_access(str(test_file))
+    
+    def test_read_file_content_os_error(self, file_processor, temp_dirs):
+        """Test file content reading with OS error."""
+        test_file = Path(temp_dirs['source']) / "os_error_test.txt"
+        test_file.write_text("test content")
+        
+        # Mock open to raise OSError
+        with patch('builtins.open', side_effect=OSError("Disk error")):
+            with pytest.raises(OSError, match="OS error when reading file"):
+                file_processor._read_file_content(str(test_file))
+    
+    def test_read_file_content_unexpected_error(self, file_processor, temp_dirs):
+        """Test file content reading with unexpected error."""
+        test_file = Path(temp_dirs['source']) / "unexpected_error_test.txt"
+        test_file.write_text("test content")
+        
+        # Mock open to raise unexpected exception
+        with patch('builtins.open', side_effect=RuntimeError("Unexpected error")):
+            with pytest.raises(RuntimeError, match="Unexpected error reading file"):
+                file_processor._read_file_content(str(test_file))
+    
+    def test_classify_error_os_error_with_errno(self, file_processor):
+        """Test error classification for OS errors with specific errno."""
+        # Test transient OS error with specific errno
+        os_error = OSError("File busy")
+        os_error.errno = 16  # EBUSY - transient error
+        
+        error_type = file_processor._classify_error(os_error)
+        assert error_type == ErrorType.TRANSIENT
+    
+    def test_classify_error_os_error_without_errno(self, file_processor):
+        """Test error classification for OS errors without errno."""
+        os_error = OSError("Generic OS error")
+        # No errno attribute
+        
+        error_type = file_processor._classify_error(os_error)
+        assert error_type == ErrorType.TRANSIENT
+    
+    def test_execute_with_retry_unknown_error_classification(self, file_processor):
+        """Test retry logic with unknown error classification."""
+        def failing_operation():
+            raise RuntimeError("Unknown error type")
+        
+        # Unknown errors should still be retried
+        with pytest.raises(RuntimeError):
+            file_processor._execute_with_retry(failing_operation, "Test operation")
+    
+    def test_process_file_error_log_creation_failure(self, file_processor, mock_services, temp_dirs):
+        """Test process file when error log creation fails."""
+        # Create empty test file (will cause processing failure)
+        test_file = Path(temp_dirs['source']) / "empty_test.txt"
+        test_file.write_text("")
+        
+        # Mock error handler to fail
+        mock_services['error_handler'].create_error_log.side_effect = Exception("Log creation failed")
+        
+        result = file_processor.process_file(str(test_file))
+        
+        # Should still return failure result
+        assert result.success is False
+        
+        # Should have attempted to create error log
+        mock_services['error_handler'].create_error_log.assert_called()
+    
+    def test_process_file_move_to_error_exception(self, file_processor, mock_services, temp_dirs):
+        """Test process file when move to error raises exception."""
+        # Create empty test file (will cause processing failure)
+        test_file = Path(temp_dirs['source']) / "empty_test.txt"
+        test_file.write_text("")
+        
+        # Mock move_to_error_with_validation to raise exception
+        with patch.object(file_processor, '_move_to_error_with_validation', side_effect=Exception("Move failed")):
+            result = file_processor.process_file(str(test_file))
+            
+            # Should still return failure result
+            assert result.success is False
+    
+    def test_move_to_saved_with_validation_failure(self, file_processor, mock_services):
+        """Test move to saved validation failure."""
+        mock_services['file_manager'].move_to_saved.return_value = False
+        
+        with pytest.raises(RuntimeError, match="Failed to move file to saved folder"):
+            file_processor._move_to_saved_with_validation("/test/file.txt")
+    
+    def test_move_to_error_with_validation_failure(self, file_processor, mock_services):
+        """Test move to error validation failure."""
+        mock_services['file_manager'].move_to_error.return_value = False
+        
+        with pytest.raises(RuntimeError, match="Failed to move file to error folder"):
+            file_processor._move_to_error_with_validation("/test/file.txt")

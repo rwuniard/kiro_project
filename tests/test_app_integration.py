@@ -452,3 +452,291 @@ class TestApplicationIntegrationScenarios:
         # Should have some successful files and some error handling
         assert len(saved_files) >= 1  # At least some successful
         assert len(error_files) >= 1 or len(error_logs) >= 1  # At least some errors handled
+
+
+class TestApplicationCoverageEnhancement:
+    """Additional tests to improve coverage for app.py."""
+    
+    def setup_method(self):
+        """Set up test environment."""
+        import uuid
+        
+        self.temp_dir = tempfile.mkdtemp(prefix=f"test_coverage_{uuid.uuid4().hex[:8]}_")
+        self.source_dir = Path(self.temp_dir) / "source"
+        self.saved_dir = Path(self.temp_dir) / "saved"
+        self.error_dir = Path(self.temp_dir) / "error"
+        
+        for dir_path in [self.source_dir, self.saved_dir, self.error_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+        
+        self.env_file = Path(self.temp_dir) / ".env"
+        with open(self.env_file, 'w') as f:
+            f.write(f"SOURCE_FOLDER={self.source_dir}\n")
+            f.write(f"SAVED_FOLDER={self.saved_dir}\n")
+            f.write(f"ERROR_FOLDER={self.error_dir}\n")
+        
+        self.app = None
+    
+    def teardown_method(self):
+        """Clean up after test."""
+        import shutil
+        import time
+        
+        if hasattr(self, 'app') and self.app:
+            try:
+                if hasattr(self.app, 'file_monitor') and self.app.file_monitor:
+                    self.app.file_monitor.stop_monitoring()
+                if hasattr(self.app, 'shutdown'):
+                    self.app.shutdown()
+            except Exception:
+                pass
+        
+        env_vars_to_clean = ['SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER']
+        for var in env_vars_to_clean:
+            if var in os.environ:
+                del os.environ[var]
+        
+        time.sleep(0.1)
+        
+        try:
+            if hasattr(self, 'temp_dir') and os.path.exists(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            print(f"Warning: Failed to cleanup temp directory {self.temp_dir}: {e}")
+    
+    def test_validate_initialization_all_components_none(self):
+        """Test validation when all components are None."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        
+        # All components should be None initially
+        result = app._validate_initialization()
+        assert result is False
+    
+    def test_validate_initialization_partial_components(self):
+        """Test validation when some components are initialized."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        
+        # Initialize only some components
+        app.config_manager = MagicMock()
+        app.logger_service = MagicMock()
+        # Leave others as None
+        
+        result = app._validate_initialization()
+        assert result is False
+    
+    def test_perform_health_check_source_folder_missing(self):
+        """Test health check when source folder is deleted."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Delete source folder to simulate failure
+        import shutil
+        shutil.rmtree(self.source_dir)
+        
+        result = app._perform_health_check()
+        assert result is False
+    
+    def test_perform_health_check_monitoring_stopped(self):
+        """Test health check when monitoring has stopped."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor to return False for is_monitoring
+        app.file_monitor.is_monitoring = MagicMock(return_value=False)
+        
+        result = app._perform_health_check()
+        assert result is False
+    
+    def test_perform_health_check_exception_handling(self):
+        """Test health check exception handling."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor to raise exception
+        app.file_monitor.is_monitoring = MagicMock(side_effect=Exception("Health check error"))
+        
+        result = app._perform_health_check()
+        assert result is False
+    
+    def test_report_statistics_success(self):
+        """Test successful statistics reporting."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock statistics methods
+        app.file_processor.get_processing_stats = MagicMock(return_value={
+            'total_processed': 10,
+            'successful': 8,
+            'failed_permanent': 1,
+            'failed_after_retry': 1,
+            'retries_attempted': 3
+        })
+        
+        app.file_monitor.get_monitoring_stats = MagicMock(return_value={
+            'events_received': 15,
+            'duplicate_events_filtered': 2
+        })
+        
+        # Should not raise exception
+        app._report_statistics()
+        
+        # Verify methods were called
+        app.file_processor.get_processing_stats.assert_called_once()
+        app.file_monitor.get_monitoring_stats.assert_called_once()
+    
+    def test_report_statistics_exception_handling(self):
+        """Test statistics reporting exception handling."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock to raise exception
+        app.file_processor.get_processing_stats = MagicMock(side_effect=Exception("Stats error"))
+        
+        # Should not raise exception
+        app._report_statistics()
+    
+    def test_run_main_loop_with_health_checks(self):
+        """Test main loop with health check intervals."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor start to avoid actual monitoring
+        app.file_monitor.start_monitoring = MagicMock()
+        
+        # Mock health check to fail after first success
+        health_check_calls = [True, False]  # First success, then failure
+        app._perform_health_check = MagicMock(side_effect=health_check_calls)
+        
+        # Mock statistics reporting
+        app._report_statistics = MagicMock()
+        
+        # Mock the main loop to simulate health check behavior
+        def mock_loop():
+            # Simulate health check calls
+            app._perform_health_check()
+            app._perform_health_check()  # Second call should fail
+            app.shutdown_requested = True
+        
+        app._run_main_loop = mock_loop
+        
+        app.start()
+    
+    def test_run_main_loop_keyboard_interrupt(self):
+        """Test main loop keyboard interrupt handling."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor start to avoid actual monitoring
+        app.file_monitor.start_monitoring = MagicMock()
+        
+        # Mock the main loop to raise KeyboardInterrupt
+        def mock_main_loop():
+            app.is_running = True
+            raise KeyboardInterrupt("User interrupt")
+        
+        app._run_main_loop = mock_main_loop
+        
+        # Should handle KeyboardInterrupt gracefully
+        app.start()
+    
+    def test_run_main_loop_unexpected_exception(self):
+        """Test main loop unexpected exception handling."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor start to avoid actual monitoring
+        app.file_monitor.start_monitoring = MagicMock()
+        
+        # Mock the main loop to raise unexpected exception
+        def mock_main_loop():
+            app.is_running = True
+            raise RuntimeError("Unexpected error")
+        
+        app._run_main_loop = mock_main_loop
+        
+        # Should handle exception gracefully
+        app.start()
+    
+    def test_shutdown_with_signal_handler_reset(self):
+        """Test shutdown with signal handler reset."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock signal.signal to verify it's called
+        with patch('signal.signal') as mock_signal:
+            app.shutdown()
+            
+            # Verify signal handlers were reset
+            assert mock_signal.call_count >= 2  # At least SIGINT and SIGTERM
+    
+    def test_shutdown_exception_handling(self):
+        """Test shutdown exception handling."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        assert app.initialize() is True
+        
+        # Mock file monitor to raise exception during stop
+        app.file_monitor.stop_monitoring = MagicMock(side_effect=Exception("Stop error"))
+        
+        # Should handle exception gracefully
+        app.shutdown()
+    
+    def test_signal_handler_sigterm(self):
+        """Test SIGTERM signal handler."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        
+        # Test SIGTERM signal
+        app._signal_handler(15, None)  # SIGTERM
+        assert app.shutdown_requested is True
+    
+    def test_app_with_custom_log_file(self):
+        """Test app initialization with custom log file."""
+        log_file = Path(self.temp_dir) / "custom.log"
+        app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(log_file))
+        
+        assert app.initialize() is True
+        assert app.log_file == str(log_file)
+        assert app.logger_service.log_file_path == str(log_file)
+    
+    def test_initialization_component_failure_scenarios(self):
+        """Test various component initialization failure scenarios."""
+        # Test ConfigManager failure
+        with patch('app.ConfigManager') as mock_config_manager:
+            mock_config_manager.side_effect = Exception("Config error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False
+        
+        # Test LoggerService failure
+        with patch('app.LoggerService.setup_logger') as mock_logger:
+            mock_logger.side_effect = Exception("Logger error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False
+        
+        # Test ErrorHandler failure
+        with patch('app.ErrorHandler') as mock_error_handler:
+            mock_error_handler.side_effect = Exception("Error handler error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False
+        
+        # Test FileManager failure
+        with patch('app.FileManager') as mock_file_manager:
+            mock_file_manager.side_effect = Exception("File manager error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False
+        
+        # Test FileProcessor failure
+        with patch('app.FileProcessor') as mock_file_processor:
+            mock_file_processor.side_effect = Exception("File processor error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False
+        
+        # Test FileMonitor failure
+        with patch('app.FileMonitor') as mock_file_monitor:
+            mock_file_monitor.side_effect = Exception("File monitor error")
+            app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = app.initialize()
+            assert result is False

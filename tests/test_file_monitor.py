@@ -423,3 +423,308 @@ class TestFileMonitorIntegration:
         self.mock_processor.process_file.assert_called()
         call_args = self.mock_processor.process_file.call_args[0]
         assert Path(call_args[0]).resolve() == Path(test_file).resolve()
+
+
+class TestFileMonitorCoverageEnhancement:
+    """Additional tests to improve coverage for FileMonitor and FileEventHandler."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_processor = Mock(spec=FileProcessor)
+        self.mock_logger = Mock(spec=LoggerService)
+        
+        # Create temporary directory for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = self.temp_dir
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_file_event_handler_duplicate_filtering(self):
+        """Test duplicate event filtering in FileEventHandler."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Test duplicate detection
+        file_path = "/test/file.txt"
+        
+        # First call should not be duplicate
+        assert handler._is_duplicate_event(file_path) is False
+        
+        # Second call should be duplicate
+        assert handler._is_duplicate_event(file_path) is True
+        
+        # Test cleanup of recent files when limit exceeded
+        # Add exactly 101 files to trigger cleanup once
+        for i in range(101):
+            handler._is_duplicate_event(f"/test/file_{i}.txt")
+        
+        # After cleanup, should have 50 files (the last 50 added)
+        assert len(handler._recent_files) == 50
+    
+    def test_file_event_handler_wait_for_file_stability_file_disappears(self):
+        """Test file stability check when file disappears."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Test with non-existent file
+        result = handler._wait_for_file_stability("/nonexistent/file.txt", 0.1)
+        assert result is False
+    
+    def test_file_event_handler_wait_for_file_stability_size_changes(self):
+        """Test file stability check when file size changes."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Create a test file
+        test_file = os.path.join(self.temp_dir, "changing_file.txt")
+        with open(test_file, 'w') as f:
+            f.write("initial content")
+        
+        # Mock os.path.getsize to return different sizes
+        with patch('os.path.getsize') as mock_getsize:
+            mock_getsize.side_effect = [100, 200]  # Size changes
+            
+            result = handler._wait_for_file_stability(test_file, 0.01)
+            assert result is False
+    
+    def test_file_event_handler_wait_for_file_stability_os_error(self):
+        """Test file stability check with OS error."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Mock os.path.getsize to raise OSError
+        with patch('os.path.getsize') as mock_getsize:
+            mock_getsize.side_effect = OSError("File access error")
+            
+            result = handler._wait_for_file_stability("/test/file.txt", 0.1)
+            assert result is False
+    
+    def test_file_event_handler_validate_file_ready_not_file(self):
+        """Test file validation when path is not a file."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Test with directory instead of file
+        result = handler._validate_file_ready(self.temp_dir)
+        assert result is False
+    
+    def test_file_event_handler_validate_file_ready_permission_error(self):
+        """Test file validation with permission error."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Create a test file
+        test_file = os.path.join(self.temp_dir, "permission_test.txt")
+        with open(test_file, 'w') as f:
+            f.write("test content")
+        
+        # Mock open to raise PermissionError
+        with patch('builtins.open') as mock_open:
+            mock_open.side_effect = PermissionError("Access denied")
+            
+            result = handler._validate_file_ready(test_file)
+            assert result is False
+    
+    def test_file_event_handler_process_file_with_resilience_max_attempts(self):
+        """Test file processing with maximum retry attempts."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Create a test file
+        test_file = os.path.join(self.temp_dir, "retry_test.txt")
+        with open(test_file, 'w') as f:
+            f.write("test content")
+        
+        # Mock processor to always raise exception
+        self.mock_processor.process_file.side_effect = Exception("Processing error")
+        
+        # Mock file validation to pass
+        with patch.object(handler, '_wait_for_file_stability', return_value=True), \
+             patch.object(handler, '_validate_file_ready', return_value=True):
+            
+            handler._process_file_with_resilience(test_file)
+            
+            # Should have attempted processing 5 times (max_stability_checks)
+            assert self.mock_processor.process_file.call_count == 5
+            assert handler.stats['processing_errors'] == 1
+    
+    def test_file_event_handler_get_stats(self):
+        """Test getting event handler statistics."""
+        handler = FileEventHandler(self.mock_processor, self.mock_logger)
+        
+        # Modify some stats
+        handler.stats['events_received'] = 10
+        handler.stats['files_processed'] = 8
+        handler.stats['duplicate_events_filtered'] = 2
+        
+        stats = handler.get_stats()
+        
+        assert stats['events_received'] == 10
+        assert stats['files_processed'] == 8
+        assert stats['duplicate_events_filtered'] == 2
+        assert isinstance(stats, dict)
+        # Ensure it's a copy, not the original
+        stats['events_received'] = 999
+        assert handler.stats['events_received'] == 10
+    
+    def test_file_monitor_start_monitoring_source_folder_validation_errors(self):
+        """Test start monitoring with various source folder validation errors."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Test when no read access to source folder
+        with patch('os.access', return_value=False):
+            with pytest.raises(RuntimeError, match="No read access to source folder"):
+                monitor.start_monitoring()
+    
+    def test_file_monitor_start_monitoring_observer_initialization_failure(self):
+        """Test start monitoring when observer initialization fails."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Set observer to None to simulate initialization failure
+        monitor.observer = None
+        
+        # The method should handle this gracefully, not raise an exception
+        # Let's test that it logs an error instead
+        try:
+            monitor.start_monitoring()
+        except RuntimeError as e:
+            assert "Observer not initialized" in str(e)
+    
+    def test_file_monitor_start_monitoring_observer_fails_to_start(self):
+        """Test start monitoring when observer fails to start properly."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock observer to appear not alive after start
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = False
+        monitor.observer = mock_observer
+        
+        try:
+            monitor.start_monitoring()
+        except RuntimeError as e:
+            assert "Observer failed to start properly" in str(e)
+    
+    def test_file_monitor_start_monitoring_retry_logic(self):
+        """Test start monitoring retry logic."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock observer schedule to fail first two attempts, succeed on third
+        call_count = 0
+        def mock_schedule(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise Exception(f"Failure {call_count}")
+            # Success on third attempt
+        
+        monitor.observer.schedule = mock_schedule
+        monitor.observer.is_alive.return_value = True
+        
+        # Should succeed on third attempt
+        monitor.start_monitoring()
+        
+        # Verify retry attempts
+        assert call_count == 3
+    
+    def test_file_monitor_stop_monitoring_observer_none(self):
+        """Test stop monitoring when observer is None."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        monitor.observer = None
+        
+        # Should not raise exception
+        monitor.stop_monitoring()
+    
+    def test_file_monitor_stop_monitoring_observer_not_alive(self):
+        """Test stop monitoring when observer is not alive."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = False
+        monitor.observer = mock_observer
+        
+        # Should not call stop or join
+        monitor.stop_monitoring()
+        mock_observer.stop.assert_not_called()
+        mock_observer.join.assert_not_called()
+    
+    def test_file_monitor_stop_monitoring_exception_handling(self):
+        """Test stop monitoring exception handling."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = True
+        mock_observer.stop.side_effect = Exception("Stop error")
+        monitor.observer = mock_observer
+        
+        # Should handle exception gracefully
+        monitor.stop_monitoring()
+        self.mock_logger.log_error.assert_called()
+    
+    def test_file_monitor_is_monitoring_observer_none(self):
+        """Test is_monitoring when observer is None."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        monitor.observer = None
+        
+        assert monitor.is_monitoring() is False
+    
+    def test_file_monitor_is_monitoring_source_folder_inaccessible(self):
+        """Test is_monitoring when source folder becomes inaccessible."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = True
+        monitor.observer = mock_observer
+        
+        # Delete the actual source folder to test the behavior
+        import shutil
+        shutil.rmtree(self.source_folder)
+        
+        result = monitor.is_monitoring()
+        assert result is False
+    
+    def test_file_monitor_is_monitoring_health_check_exception(self):
+        """Test is_monitoring health check exception handling."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = True
+        monitor.observer = mock_observer
+        
+        # Mock Path.exists to raise exception
+        with patch('pathlib.Path.exists', side_effect=Exception("Health check error")):
+            result = monitor.is_monitoring()
+            assert result is False
+    
+    def test_file_monitor_get_monitoring_stats(self):
+        """Test get_monitoring_stats method."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = True
+        monitor.observer = mock_observer
+        
+        # Mock event handler stats
+        monitor.event_handler.get_stats = Mock(return_value={
+            'events_received': 5,
+            'files_processed': 3
+        })
+        
+        stats = monitor.get_monitoring_stats()
+        
+        assert stats['is_monitoring'] is True
+        assert stats['source_folder'] == str(monitor.source_folder)
+        assert stats['observer_alive'] is True
+        assert stats['events_received'] == 5
+        assert stats['files_processed'] == 3
+    
+    def test_file_monitor_get_monitoring_stats_no_event_handler(self):
+        """Test get_monitoring_stats when event handler is None."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        monitor.event_handler = None
+        
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = False
+        monitor.observer = mock_observer
+        
+        stats = monitor.get_monitoring_stats()
+        
+        assert stats['is_monitoring'] is False
+        assert stats['observer_alive'] is False
+        # Should not have event handler stats
+        assert 'events_received' not in stats

@@ -11,4 +11,5 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=6.2.1",
 ]
