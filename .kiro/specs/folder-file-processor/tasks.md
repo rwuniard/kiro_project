@@ -35,7 +35,7 @@
   - Write unit tests for error log creation and formatting
   - _Requirements: 4.3, 4.4_
 
-- [ ] 6. Create core file processor
+- [x] 6. Create core file processor
   - Implement FileProcessor class with file reading and processing logic
   - Add basic file processing functionality (print to screen)
   - Integrate with FileManager for successful file movement
