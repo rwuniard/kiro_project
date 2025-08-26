@@ -16,6 +16,7 @@ from enum import Enum
 from src.services.logger_service import LoggerService
 from src.core.file_manager import FileManager
 from src.services.error_handler import ErrorHandler
+from src.core.document_processing import DocumentProcessingInterface
 
 
 class ErrorType(Enum):
@@ -70,7 +71,8 @@ class FileProcessor:
     """
     
     def __init__(self, file_manager: FileManager, error_handler: ErrorHandler, 
-                 logger_service: LoggerService, retry_config: Optional[RetryConfig] = None):
+                 logger_service: LoggerService, document_processor: DocumentProcessingInterface,
+                 retry_config: Optional[RetryConfig] = None):
         """
         Initialize FileProcessor with required services.
         
@@ -78,12 +80,23 @@ class FileProcessor:
             file_manager: FileManager instance for file operations
             error_handler: ErrorHandler instance for error logging
             logger_service: LoggerService instance for application logging
+            document_processor: DocumentProcessingInterface instance for document processing
             retry_config: Optional retry configuration for transient errors
+            
+        Raises:
+            ValueError: If document_processor is None or not properly initialized
         """
+        if document_processor is None:
+            raise ValueError("Document processor cannot be None")
+        
         self.file_manager = file_manager
         self.error_handler = error_handler
         self.logger = logger_service
+        self.document_processor = document_processor
         self.retry_config = retry_config or RetryConfig()
+        
+        # Validate that document processor is properly initialized
+        self._validate_document_processor()
         
         # Track processing statistics
         self.stats = {
@@ -93,6 +106,52 @@ class FileProcessor:
             'failed_after_retry': 0,
             'retries_attempted': 0
         }
+    
+    def _validate_document_processor(self) -> None:
+        """
+        Validate that the document processor is properly initialized.
+        
+        Raises:
+            ValueError: If document processor is not properly initialized
+            RuntimeError: If document processor initialization check fails
+        """
+        try:
+            # Check if processor has required methods (interface compliance)
+            required_methods = ['initialize', 'is_supported_file', 'process_document', 
+                              'get_supported_extensions', 'cleanup']
+            
+            for method_name in required_methods:
+                if not hasattr(self.document_processor, method_name):
+                    raise ValueError(
+                        f"Document processor missing required method: {method_name}"
+                    )
+                
+                method = getattr(self.document_processor, method_name)
+                if not callable(method):
+                    raise ValueError(
+                        f"Document processor method {method_name} is not callable"
+                    )
+            
+            # Test basic functionality by getting supported extensions
+            try:
+                extensions = self.document_processor.get_supported_extensions()
+                if not isinstance(extensions, set):
+                    raise ValueError(
+                        "Document processor get_supported_extensions() must return a set"
+                    )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Document processor failed basic functionality test: {str(e)}"
+                )
+            
+            self.logger.log_info(
+                f"Document processor validation successful: {self.document_processor.get_processor_name()}"
+            )
+            
+        except Exception as e:
+            error_msg = f"Document processor validation failed: {str(e)}"
+            self.logger.log_error(error_msg)
+            raise ValueError(error_msg) from e
         
     def process_file(self, file_path: str) -> ProcessingResult:
         """
@@ -115,18 +174,11 @@ class FileProcessor:
                 file_path
             )
             
-            # Read file content with retry logic
-            content = self._execute_with_retry(
-                self._read_file_content, 
-                "File reading", 
-                file_path
-            )
-            
             # Perform processing with retry logic
             self._execute_with_retry(
                 self._perform_processing, 
                 "File processing", 
-                content, file_path
+                file_path
             )
             
             # Move to saved folder on success with retry logic
@@ -180,11 +232,20 @@ class FileProcessor:
             
             # Create error log file (with retry for transient file system issues)
             try:
-                self._execute_with_retry(
-                    self.error_handler.create_error_log,
-                    "Error log creation",
-                    file_path, str(e), e
-                )
+                # Check if we have a DocumentProcessingError to pass along
+                doc_error = self._extract_document_processing_error(e)
+                if doc_error:
+                    self._execute_with_retry(
+                        self.error_handler.create_document_processing_error_log,
+                        "Document processing error log creation",
+                        file_path, str(e), e, doc_error
+                    )
+                else:
+                    self._execute_with_retry(
+                        self.error_handler.create_error_log,
+                        "Error log creation",
+                        file_path, str(e), e
+                    )
             except Exception as log_error:
                 self.logger.log_error(f"Failed to create error log: {log_error}")
             
@@ -306,32 +367,66 @@ class FileProcessor:
         except Exception as e:
             raise RuntimeError(f"Unexpected error reading file: {str(e)}")
     
-    def _perform_processing(self, content: str, file_path: str) -> None:
+    def _perform_processing(self, file_path: str) -> None:
         """
-        Perform the actual file processing logic.
+        Perform document processing using the configured DocumentProcessingInterface.
         
-        Currently implements basic processing (validation and logging).
-        This method can be extended with more complex processing logic.
+        This method processes the file through the document processing system
+        and handles the ProcessingResult appropriately.
         
         Args:
-            content: Content of the file to process
             file_path: Path to the file being processed
+            
+        Raises:
+            Exception: If document processing fails
         """
-        # Basic processing: validate content is not empty
-        if not content.strip():
-            raise ValueError("File is empty or contains only whitespace")
+        from .document_processing import DocumentProcessingError
         
-        # Basic processing: log file information
-        file_size = len(content)
-        line_count = len(content.splitlines())
+        # Convert to Path object for document processor
+        path_obj = Path(file_path)
+        
+        # Process document through the document processing interface
+        result = self.document_processor.process_document(path_obj)
+        
+        # Handle processing result
+        if not result.success:
+            # Create appropriate exception based on error type
+            error_msg = result.error_message or "Document processing failed"
+            
+            # Check if we have a DocumentProcessingError in metadata
+            processing_error = result.metadata.get('processing_error') if result.metadata else None
+            
+            if processing_error and isinstance(processing_error, DocumentProcessingError):
+                # Create exception with DocumentProcessingError in metadata for enhanced error handling
+                exception = RuntimeError(f"Document processing failed: {error_msg}")
+                exception.metadata = {'processing_error': processing_error}
+                raise exception
+            else:
+                # Raise with basic error information
+                if result.error_type == "unsupported_file_type":
+                    raise ValueError(f"Unsupported file type: {error_msg}")
+                elif result.error_type == "empty_document":
+                    raise ValueError(f"Empty document: {error_msg}")
+                elif result.error_type == "initialization_error":
+                    raise RuntimeError(f"Processor not initialized: {error_msg}")
+                else:
+                    raise RuntimeError(f"Document processing failed: {error_msg}")
+        
+        # Log successful processing with detailed information
+        relative_path = self.file_manager.get_relative_path(file_path) or os.path.basename(file_path)
+        
+        # Extract metadata for logging
+        metadata = result.metadata or {}
+        processor_name = metadata.get('document_processor', 'unknown')
+        file_size = metadata.get('file_size', 0)
+        model_vendor = metadata.get('model_vendor', 'unknown')
         
         self.logger.log_info(
-            f"Processing file {os.path.basename(file_path)}: "
-            f"{file_size} bytes, {line_count} lines"
+            f"Document processing completed for {relative_path}: "
+            f"processor={processor_name}, chunks={result.chunks_created}, "
+            f"time={result.processing_time:.2f}s, size={file_size} bytes, "
+            f"model={model_vendor}"
         )
-        
-        # Additional processing logic can be added here
-        # For now, we just validate the file was readable and has content
     
     def _classify_error(self, exception: Exception) -> ErrorType:
         """
@@ -343,6 +438,46 @@ class FileProcessor:
         Returns:
             ErrorType: Classification of the error
         """
+        from .document_processing import DocumentProcessingError
+        
+        # Check for DocumentProcessingError first (highest priority)
+        if hasattr(exception, '__cause__') and isinstance(exception.__cause__, DocumentProcessingError):
+            # Extract DocumentProcessingError from exception chain
+            doc_error = exception.__cause__
+            return self._classify_document_processing_error(doc_error)
+        
+        # Check if exception contains DocumentProcessingError information
+        error_message = str(exception).lower()
+        
+        # Document processing permanent errors (don't retry)
+        if any(keyword in error_message for keyword in [
+            'unsupported file type',
+            'empty document', 
+            'processor not initialized',
+            'invalid file format',
+            'corrupted file',
+            'file too large',
+            'invalid document structure',
+            'malformed content'
+        ]):
+            return ErrorType.PERMANENT
+        
+        # Document processing transient errors (retry possible)
+        if any(keyword in error_message for keyword in [
+            'api rate limit',
+            'connection timeout',
+            'network error',
+            'temporary unavailable',
+            'service unavailable',
+            'chromadb',
+            'embedding generation failed',
+            'rate limit exceeded',
+            'quota exceeded',
+            'server overloaded'
+        ]):
+            return ErrorType.TRANSIENT
+        
+        # Traditional file system errors
         # Transient errors that might resolve with retry
         transient_errors = (
             OSError,  # Temporary file system issues
@@ -353,7 +488,7 @@ class FileProcessor:
         # Permanent errors that won't resolve with retry
         permanent_errors = (
             UnicodeDecodeError,  # File encoding issues
-            ValueError,  # Business logic validation errors
+            ValueError,  # Business logic validation errors (including document processing)
         )
         
         if isinstance(exception, transient_errors):
@@ -373,10 +508,149 @@ class FileProcessor:
                 return ErrorType.TRANSIENT
         
         if isinstance(exception, permanent_errors):
+            # For ValueError, check if it's document processing related
+            if isinstance(exception, ValueError):
+                # Document processing ValueErrors are typically permanent
+                if any(keyword in error_message for keyword in [
+                    'document processing',
+                    'unsupported file',
+                    'empty document',
+                    'invalid format'
+                ]):
+                    return ErrorType.PERMANENT
             return ErrorType.PERMANENT
+        
+        # RuntimeError classification based on content
+        if isinstance(exception, RuntimeError):
+            # Some RuntimeErrors from document processing might be transient
+            if any(keyword in error_message for keyword in [
+                'api rate limit',
+                'connection',
+                'timeout',
+                'network',
+                'temporary',
+                'quota',
+                'overloaded'
+            ]):
+                return ErrorType.TRANSIENT
+            else:
+                # Check if it's a document processing related RuntimeError
+                if any(keyword in error_message for keyword in [
+                    'document processing',
+                    'processor not initialized',
+                    'processing failed'
+                ]):
+                    return ErrorType.PERMANENT
+                else:
+                    # Other RuntimeErrors are unknown
+                    return ErrorType.UNKNOWN
         
         # Default to unknown for unclassified errors
         return ErrorType.UNKNOWN
+    
+    def _classify_document_processing_error(self, doc_error: 'DocumentProcessingError') -> ErrorType:
+        """
+        Classify a DocumentProcessingError to determine retry behavior.
+        
+        Args:
+            doc_error: DocumentProcessingError instance to classify
+            
+        Returns:
+            ErrorType: Classification of the document processing error
+        """
+        error_type = doc_error.error_type.lower()
+        error_message = doc_error.error_message.lower()
+        
+        # Permanent document processing errors (don't retry)
+        permanent_error_types = {
+            'unsupported_file_type',
+            'empty_document',
+            'invalid_file_format',
+            'corrupted_file',
+            'file_too_large',
+            'initialization_error',
+            'configuration_error',
+            'invalid_document_structure',
+            'malformed_content',
+            'encoding_error'
+        }
+        
+        if error_type in permanent_error_types:
+            return ErrorType.PERMANENT
+        
+        # Transient document processing errors (retry possible)
+        transient_error_types = {
+            'api_rate_limit',
+            'connection_timeout',
+            'network_error',
+            'service_unavailable',
+            'temporary_failure',
+            'quota_exceeded',
+            'server_overloaded',
+            'chromadb_error',
+            'embedding_generation_failed'
+        }
+        
+        if error_type in transient_error_types:
+            return ErrorType.TRANSIENT
+        
+        # Check error message for additional classification hints
+        if any(keyword in error_message for keyword in [
+            'rate limit',
+            'quota exceeded',
+            'connection',
+            'timeout',
+            'network',
+            'temporary',
+            'unavailable',
+            'overloaded',
+            'chromadb'
+        ]):
+            return ErrorType.TRANSIENT
+        
+        if any(keyword in error_message for keyword in [
+            'unsupported',
+            'invalid format',
+            'corrupted',
+            'empty',
+            'malformed',
+            'encoding'
+        ]):
+            return ErrorType.PERMANENT
+        
+        # Default to permanent for unknown document processing errors
+        # to avoid infinite retries on unclassified errors
+        return ErrorType.PERMANENT
+    
+    def _extract_document_processing_error(self, exception: Exception) -> Optional['DocumentProcessingError']:
+        """
+        Extract DocumentProcessingError from exception or exception metadata.
+        
+        Args:
+            exception: Exception to examine for DocumentProcessingError
+            
+        Returns:
+            DocumentProcessingError if found, None otherwise
+        """
+        from .document_processing import DocumentProcessingError
+        
+        # Check if exception has a DocumentProcessingError as cause
+        if hasattr(exception, '__cause__') and isinstance(exception.__cause__, DocumentProcessingError):
+            return exception.__cause__
+        
+        # Check if exception has DocumentProcessingError in args
+        if hasattr(exception, 'args') and exception.args:
+            for arg in exception.args:
+                if isinstance(arg, DocumentProcessingError):
+                    return arg
+        
+        # Check if exception has a metadata attribute with DocumentProcessingError
+        if hasattr(exception, 'metadata') and isinstance(exception.metadata, dict):
+            doc_error = exception.metadata.get('processing_error')
+            if isinstance(doc_error, DocumentProcessingError):
+                return doc_error
+        
+        return None
     
     def _execute_with_retry(self, operation: Callable, operation_name: str, 
                            *args, **kwargs) -> Any:

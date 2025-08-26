@@ -34,7 +34,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 5.1, 5.4, 7.1_
 
 - [ ] 3. Modify file processor for document processing integration
-- [ ] 3.1 Update FileProcessor constructor to accept document processor
+- [x] 3.1 Update FileProcessor constructor to accept document processor
   - Add document_processor parameter to FileProcessor.__init__()
   - Initialize document processor during FileProcessor construction
   - Add validation that document processor is properly initialized
@@ -42,7 +42,7 @@
   - Create unit tests for FileProcessor constructor changes and validation
   - _Requirements: 2.1, 4.2, 7.1_
 
-- [ ] 3.2 Replace file processing logic with document processing
+- [x] 3.2 Replace file processing logic with document processing
   - Modify _perform_processing() method to use DocumentProcessingInterface
   - Remove existing basic file processing logic
   - Integrate ProcessingResult handling with existing error handling
@@ -50,7 +50,7 @@
   - Create unit tests for updated file processing logic and error integration
   - _Requirements: 1.1, 5.1, 5.2, 5.3, 7.1_
 
-- [ ] 3.3 Enhance error handling for document processing failures
+- [x] 3.3 Enhance error handling for document processing failures
   - Update error classification to include document processing error types
   - Modify _classify_error() to handle DocumentProcessingError types
   - Ensure proper file movement for document processing failures
