@@ -59,7 +59,7 @@
   - _Requirements: 4.1, 4.3, 4.4, 5.3, 7.1_
 
 - [ ] 4. Extend configuration management for document processing
-- [ ] 4.1 Create DocumentProcessingConfig dataclass
+- [x] 4.1 Create DocumentProcessingConfig dataclass
   - Define configuration fields for processor type, API keys, and settings
   - Add validation methods for required configuration values
   - Implement default values and environment variable mapping
@@ -67,7 +67,7 @@
   - Create unit tests for DocumentProcessingConfig validation and defaults
   - _Requirements: 6.1, 6.2, 7.1_
 
-- [ ] 4.2 Update ConfigManager to load document processing configuration
+- [x] 4.2 Update ConfigManager to load document processing configuration
   - Extend AppConfig dataclass to include DocumentProcessingConfig
   - Update ConfigManager.initialize() to load document processing settings
   - Add validation for required environment variables (API keys)
@@ -75,7 +75,7 @@
   - Create unit tests for ConfigManager updates and configuration loading
   - _Requirements: 6.1, 6.2, 6.4, 7.1_
 
-- [ ] 4.3 Add configuration validation and error handling
+- [x] 4.3 Add configuration validation and error handling
   - Validate API keys are present when document processing is enabled
   - Check ChromaDB path accessibility and permissions
   - Validate embedding model configuration
