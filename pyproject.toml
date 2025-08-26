@@ -6,6 +6,17 @@ requires-python = ">=3.12"
 dependencies = [
     "watchdog==3.0.0",
     "python-dotenv==1.0.0",
+    # RAG store dependencies
+    "chromadb>=1.0.17",
+    "docx2txt>=0.8",
+    "langchain>=0.3.27",
+    "langchain-chroma>=0.2.5",
+    "langchain-community>=0.3.27",
+    "langchain-google-genai>=2.0.10",
+    "langchain-openai>=0.2.0",
+    "pypdf>=5.1.0",
+    "structlog>=24.1.0",
+    "prometheus-client>=0.21.0",
 ]
 
 [dependency-groups]
