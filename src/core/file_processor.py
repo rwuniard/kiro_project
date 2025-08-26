@@ -71,7 +71,7 @@ class FileProcessor:
     """
     
     def __init__(self, file_manager: FileManager, error_handler: ErrorHandler, 
-                 logger_service: LoggerService, document_processor: DocumentProcessingInterface,
+                 logger_service: LoggerService, document_processor: Optional[DocumentProcessingInterface] = None,
                  retry_config: Optional[RetryConfig] = None):
         """
         Initialize FileProcessor with required services.
@@ -80,23 +80,18 @@ class FileProcessor:
             file_manager: FileManager instance for file operations
             error_handler: ErrorHandler instance for error logging
             logger_service: LoggerService instance for application logging
-            document_processor: DocumentProcessingInterface instance for document processing
+            document_processor: Optional DocumentProcessingInterface instance for document processing
             retry_config: Optional retry configuration for transient errors
-            
-        Raises:
-            ValueError: If document_processor is None or not properly initialized
         """
-        if document_processor is None:
-            raise ValueError("Document processor cannot be None")
-        
         self.file_manager = file_manager
         self.error_handler = error_handler
         self.logger = logger_service
         self.document_processor = document_processor
         self.retry_config = retry_config or RetryConfig()
         
-        # Validate that document processor is properly initialized
-        self._validate_document_processor()
+        # Validate that document processor is properly initialized if provided
+        if self.document_processor is not None:
+            self._validate_document_processor()
         
         # Track processing statistics
         self.stats = {
@@ -372,14 +367,20 @@ class FileProcessor:
         Perform document processing using the configured DocumentProcessingInterface.
         
         This method processes the file through the document processing system
-        and handles the ProcessingResult appropriately.
+        and handles the ProcessingResult appropriately. If no document processor
+        is configured, performs basic file validation.
         
         Args:
             file_path: Path to the file being processed
             
         Raises:
-            Exception: If document processing fails
+            Exception: If document processing fails or file validation fails
         """
+        # If no document processor is configured, perform basic file processing
+        if self.document_processor is None:
+            self._perform_basic_processing(file_path)
+            return
+        
         from .document_processing import DocumentProcessingError
         
         # Convert to Path object for document processor
@@ -426,6 +427,45 @@ class FileProcessor:
             f"processor={processor_name}, chunks={result.chunks_created}, "
             f"time={result.processing_time:.2f}s, size={file_size} bytes, "
             f"model={model_vendor}"
+        )
+    
+    def _perform_basic_processing(self, file_path: str) -> None:
+        """
+        Perform basic file processing when document processing is not available.
+        
+        This method performs basic file validation and logging without
+        advanced document processing features.
+        
+        Args:
+            file_path: Path to the file being processed
+            
+        Raises:
+            ValueError: If file validation fails
+        """
+        # Basic file validation
+        path_obj = Path(file_path)
+        
+        if not path_obj.exists():
+            raise ValueError(f"File does not exist: {file_path}")
+        
+        if path_obj.stat().st_size == 0:
+            raise ValueError(f"File is empty: {file_path}")
+        
+        # Try to read file to ensure it's accessible
+        try:
+            with open(file_path, 'rb') as f:
+                # Read first few bytes to ensure file is readable
+                f.read(1024)
+        except Exception as e:
+            raise ValueError(f"File is not readable: {str(e)}")
+        
+        # Log successful basic processing
+        relative_path = self.file_manager.get_relative_path(file_path) or os.path.basename(file_path)
+        file_size = path_obj.stat().st_size
+        
+        self.logger.log_info(
+            f"Basic file processing completed for {relative_path}: "
+            f"size={file_size} bytes (document processing disabled)"
         )
     
     def _classify_error(self, exception: Exception) -> ErrorType:
