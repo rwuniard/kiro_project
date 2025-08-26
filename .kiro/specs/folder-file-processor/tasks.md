@@ -173,14 +173,14 @@
   - Test integration with regular file processing workflow
   - _Requirements: 8.5_
 
-- [ ] 16. Update project documentation for new features
-- [ ] 16.1 Document enhanced error logging
+- [x] 16. Update project documentation for new features
+- [x] 16.1 Document enhanced error logging
   - Update README.md to explain new error log filename format
   - Add examples of error log naming for different file types
   - Document error log placement within error folder structure
   - _Requirements: 4.3, 4.4_
 
-- [ ] 16.2 Document empty folder handling
+- [x] 16.2 Document empty folder handling
   - Add section explaining completely empty folder detection and handling
   - Clarify that only folders with no files AND no subfolders are moved
   - Document the empty_folder.log file format and content

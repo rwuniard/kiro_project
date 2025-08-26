@@ -171,6 +171,122 @@ Processed file: shared/temp/file.txt
 - **Directory Structure**: Original folder hierarchy is maintained in both saved and error destinations
 - **Automatic Cleanup**: Empty folders are automatically removed after successful file processing
 
+#### Enhanced Error Logging
+
+When files fail to process, the application creates detailed error log files with enhanced naming conventions:
+
+**Error Log Filename Format**: `[original_filename].[original_extension].log`
+
+**Examples of Error Log Naming:**
+- `document.pdf` → `document.pdf.log`
+- `data.csv` → `data.csv.log`
+- `backup.tar.gz` → `backup.tar.gz.log`
+- `report.xlsx` → `report.xlsx.log`
+- `config.json` → `config.json.log`
+- `script.py` → `script.py.log`
+- `archive.zip` → `archive.zip.log`
+
+**Error Log Placement:**
+Error log files are placed in the same folder as the failed file within the error folder structure, maintaining the original directory hierarchy:
+
+```
+Error Folder Structure Example:
+error/
+├── project1/
+│   ├── data/
+│   │   ├── corrupted_file.txt      # Failed file
+│   │   └── corrupted_file.txt.log  # Error log
+│   └── reports/
+│       ├── broken_report.pdf
+│       └── broken_report.pdf.log
+└── project2/
+    ├── config.json
+    └── config.json.log
+```
+
+**Error Log Content Format:**
+```
+Timestamp: 2025-01-23 10:30:45
+File: /source/project1/data/corrupted_file.txt
+Error: Permission denied when reading file
+Stack Trace: [if applicable]
+Additional Context: File size: 1024 bytes, Last modified: 2025-01-23 10:29:12
+```
+
+This enhanced error logging system ensures that:
+- Each failed file has a uniquely identifiable error log
+- Error logs are co-located with their corresponding failed files
+- The original folder structure is preserved for easy navigation
+- Detailed error information is captured for effective troubleshooting
+
+#### Empty Folder Handling
+
+The application automatically detects and handles completely empty folders found in the source directory:
+
+**Empty Folder Detection Criteria:**
+A folder is considered "completely empty" when it contains:
+- **No files** (no regular files of any type)
+- **No subfolders** (no subdirectories, empty or otherwise)
+
+**Important**: Folders that contain empty subfolders are NOT considered completely empty and will not be moved.
+
+**Empty Folder Processing Behavior:**
+1. **Detection**: During monitoring, completely empty folders are identified
+2. **Movement**: Empty folders are moved to the error folder with preserved directory structure
+3. **Logging**: An `empty_folder.log` file is created inside the moved folder
+4. **Integration**: Empty folder handling runs alongside regular file processing without interference
+
+**Empty Folder Log Format:**
+**Filename**: `empty_folder.log`
+**Content Example**:
+```
+Timestamp: 2025-01-23 10:30:45
+Folder: /source/project1/empty_directory
+Reason: Completely empty folder detected (no files, no subfolders) and moved to error folder
+Original Path: /source/project1/empty_directory
+Moved To: /error/project1/empty_directory
+```
+
+**Empty Folder Structure Example:**
+```
+Before Processing:
+source/
+├── project1/
+│   ├── data/
+│   │   └── file.txt
+│   ├── completely_empty/     # Will be moved (no files, no subfolders)
+│   └── has_empty_subfolder/  # Will NOT be moved (contains subfolder)
+│       └── empty_sub/
+└── project2/
+    └── another_empty/        # Will be moved (no files, no subfolders)
+
+After Processing:
+source/
+├── project1/
+│   └── has_empty_subfolder/  # Remains (not completely empty)
+│       └── empty_sub/
+└── # project2/ removed by cleanup (became empty after processing)
+
+error/
+├── project1/
+│   └── completely_empty/
+│       └── empty_folder.log
+└── project2/
+    └── another_empty/
+        └empty_folder.log
+
+saved/
+└── project1/
+    └── data/
+        └── file.txt
+```
+
+**Integration with Regular Processing:**
+- Empty folder detection runs during the initial source folder scan
+- Does not interfere with file processing operations
+- Operates independently of the automatic folder cleanup feature
+- Logged at INFO level in the application log: `"Moved empty folder to error: /path/to/folder"`
+
 #### Folder Cleanup Details
 
 The application automatically cleans up empty folders after successfully processing files:
@@ -400,6 +516,43 @@ mkdir -p /path/to/source /path/to/saved /path/to/error
 ```
 INFO - Cleaned up empty folder: project1/data
 WARNING - Could not remove empty folder /path/to/folder: Permission denied
+```
+
+#### 5. Empty Folder Handling Issues
+
+**Empty Folders Not Being Moved:**
+- **Check Criteria**: Ensure folders are completely empty (no files AND no subfolders)
+- **Hidden Files**: Folders with hidden files (like `.DS_Store` on macOS) are not considered empty
+- **System Files**: Folders containing system files or metadata will not be moved
+- **Permissions**: Verify the application has read access to check folder contents
+
+**Empty Folder Movement Failures:**
+```
+ERROR: Failed to move empty folder: Permission denied
+```
+**Solutions:**
+- Check folder permissions and ownership
+- Ensure the error folder is writable
+- Verify no processes are using the folder
+
+**Missing empty_folder.log Files:**
+- **Check Error Folder**: Log files are created inside the moved empty folders
+- **Permission Issues**: Verify write permissions in the error folder
+- **Check Application Logs**: Look for error messages about log file creation
+
+**Empty Folder Detection Confusion:**
+```
+Expected empty folder to be moved but it wasn't:
+folder/
+├── subfolder/  # Even if empty, parent is not "completely empty"
+```
+**Understanding**: Only folders with absolutely no contents (no files, no subfolders) are moved.
+
+**Empty Folder Log Messages:**
+```
+INFO - Moved empty folder to error: /source/project1/empty_dir
+INFO - Created empty folder log: /error/project1/empty_dir/empty_folder.log
+WARNING - Failed to move empty folder /source/folder: Permission denied
 ```
 
 ### Getting Help
