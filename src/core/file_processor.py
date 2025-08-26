@@ -435,6 +435,73 @@ class FileProcessor:
         if last_exception:
             raise last_exception
     
+    def process_empty_folder(self, folder_path: str) -> ProcessingResult:
+        """
+        Process a completely empty folder by moving it to error folder with log creation.
+        
+        Args:
+            folder_path: Path to the completely empty folder
+            
+        Returns:
+            ProcessingResult: Result of the processing operation
+        """
+        start_time = datetime.now()
+        
+        try:
+            # Validate it's actually a completely empty folder
+            if not self.file_manager.is_completely_empty_folder(folder_path):
+                error_message = f"Folder is not completely empty: {folder_path}"
+                self.logger.log_error(error_message)
+                return ProcessingResult(
+                    success=False,
+                    file_path=folder_path,
+                    error_message=error_message,
+                    processing_time=(datetime.now() - start_time).total_seconds()
+                )
+            
+            # Move empty folder to error folder
+            move_success = self.file_manager.move_empty_folder_to_error(folder_path)
+            if not move_success:
+                error_message = f"Failed to move empty folder to error folder: {folder_path}"
+                self.logger.log_error(error_message)
+                return ProcessingResult(
+                    success=False,
+                    file_path=folder_path,
+                    error_message=error_message,
+                    processing_time=(datetime.now() - start_time).total_seconds()
+                )
+            
+            # Create empty folder log
+            try:
+                self.error_handler.create_empty_folder_log(folder_path)
+            except Exception as log_error:
+                self.logger.log_error(f"Failed to create empty folder log: {log_error}")
+                # Don't fail the whole operation if log creation fails
+            
+            # Calculate processing time
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            # Log success
+            relative_path = self.file_manager.get_relative_path(folder_path) or os.path.basename(folder_path)
+            self.logger.log_info(f"Successfully processed completely empty folder: {relative_path}")
+            
+            return ProcessingResult(
+                success=True,
+                file_path=folder_path,
+                processing_time=processing_time
+            )
+            
+        except Exception as e:
+            error_message = f"Failed to process empty folder {folder_path}: {str(e)}"
+            self.logger.log_error(error_message, e)
+            
+            return ProcessingResult(
+                success=False,
+                file_path=folder_path,
+                error_message=error_message,
+                processing_time=(datetime.now() - start_time).total_seconds()
+            )
+    
     def get_processing_stats(self) -> Dict[str, int]:
         """
         Get processing statistics.

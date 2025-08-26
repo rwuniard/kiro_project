@@ -687,7 +687,604 @@ class TestFileManagerEmptyFolderDetection:
         # Should now return False
         result = self.file_manager._is_folder_empty(complex_folder)
         
-        assert result is False   
+        assert result is False
+
+
+class TestEmptyFolderHandling:
+    """Test cases for empty folder handling functionality (Task 15.2)."""
+    
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        # Create temporary directories for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = Path(self.temp_dir) / "source"
+        self.saved_folder = Path(self.temp_dir) / "saved"
+        self.error_folder = Path(self.temp_dir) / "error"
+        
+        # Create the directories
+        self.source_folder.mkdir(parents=True)
+        self.saved_folder.mkdir(parents=True)
+        self.error_folder.mkdir(parents=True)
+        
+        # Initialize FileManager
+        self.file_manager = FileManager(
+            str(self.source_folder),
+            str(self.saved_folder),
+            str(self.error_folder)
+        )
+    
+    def teardown_method(self):
+        """Clean up test fixtures after each test method."""
+        # Remove temporary directory and all contents
+        shutil.rmtree(self.temp_dir)
+    
+    def test_completely_empty_folder_detection_truly_empty(self):
+        """Test completely empty folder detection (no files, no subfolders)."""
+        # Create completely empty folder
+        empty_folder = self.source_folder / "completely_empty"
+        empty_folder.mkdir()
+        
+        result = self.file_manager.is_completely_empty_folder(str(empty_folder))
+        
+        assert result is True
+    
+    def test_completely_empty_folder_detection_with_files(self):
+        """Test that folders with files are NOT detected as completely empty."""
+        # Create folder with file
+        folder_with_file = self.source_folder / "with_file"
+        folder_with_file.mkdir()
+        (folder_with_file / "test.txt").write_text("content")
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_file))
+        
+        assert result is False
+    
+    def test_completely_empty_folder_detection_with_empty_subfolders(self):
+        """Test that folders with empty subfolders are NOT detected as completely empty."""
+        # Create folder with empty subfolder
+        folder_with_empty_sub = self.source_folder / "with_empty_sub"
+        folder_with_empty_sub.mkdir()
+        (folder_with_empty_sub / "empty_sub").mkdir()
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_empty_sub))
+        
+        assert result is False
+    
+    def test_completely_empty_folder_detection_with_nested_empty_subfolders(self):
+        """Test that folders with nested empty subfolders are NOT detected as completely empty."""
+        # Create folder with nested empty subfolders
+        folder_with_nested = self.source_folder / "with_nested"
+        folder_with_nested.mkdir()
+        nested_path = folder_with_nested / "level1" / "level2" / "level3"
+        nested_path.mkdir(parents=True)
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_nested))
+        
+        assert result is False
+    
+    def test_completely_empty_folder_detection_nonexistent_folder(self):
+        """Test completely empty folder detection for non-existent folder."""
+        nonexistent_folder = self.source_folder / "nonexistent"
+        
+        result = self.file_manager.is_completely_empty_folder(str(nonexistent_folder))
+        
+        assert result is False
+    
+    def test_completely_empty_folder_detection_file_instead_of_folder(self):
+        """Test completely empty folder detection when path points to a file."""
+        test_file = self.source_folder / "test_file.txt"
+        test_file.write_text("content")
+        
+        result = self.file_manager.is_completely_empty_folder(str(test_file))
+        
+        assert result is False
+    
+    def test_move_empty_folder_to_error_success(self):
+        """Test successful movement of completely empty folder to error folder."""
+        # Create completely empty folder
+        empty_folder = self.source_folder / "empty_test"
+        empty_folder.mkdir()
+        
+        # Move to error folder
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        # Verify move was successful
+        assert result is True
+        assert not empty_folder.exists()
+        
+        # Verify folder exists in error folder
+        error_folder_path = self.error_folder / "empty_test"
+        assert error_folder_path.exists()
+        assert error_folder_path.is_dir()
+    
+    def test_move_empty_folder_to_error_with_structure_preservation(self):
+        """Test empty folder movement to error folder with structure preservation."""
+        # Create nested empty folder
+        nested_empty = self.source_folder / "level1" / "level2" / "empty_nested"
+        nested_empty.mkdir(parents=True)
+        
+        # Move to error folder
+        result = self.file_manager.move_empty_folder_to_error(str(nested_empty))
+        
+        # Verify move was successful
+        assert result is True
+        assert not nested_empty.exists()
+        
+        # Verify folder exists in error folder with preserved structure
+        error_folder_path = self.error_folder / "level1" / "level2" / "empty_nested"
+        assert error_folder_path.exists()
+        assert error_folder_path.is_dir()
+        
+        # Verify intermediate directories were created
+        assert (self.error_folder / "level1").exists()
+        assert (self.error_folder / "level1" / "level2").exists()
+    
+    def test_move_empty_folder_to_error_fails_for_non_empty_folder(self):
+        """Test that moving non-empty folder to error folder fails."""
+        # Create folder with file
+        folder_with_file = self.source_folder / "not_empty"
+        folder_with_file.mkdir()
+        (folder_with_file / "file.txt").write_text("content")
+        
+        # Attempt to move to error folder (should fail)
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_file))
+        
+        # Verify move failed
+        assert result is False
+        assert folder_with_file.exists()  # Original folder should still exist
+        
+        # Verify folder was not moved to error folder
+        error_folder_path = self.error_folder / "not_empty"
+        assert not error_folder_path.exists()
+    
+    def test_move_empty_folder_to_error_fails_for_folder_with_subfolders(self):
+        """Test that moving folder with subfolders to error folder fails."""
+        # Create folder with empty subfolder
+        folder_with_sub = self.source_folder / "with_subfolder"
+        folder_with_sub.mkdir()
+        (folder_with_sub / "empty_sub").mkdir()
+        
+        # Attempt to move to error folder (should fail)
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_sub))
+        
+        # Verify move failed
+        assert result is False
+        assert folder_with_sub.exists()  # Original folder should still exist
+        
+        # Verify folder was not moved to error folder
+        error_folder_path = self.error_folder / "with_subfolder"
+        assert not error_folder_path.exists()
+    
+    def test_move_empty_folder_to_error_handles_destination_conflict(self):
+        """Test empty folder movement handles destination conflicts."""
+        # Create completely empty folder
+        empty_folder = self.source_folder / "conflict_test"
+        empty_folder.mkdir()
+        
+        # Create conflicting folder in error directory
+        conflict_folder = self.error_folder / "conflict_test"
+        conflict_folder.mkdir()
+        (conflict_folder / "existing_file.txt").write_text("existing content")
+        
+        # Move to error folder (should resolve conflict)
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        # Verify move was successful
+        assert result is True
+        assert not empty_folder.exists()
+        
+        # Verify original conflict folder still exists
+        assert conflict_folder.exists()
+        assert (conflict_folder / "existing_file.txt").exists()
+        
+        # Verify new folder was created with conflict resolution
+        resolved_folder = self.error_folder / "conflict_test_001"
+        assert resolved_folder.exists()
+        assert resolved_folder.is_dir()
+    
+    def test_move_empty_folder_to_error_permission_error(self):
+        """Test empty folder movement handles permission errors gracefully."""
+        # Create completely empty folder
+        empty_folder = self.source_folder / "permission_test"
+        empty_folder.mkdir()
+        
+        # Mock shutil.move to raise PermissionError
+        with patch('shutil.move', side_effect=PermissionError("Access denied")):
+            result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+            
+            # Verify move failed gracefully
+            assert result is False
+            assert empty_folder.exists()  # Original folder should still exist
+    
+    def test_completely_empty_folder_detection_permission_error(self):
+        """Test completely empty folder detection handles permission errors."""
+        # Create test folder
+        test_folder = self.source_folder / "permission_test"
+        test_folder.mkdir()
+        
+        # Mock iterdir to raise PermissionError
+        with patch.object(Path, 'iterdir', side_effect=PermissionError("Access denied")):
+            result = self.file_manager.is_completely_empty_folder(str(test_folder))
+            
+            # Should return False when permission is denied
+            assert result is False
+    
+    def test_multiple_completely_empty_folders(self):
+        """Test handling multiple completely empty folders."""
+        # Create multiple completely empty folders
+        empty_folders = []
+        for i in range(3):
+            empty_folder = self.source_folder / f"empty_{i}"
+            empty_folder.mkdir()
+            empty_folders.append(empty_folder)
+        
+        # Test detection for all folders
+        for folder in empty_folders:
+            result = self.file_manager.is_completely_empty_folder(str(folder))
+            assert result is True
+        
+        # Move all to error folder
+        for folder in empty_folders:
+            result = self.file_manager.move_empty_folder_to_error(str(folder))
+            assert result is True
+            assert not folder.exists()
+            
+            # Verify in error folder
+            error_path = self.error_folder / folder.name
+            assert error_path.exists()
+            assert error_path.is_dir()
+    
+    def test_completely_empty_folder_vs_regular_empty_folder_detection(self):
+        """Test difference between completely empty and regular empty folder detection."""
+        # Create folder with only empty subfolders (regular empty but not completely empty)
+        regular_empty = self.source_folder / "regular_empty"
+        regular_empty.mkdir()
+        (regular_empty / "empty_sub1").mkdir()
+        (regular_empty / "empty_sub2").mkdir()
+        (regular_empty / "nested" / "empty_sub3").mkdir(parents=True)
+        
+        # Test completely empty detection (should be False - has subfolders)
+        completely_empty_result = self.file_manager.is_completely_empty_folder(str(regular_empty))
+        assert completely_empty_result is False
+        
+        # Test regular empty detection (should be True - no files, only empty subfolders)
+        regular_empty_result = self.file_manager._is_folder_empty(regular_empty)
+        assert regular_empty_result is True
+        
+        # Create truly completely empty folder
+        completely_empty = self.source_folder / "completely_empty"
+        completely_empty.mkdir()
+        
+        # Test both detection methods (both should be True)
+        completely_empty_result = self.file_manager.is_completely_empty_folder(str(completely_empty))
+        assert completely_empty_result is True
+        
+        regular_empty_result = self.file_manager._is_folder_empty(completely_empty)
+        assert regular_empty_result is True
+    
+    def test_completely_empty_folder_detection_with_empty_subfolders(self):
+        """Test that folders with empty subfolders are NOT moved (only completely empty folders)."""
+        # Create folder with empty subfolders
+        folder_with_empty_subs = self.source_folder / "with_empty_subs"
+        folder_with_empty_subs.mkdir()
+        (folder_with_empty_subs / "empty_sub1").mkdir()
+        (folder_with_empty_subs / "empty_sub2").mkdir()
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_empty_subs))
+        
+        # Should return False because it contains subfolders (even if they're empty)
+        assert result is False
+    
+    def test_completely_empty_folder_detection_with_nested_empty_subfolders(self):
+        """Test that folders with nested empty subfolders are NOT detected as completely empty."""
+        # Create folder with nested empty structure
+        folder_with_nested = self.source_folder / "with_nested"
+        folder_with_nested.mkdir()
+        nested_path = folder_with_nested / "level1" / "level2" / "level3"
+        nested_path.mkdir(parents=True)
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_nested))
+        
+        # Should return False because it contains subfolders
+        assert result is False
+    
+    def test_completely_empty_folder_detection_nonexistent_folder(self):
+        """Test completely empty folder detection for non-existent folder."""
+        nonexistent_folder = self.source_folder / "nonexistent"
+        
+        result = self.file_manager.is_completely_empty_folder(str(nonexistent_folder))
+        
+        assert result is False
+    
+    def test_completely_empty_folder_detection_file_instead_of_folder(self):
+        """Test completely empty folder detection when path points to a file."""
+        test_file = self.source_folder / "test_file.txt"
+        test_file.write_text("content")
+        
+        result = self.file_manager.is_completely_empty_folder(str(test_file))
+        
+        assert result is False
+    
+    def test_move_empty_folder_to_error_completely_empty(self):
+        """Test moving completely empty folder to error folder with structure preservation."""
+        # Create completely empty folder
+        empty_folder = self.source_folder / "subfolder" / "empty"
+        empty_folder.mkdir(parents=True)
+        
+        # Move empty folder to error
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        assert result is True
+        
+        # Verify folder was moved to error folder with preserved structure
+        expected_error_path = self.error_folder / "subfolder" / "empty"
+        assert expected_error_path.exists()
+        assert expected_error_path.is_dir()
+        
+        # Verify original folder no longer exists
+        assert not empty_folder.exists()
+    
+    def test_move_empty_folder_to_error_not_empty(self):
+        """Test that non-empty folders are not moved to error folder."""
+        # Create folder with file
+        folder_with_file = self.source_folder / "not_empty"
+        folder_with_file.mkdir()
+        (folder_with_file / "file.txt").write_text("content")
+        
+        # Attempt to move (should fail)
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_file))
+        
+        assert result is False
+        
+        # Verify folder still exists in source
+        assert folder_with_file.exists()
+        
+        # Verify folder was not moved to error
+        error_path = self.error_folder / "not_empty"
+        assert not error_path.exists()
+    
+    def test_move_empty_folder_to_error_with_empty_subfolders(self):
+        """Test that folders with empty subfolders are not moved."""
+        # Create folder with empty subfolders
+        folder_with_subs = self.source_folder / "with_subs"
+        folder_with_subs.mkdir()
+        (folder_with_subs / "empty_sub").mkdir()
+        
+        # Attempt to move (should fail because it has subfolders)
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_subs))
+        
+        assert result is False
+        
+        # Verify folder still exists in source
+        assert folder_with_subs.exists()
+    
+    def test_move_empty_folder_to_error_root_level(self):
+        """Test moving completely empty folder at root level."""
+        # Create empty folder at root level
+        empty_root_folder = self.source_folder / "empty_root"
+        empty_root_folder.mkdir()
+        
+        # Move empty folder to error
+        result = self.file_manager.move_empty_folder_to_error(str(empty_root_folder))
+        
+        assert result is True
+        
+        # Verify folder was moved to error folder
+        expected_error_path = self.error_folder / "empty_root"
+        assert expected_error_path.exists()
+        assert expected_error_path.is_dir()
+        
+        # Verify original folder no longer exists
+        assert not empty_root_folder.exists()
+    
+    def test_move_empty_folder_to_error_deep_nested_structure(self):
+        """Test moving completely empty folder with deeply nested structure preservation."""
+        # Create deeply nested empty folder
+        deep_empty_folder = self.source_folder / "level1" / "level2" / "level3" / "empty"
+        deep_empty_folder.mkdir(parents=True)
+        
+        # Move empty folder to error
+        result = self.file_manager.move_empty_folder_to_error(str(deep_empty_folder))
+        
+        assert result is True
+        
+        # Verify folder was moved with full structure preservation
+        expected_error_path = self.error_folder / "level1" / "level2" / "level3" / "empty"
+        assert expected_error_path.exists()
+        assert expected_error_path.is_dir()
+        
+        # Verify all intermediate directories were created
+        assert (self.error_folder / "level1").exists()
+        assert (self.error_folder / "level1" / "level2").exists()
+        assert (self.error_folder / "level1" / "level2" / "level3").exists()
+        
+        # Verify original folder no longer exists
+        assert not deep_empty_folder.exists()
+    
+    def test_move_empty_folder_to_error_destination_conflict(self):
+        """Test moving empty folder when destination already exists."""
+        # Create empty folder
+        empty_folder = self.source_folder / "conflict_test"
+        empty_folder.mkdir()
+        
+        # Create conflicting folder in error directory
+        conflicting_folder = self.error_folder / "conflict_test"
+        conflicting_folder.mkdir()
+        (conflicting_folder / "existing.txt").write_text("existing content")
+        
+        # Move empty folder (should resolve conflict)
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        assert result is True
+        
+        # Verify original folder no longer exists
+        assert not empty_folder.exists()
+        
+        # Verify conflicting folder still exists with its content
+        assert conflicting_folder.exists()
+        assert (conflicting_folder / "existing.txt").exists()
+        
+        # Verify moved folder exists with resolved name
+        resolved_folder = self.error_folder / "conflict_test_001"
+        assert resolved_folder.exists()
+    
+    def test_move_empty_folder_to_error_permission_error(self):
+        """Test handling of permission errors during empty folder move."""
+        # Create empty folder
+        empty_folder = self.source_folder / "permission_test"
+        empty_folder.mkdir()
+        
+        # Mock shutil.move to raise permission error
+        with patch('shutil.move', side_effect=PermissionError("Access denied")):
+            result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+            
+            assert result is False
+            
+            # Verify folder still exists in source
+            assert empty_folder.exists()
+    
+    def test_empty_folder_detection_vs_regular_empty_detection(self):
+        """Test difference between completely empty and regular empty folder detection."""
+        # Create folder with only empty subfolders
+        folder_with_empty_subs = self.source_folder / "mixed_empty"
+        folder_with_empty_subs.mkdir()
+        (folder_with_empty_subs / "empty1").mkdir()
+        (folder_with_empty_subs / "empty2" / "nested_empty").mkdir(parents=True)
+        
+        # Regular empty detection should return True (no files anywhere)
+        regular_empty = self.file_manager._is_folder_empty(folder_with_empty_subs)
+        assert regular_empty is True
+        
+        # Completely empty detection should return False (has subfolders)
+        completely_empty = self.file_manager.is_completely_empty_folder(str(folder_with_empty_subs))
+        assert completely_empty is False
+    
+    def test_empty_folder_handling_integration_with_error_handler(self):
+        """Test integration of empty folder handling with ErrorHandler for log creation."""
+        from src.services.error_handler import ErrorHandler
+        
+        # Create ErrorHandler
+        error_handler = ErrorHandler(str(self.error_folder), str(self.source_folder))
+        
+        # Create completely empty folder
+        empty_folder = self.source_folder / "integration_test"
+        empty_folder.mkdir()
+        
+        # Move empty folder to error
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        assert result is True
+        
+        # Create empty folder log using ErrorHandler
+        error_handler.create_empty_folder_log(str(empty_folder))
+        
+        # Verify log file was created
+        moved_folder = self.error_folder / "integration_test"
+        log_file = moved_folder / "empty_folder.log"
+        assert log_file.exists()
+        
+        # Verify log content
+        log_content = log_file.read_text()
+        assert "EMPTY FOLDER LOG" in log_content
+        assert str(empty_folder) in log_content
+        assert "Completely empty folder detected" in log_content
+        assert str(moved_folder) in log_content
+    
+    def test_empty_folder_handling_multiple_empty_folders(self):
+        """Test handling multiple completely empty folders."""
+        # Create multiple completely empty folders
+        empty_folders = [
+            self.source_folder / "empty1",
+            self.source_folder / "branch" / "empty2", 
+            self.source_folder / "deep" / "nested" / "empty3"
+        ]
+        
+        for folder in empty_folders:
+            folder.mkdir(parents=True)
+        
+        # Move all empty folders to error
+        for folder in empty_folders:
+            result = self.file_manager.move_empty_folder_to_error(str(folder))
+            assert result is True
+        
+        # Verify all folders were moved with structure preservation
+        expected_paths = [
+            self.error_folder / "empty1",
+            self.error_folder / "branch" / "empty2",
+            self.error_folder / "deep" / "nested" / "empty3"
+        ]
+        
+        for expected_path in expected_paths:
+            assert expected_path.exists()
+            assert expected_path.is_dir()
+        
+        # Verify original folders no longer exist
+        for folder in empty_folders:
+            assert not folder.exists()
+    
+    def test_empty_folder_handling_with_regular_file_processing(self):
+        """Test integration of empty folder handling with regular file processing workflow."""
+        # Create a mixed structure with files and empty folders
+        
+        # Create file that will be processed
+        test_file = self.source_folder / "subfolder" / "test.txt"
+        test_file.parent.mkdir(parents=True)
+        test_file.write_text("test content")
+        
+        # Create completely empty folder in same structure
+        empty_folder = self.source_folder / "subfolder" / "empty"
+        empty_folder.mkdir()
+        
+        # Create folder with empty subfolders (should NOT be moved)
+        folder_with_subs = self.source_folder / "subfolder" / "with_subs"
+        folder_with_subs.mkdir()
+        (folder_with_subs / "empty_sub").mkdir()
+        
+        # Simulate file processing by moving file to saved
+        file_move_result = self.file_manager.move_to_saved(str(test_file))
+        assert file_move_result is True
+        
+        # Handle empty folder
+        empty_move_result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        assert empty_move_result is True
+        
+        # Attempt to move folder with subfolders (should fail)
+        subs_move_result = self.file_manager.move_empty_folder_to_error(str(folder_with_subs))
+        assert subs_move_result is False
+        
+        # Verify final state
+        # File should be in saved folder
+        assert (self.saved_folder / "subfolder" / "test.txt").exists()
+        
+        # Completely empty folder should be in error folder
+        assert (self.error_folder / "subfolder" / "empty").exists()
+        
+        # Folder with subfolders should still be in source
+        assert folder_with_subs.exists()
+        assert (folder_with_subs / "empty_sub").exists()
+    
+    def test_empty_folder_detection_performance_with_large_structures(self):
+        """Test empty folder detection performance with large nested structures."""
+        # Create a large nested structure with many empty folders
+        base_folder = self.source_folder / "large_structure"
+        base_folder.mkdir()
+        
+        # Create 50 nested levels of empty folders
+        current_folder = base_folder
+        for i in range(50):
+            current_folder = current_folder / f"level_{i}"
+            current_folder.mkdir()
+        
+        # Test completely empty detection (should be False due to subfolders)
+        result = self.file_manager.is_completely_empty_folder(str(base_folder))
+        assert result is False
+        
+        # Test regular empty detection (should be True as no files anywhere)
+        result = self.file_manager._is_folder_empty(base_folder)
+        assert result is True
+        
+        # Test the deepest folder (should be completely empty)
+        result = self.file_manager.is_completely_empty_folder(str(current_folder))
+        assert result is True   
  
     def test_cleanup_empty_folders_single_empty_folder(self):
         """Test cleanup of a single empty folder after file removal."""
@@ -1129,3 +1726,173 @@ class TestFileManagerEmptyFolderDetection:
                 nested_folder.chmod(0o755)
             except:
                 pass
+
+
+class TestFileManagerCompletelyEmptyFolderDetection:
+    """Test cases for completely empty folder detection and handling."""
+    
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        # Create temporary directories for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = Path(self.temp_dir) / "source"
+        self.saved_folder = Path(self.temp_dir) / "saved"
+        self.error_folder = Path(self.temp_dir) / "error"
+        
+        # Create the directories
+        self.source_folder.mkdir(parents=True)
+        self.saved_folder.mkdir(parents=True)
+        self.error_folder.mkdir(parents=True)
+        
+        # Initialize FileManager
+        self.file_manager = FileManager(
+            str(self.source_folder),
+            str(self.saved_folder),
+            str(self.error_folder)
+        )
+    
+    def teardown_method(self):
+        """Clean up test fixtures after each test method."""
+        # Remove temporary directory and all contents
+        shutil.rmtree(self.temp_dir)
+    
+    def test_is_completely_empty_folder_truly_empty(self):
+        """Test detection of completely empty folder (no files, no subfolders)."""
+        empty_folder = self.source_folder / "completely_empty"
+        empty_folder.mkdir()
+        
+        result = self.file_manager.is_completely_empty_folder(str(empty_folder))
+        
+        assert result is True
+    
+    def test_is_completely_empty_folder_with_file(self):
+        """Test detection when folder contains a file."""
+        folder_with_file = self.source_folder / "with_file"
+        folder_with_file.mkdir()
+        
+        # Add a file
+        (folder_with_file / "test.txt").write_text("content")
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_file))
+        
+        assert result is False
+    
+    def test_is_completely_empty_folder_with_empty_subfolder(self):
+        """Test detection when folder contains empty subfolders (should be False)."""
+        folder_with_empty_sub = self.source_folder / "with_empty_sub"
+        folder_with_empty_sub.mkdir()
+        
+        # Add empty subfolder
+        (folder_with_empty_sub / "empty_sub").mkdir()
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_empty_sub))
+        
+        assert result is False  # Has subfolder, so not completely empty
+    
+    def test_is_completely_empty_folder_with_nested_empty_subfolders(self):
+        """Test detection with nested empty subfolders (should be False)."""
+        folder_with_nested = self.source_folder / "with_nested"
+        folder_with_nested.mkdir()
+        
+        # Create nested empty structure
+        (folder_with_nested / "level1" / "level2").mkdir(parents=True)
+        
+        result = self.file_manager.is_completely_empty_folder(str(folder_with_nested))
+        
+        assert result is False  # Has subfolders, so not completely empty
+    
+    def test_is_completely_empty_folder_nonexistent(self):
+        """Test detection for non-existent folder."""
+        nonexistent = self.source_folder / "nonexistent"
+        
+        result = self.file_manager.is_completely_empty_folder(str(nonexistent))
+        
+        assert result is False
+    
+    def test_is_completely_empty_folder_file_path(self):
+        """Test detection when path points to a file."""
+        test_file = self.source_folder / "test.txt"
+        test_file.write_text("content")
+        
+        result = self.file_manager.is_completely_empty_folder(str(test_file))
+        
+        assert result is False
+    
+    def test_is_completely_empty_folder_permission_error(self):
+        """Test detection with permission error."""
+        test_folder = self.source_folder / "permission_test"
+        test_folder.mkdir()
+        
+        # Mock iterdir to raise PermissionError
+        with patch.object(Path, 'iterdir', side_effect=PermissionError("Access denied")):
+            result = self.file_manager.is_completely_empty_folder(str(test_folder))
+            
+            assert result is False
+    
+    def test_move_empty_folder_to_error_success(self):
+        """Test successful move of completely empty folder to error folder."""
+        empty_folder = self.source_folder / "subfolder" / "empty"
+        empty_folder.mkdir(parents=True)
+        
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        assert result is True
+        assert not empty_folder.exists()
+        
+        # Verify folder moved to error folder with structure preservation
+        moved_folder = self.error_folder / "subfolder" / "empty"
+        assert moved_folder.exists()
+        assert moved_folder.is_dir()
+    
+    def test_move_empty_folder_to_error_not_empty(self):
+        """Test move attempt on folder that is not completely empty."""
+        folder_with_file = self.source_folder / "not_empty"
+        folder_with_file.mkdir()
+        (folder_with_file / "file.txt").write_text("content")
+        
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_file))
+        
+        assert result is False
+        assert folder_with_file.exists()  # Should not be moved
+    
+    def test_move_empty_folder_to_error_with_empty_subfolder(self):
+        """Test move attempt on folder with empty subfolders (should fail)."""
+        folder_with_empty_sub = self.source_folder / "with_empty_sub"
+        folder_with_empty_sub.mkdir()
+        (folder_with_empty_sub / "empty_sub").mkdir()
+        
+        result = self.file_manager.move_empty_folder_to_error(str(folder_with_empty_sub))
+        
+        assert result is False
+        assert folder_with_empty_sub.exists()  # Should not be moved
+    
+    def test_move_empty_folder_to_error_destination_conflict(self):
+        """Test move with destination conflict resolution."""
+        empty_folder = self.source_folder / "conflict_test"
+        empty_folder.mkdir()
+        
+        # Create conflicting folder in error directory
+        existing_folder = self.error_folder / "conflict_test"
+        existing_folder.mkdir()
+        
+        result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+        
+        assert result is True
+        assert not empty_folder.exists()
+        
+        # Should create conflict_test_001 folder
+        moved_folder = self.error_folder / "conflict_test_001"
+        assert moved_folder.exists()
+        assert moved_folder.is_dir()
+    
+    def test_move_empty_folder_to_error_move_failure(self):
+        """Test move failure handling."""
+        empty_folder = self.source_folder / "move_fail_test"
+        empty_folder.mkdir()
+        
+        # Mock shutil.move to fail
+        with patch('shutil.move', side_effect=OSError("Move failed")):
+            result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
+            
+            assert result is False
+            assert empty_folder.exists()  # Should still exist after failed move

@@ -20,14 +20,16 @@ class ErrorHandler:
     when files fail to process.
     """
     
-    def __init__(self, error_folder: str):
+    def __init__(self, error_folder: str, source_folder: Optional[str] = None):
         """
         Initialize the ErrorHandler with the error folder path.
         
         Args:
             error_folder: Path to the folder where error logs will be stored
+            source_folder: Optional path to source folder for structure preservation
         """
         self.error_folder = Path(error_folder)
+        self.source_folder = Path(source_folder) if source_folder else None
     
     def create_error_log(self, file_path: str, error_message: str, 
                         exception: Optional[Exception] = None) -> None:
@@ -51,20 +53,42 @@ class ErrorHandler:
         """
         Generate the error log file path based on the original file path.
         
+        Creates log files with format: [filename].[extension].log
+        Examples: 
+        - document.pdf → document.pdf.log
+        - data.csv → data.csv.log  
+        - backup.tar.gz → backup.tar.gz.log
+        - file_without_extension → file_without_extension.log
+        
+        The error log is placed in the same folder as the failed file within
+        the error folder structure, preserving the original folder hierarchy.
+        
         Args:
             file_path: Original file path that failed processing
             
         Returns:
-            Path object for the error log file with .log extension
+            Path object for the error log file with enhanced naming format
         """
         original_path = Path(file_path)
-        # Create log file with same name but .log extension
-        log_filename = f"{original_path.stem}.log"
         
-        # Place error log in the error folder
-        # For now, put all logs directly in error folder for simplicity
-        # This can be enhanced later to preserve folder structure if needed
-        error_log_dir = self.error_folder
+        # Create log file with format: [filename].[extension].log
+        # Use the full filename (including all extensions) + .log
+        log_filename = f"{original_path.name}.log"
+        
+        # Determine the error log directory with structure preservation
+        if self.source_folder:
+            # Preserve folder structure relative to source folder
+            try:
+                # Get relative path from source folder to the file
+                relative_path = original_path.resolve().relative_to(self.source_folder.resolve())
+                # Place log in the same folder as the failed file within error structure
+                error_log_dir = self.error_folder / relative_path.parent
+            except ValueError:
+                # File is not under source folder - use just the error folder root
+                error_log_dir = self.error_folder
+        else:
+            # No source folder specified, use error folder root
+            error_log_dir = self.error_folder
         
         # Ensure the directory exists
         error_log_dir.mkdir(parents=True, exist_ok=True)
@@ -137,5 +161,72 @@ class ErrorHandler:
                 for line in error_info['stack_trace']:
                     log_file.write(line)
                 log_file.write("\n")
+            
+            log_file.write("=" * 50 + "\n")
+    
+    def create_empty_folder_log(self, folder_path: str) -> None:
+        """
+        Create a log file for a completely empty folder that was moved to error folder.
+        
+        Creates "empty_folder.log" file inside the moved empty folder with timestamp,
+        original path, and reason for the move.
+        
+        Args:
+            folder_path: Original path to the empty folder that was moved
+        """
+        try:
+            # Calculate where the folder was moved to in error folder
+            original_path = Path(folder_path)
+            
+            # Determine the error log directory with structure preservation
+            if self.source_folder:
+                try:
+                    # Get relative path from source folder to the folder
+                    relative_path = original_path.resolve().relative_to(self.source_folder.resolve())
+                    # The folder is now in the error folder with preserved structure
+                    moved_folder_path = self.error_folder / relative_path
+                except ValueError:
+                    # Folder is not under source folder - use just the error folder root
+                    moved_folder_path = self.error_folder / original_path.name
+            else:
+                # No source folder specified, use error folder root
+                moved_folder_path = self.error_folder / original_path.name
+            
+            # Create the log file inside the moved folder
+            log_file_path = moved_folder_path / "empty_folder.log"
+            
+            # Build log information
+            log_info = {
+                'timestamp': datetime.now().isoformat(),
+                'original_path': str(folder_path),
+                'moved_to': str(moved_folder_path),
+                'reason': 'Completely empty folder detected (no files, no subfolders) and moved to error folder'
+            }
+            
+            # Write the log file
+            self._write_empty_folder_log(log_file_path, log_info)
+            
+        except Exception as e:
+            # If we can't write the empty folder log, at least try to log to console
+            print(f"Failed to create empty folder log for {folder_path}: {str(e)}")
+    
+    def _write_empty_folder_log(self, log_path: Path, log_info: Dict[str, Any]) -> None:
+        """
+        Write the empty folder information to the log file.
+        
+        Args:
+            log_path: Path where the empty folder log should be written
+            log_info: Dictionary containing empty folder details
+        """
+        with open(log_path, 'w', encoding='utf-8') as log_file:
+            log_file.write("=" * 50 + "\n")
+            log_file.write("EMPTY FOLDER LOG\n")
+            log_file.write("=" * 50 + "\n\n")
+            
+            log_file.write(f"Timestamp: {log_info['timestamp']}\n")
+            log_file.write(f"Folder: {log_info['original_path']}\n")
+            log_file.write(f"Reason: {log_info['reason']}\n")
+            log_file.write(f"Original Path: {log_info['original_path']}\n")
+            log_file.write(f"Moved To: {log_info['moved_to']}\n\n")
             
             log_file.write("=" * 50 + "\n")

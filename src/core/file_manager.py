@@ -377,3 +377,77 @@ class FileManager:
             return True
         except ValueError:
             return False
+    
+    def is_completely_empty_folder(self, folder_path: str) -> bool:
+        """
+        Check if a folder is completely empty (contains no files AND no subfolders).
+        
+        This is different from _is_folder_empty which allows empty subfolders.
+        A completely empty folder has absolutely nothing in it.
+        
+        Args:
+            folder_path: Path to the folder to check
+            
+        Returns:
+            bool: True if folder is completely empty, False otherwise
+        """
+        try:
+            folder = Path(folder_path)
+            if not folder.exists() or not folder.is_dir():
+                return False
+            
+            # Check if folder has any contents at all
+            try:
+                # Use next() with iter() to check if there are any items
+                next(folder.iterdir())
+                # If we get here, there's at least one item
+                return False
+            except StopIteration:
+                # No items found, folder is completely empty
+                return True
+                
+        except (OSError, PermissionError) as e:
+            self.logger.warning(f"Could not check if folder is completely empty {folder_path}: {e}")
+            return False
+    
+    def move_empty_folder_to_error(self, folder_path: str) -> bool:
+        """
+        Move a completely empty folder to the error folder with structure preservation.
+        
+        Args:
+            folder_path: Path to the completely empty folder to move
+            
+        Returns:
+            bool: True if move was successful, False otherwise
+        """
+        try:
+            source_folder_path = Path(folder_path).resolve()
+            
+            # Validate it's actually a completely empty folder
+            if not self.is_completely_empty_folder(folder_path):
+                self.logger.warning(f"Folder is not completely empty, cannot move: {folder_path}")
+                return False
+            
+            # Calculate destination path with structure preservation
+            dest_path = self._preserve_folder_structure(source_folder_path, self.error_folder)
+            
+            # Ensure parent directory exists
+            self._ensure_directory_exists(dest_path.parent)
+            
+            # Handle destination conflict
+            dest_path = self._resolve_destination_conflict(dest_path)
+            
+            # Move the empty folder
+            shutil.move(str(source_folder_path), str(dest_path))
+            
+            # Verify move was successful
+            if dest_path.exists() and not source_folder_path.exists():
+                self.logger.info(f"Successfully moved completely empty folder to error folder: {dest_path}")
+                return True
+            else:
+                self.logger.error(f"Move verification failed for empty folder: {folder_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Failed to move empty folder {folder_path} to error folder: {e}")
+            return False

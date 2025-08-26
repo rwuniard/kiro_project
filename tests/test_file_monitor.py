@@ -735,3 +735,135 @@ class TestFileMonitorCoverageEnhancement:
         assert stats['observer_alive'] is False
         # Should not have event handler stats
         assert 'events_received' not in stats
+
+
+class TestFileMonitorEmptyFolderHandling:
+    """Test cases for FileMonitor empty folder handling functionality (Task 15.2)."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_processor = Mock(spec=FileProcessor)
+        self.mock_logger = Mock(spec=LoggerService)
+        
+        # Create temporary directory for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = self.temp_dir
+        
+        # Mock FileManager for empty folder detection
+        self.mock_file_manager = Mock()
+        self.mock_processor.file_manager = self.mock_file_manager
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_scan_for_empty_folders_finds_completely_empty_folders(self):
+        """Test scanning for completely empty folders."""
+        # Create test folder structure
+        empty_folder1 = os.path.join(self.source_folder, "empty1")
+        empty_folder2 = os.path.join(self.source_folder, "subdir", "empty2")
+        non_empty_folder = os.path.join(self.source_folder, "non_empty")
+        
+        os.makedirs(empty_folder1)
+        os.makedirs(empty_folder2)
+        os.makedirs(non_empty_folder)
+        
+        # Add file to non-empty folder
+        with open(os.path.join(non_empty_folder, "file.txt"), 'w') as f:
+            f.write("content")
+        
+        # Mock FileManager to return True for empty folders, False for non-empty
+        def mock_is_completely_empty(path):
+            # Resolve symlinks to handle macOS /private/var vs /var differences
+            resolved_path = os.path.realpath(path)
+            resolved_empty1 = os.path.realpath(empty_folder1)
+            resolved_empty2 = os.path.realpath(empty_folder2)
+            
+            # Check if path matches our target empty folders
+            if resolved_path == resolved_empty1 or resolved_path == resolved_empty2:
+                return True
+            # Also check for subdir which should not be empty (contains empty2)
+            if path.endswith("subdir") or path.endswith("non_empty"):
+                return False
+            return False
+        
+        self.mock_file_manager.is_completely_empty_folder.side_effect = mock_is_completely_empty
+        
+        # Create monitor and scan
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        empty_folders = monitor.scan_for_empty_folders()
+        
+        # Verify results
+        assert len(empty_folders) == 2
+        
+        # Use realpath to resolve symlinks for comparison
+        resolved_empty_folders = [os.path.realpath(f) for f in empty_folders]
+        resolved_empty1 = os.path.realpath(empty_folder1)
+        resolved_empty2 = os.path.realpath(empty_folder2)
+        resolved_non_empty = os.path.realpath(non_empty_folder)
+        
+        assert resolved_empty1 in resolved_empty_folders
+        assert resolved_empty2 in resolved_empty_folders
+        # Verify non-empty folder is not included
+        assert resolved_non_empty not in resolved_empty_folders
+    
+    def test_handle_empty_folders_processes_found_folders(self):
+        """Test handling of found empty folders."""
+        # Mock scan to return empty folders
+        empty_folders = ["/source/empty1", "/source/empty2"]
+        
+        # Mock successful processing results
+        success_result1 = ProcessingResult(success=True, file_path="/source/empty1")
+        success_result2 = ProcessingResult(success=True, file_path="/source/empty2")
+        
+        self.mock_processor.process_empty_folder.side_effect = [success_result1, success_result2]
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock scan_for_empty_folders to return our test folders
+        with patch.object(monitor, 'scan_for_empty_folders', return_value=empty_folders):
+            processed_count = monitor.handle_empty_folders()
+        
+        # Verify processing
+        assert processed_count == 2
+        assert self.mock_processor.process_empty_folder.call_count == 2
+        self.mock_processor.process_empty_folder.assert_any_call("/source/empty1")
+        self.mock_processor.process_empty_folder.assert_any_call("/source/empty2")
+        
+        # Verify success logging
+        self.mock_logger.log_info.assert_any_call("Successfully processed empty folder: /source/empty1")
+        self.mock_logger.log_info.assert_any_call("Successfully processed empty folder: /source/empty2")
+    
+    def test_empty_folder_integration_with_file_processing_workflow(self):
+        """Test integration of empty folder handling with regular file processing workflow."""
+        # Create test structure with both files and empty folders
+        test_file = os.path.join(self.source_folder, "test.txt")
+        empty_folder = os.path.join(self.source_folder, "empty")
+        
+        with open(test_file, 'w') as f:
+            f.write("test content")
+        os.makedirs(empty_folder)
+        
+        # Mock FileManager methods
+        self.mock_file_manager.is_completely_empty_folder.side_effect = lambda path: path == empty_folder
+        
+        # Mock successful processing results
+        file_result = ProcessingResult(success=True, file_path=test_file)
+        folder_result = ProcessingResult(success=True, file_path=empty_folder)
+        
+        self.mock_processor.process_file.return_value = file_result
+        self.mock_processor.process_empty_folder.return_value = folder_result
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Test that both file and empty folder processing work together
+        with patch.object(monitor, 'scan_for_empty_folders', return_value=[empty_folder]):
+            processed_count = monitor.handle_empty_folders()
+        
+        # Verify empty folder was processed
+        assert processed_count == 1
+        self.mock_processor.process_empty_folder.assert_called_once_with(empty_folder)
+        
+        # Verify logging indicates successful processing
+        self.mock_logger.log_info.assert_any_call(f"Successfully processed empty folder: {empty_folder}")

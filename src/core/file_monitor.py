@@ -9,7 +9,7 @@ import os
 import time
 import threading
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional, Set, List
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent
 
@@ -301,6 +301,10 @@ class FileMonitor:
                     raise RuntimeError("Observer failed to start properly")
                 
                 self.logger.log_info(f"Started monitoring folder: {self.source_folder}")
+                
+                # Perform initial scan for empty folders
+                self._perform_initial_empty_folder_scan()
+                
                 return
                 
             except Exception as e:
@@ -393,3 +397,106 @@ class FileMonitor:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.stop_monitoring()
+    
+    def scan_for_empty_folders(self) -> List[str]:
+        """
+        Scan the source folder for completely empty folders.
+        
+        Returns:
+            List[str]: List of paths to completely empty folders found
+        """
+        empty_folders = []
+        
+        try:
+            # Get FileManager instance from FileProcessor
+            file_manager = getattr(self.file_processor, 'file_manager', None)
+            if not file_manager:
+                self.logger.log_error("FileManager not available for empty folder detection")
+                return empty_folders
+            
+            # Recursively scan for empty folders
+            for root, dirs, files in os.walk(self.source_folder):
+                # Check each directory
+                for dir_name in dirs:
+                    dir_path = os.path.join(root, dir_name)
+                    if file_manager.is_completely_empty_folder(dir_path):
+                        empty_folders.append(dir_path)
+                        self.logger.log_info(f"Found completely empty folder: {dir_path}")
+            
+        except Exception as e:
+            self.logger.log_error(f"Error scanning for empty folders: {e}")
+        
+        return empty_folders
+    
+    def handle_empty_folders(self) -> int:
+        """
+        Detect and handle completely empty folders in the source directory.
+        
+        Returns:
+            int: Number of empty folders processed
+        """
+        processed_count = 0
+        
+        try:
+            empty_folders = self.scan_for_empty_folders()
+            
+            for folder_path in empty_folders:
+                try:
+                    # Process the empty folder through FileProcessor
+                    result = self.file_processor.process_empty_folder(folder_path)
+                    if result.success:
+                        processed_count += 1
+                        self.logger.log_info(f"Successfully processed empty folder: {folder_path}")
+                    else:
+                        self.logger.log_error(f"Failed to process empty folder: {result.error_message}")
+                        
+                except Exception as e:
+                    self.logger.log_error(f"Error processing empty folder {folder_path}: {e}")
+            
+        except Exception as e:
+            self.logger.log_error(f"Error in empty folder handling: {e}")
+        
+        return processed_count
+    
+    def _perform_initial_empty_folder_scan(self) -> None:
+        """
+        Perform initial scan for empty folders when monitoring starts.
+        
+        This ensures that any empty folders present when monitoring begins
+        are detected and handled appropriately.
+        """
+        try:
+            self.logger.log_info("Performing initial scan for completely empty folders")
+            processed_count = self.handle_empty_folders()
+            
+            if processed_count > 0:
+                self.logger.log_info(f"Initial scan processed {processed_count} completely empty folders")
+            else:
+                self.logger.log_info("Initial scan found no completely empty folders")
+                
+        except Exception as e:
+            self.logger.log_error(f"Error during initial empty folder scan: {e}")
+            # Don't fail monitoring startup due to empty folder scan issues
+    
+    def trigger_empty_folder_check(self) -> int:
+        """
+        Manually trigger a check for empty folders.
+        
+        This can be called periodically or on demand to ensure empty folders
+        are detected and handled even if they weren't caught by file events.
+        
+        Returns:
+            int: Number of empty folders processed
+        """
+        try:
+            self.logger.log_info("Manual empty folder check triggered")
+            processed_count = self.handle_empty_folders()
+            
+            if processed_count > 0:
+                self.logger.log_info(f"Manual check processed {processed_count} completely empty folders")
+            
+            return processed_count
+            
+        except Exception as e:
+            self.logger.log_error(f"Error during manual empty folder check: {e}")
+            return 0

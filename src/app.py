@@ -91,7 +91,10 @@ class FolderFileProcessorApp:
             
             # Step 3: Initialize error handler
             print("Initializing error handler...")
-            self.error_handler = ErrorHandler(self.config.error_folder)
+            self.error_handler = ErrorHandler(
+                error_folder=self.config.error_folder,
+                source_folder=self.config.source_folder
+            )
             
             # Step 4: Initialize file manager
             print("Initializing file manager...")

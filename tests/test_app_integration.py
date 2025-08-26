@@ -322,28 +322,57 @@ class TestFolderFileProcessorApp:
         error_file = self.source_dir / "empty.txt"
         error_file.write_text("")  # Empty file should cause validation error
         
-        # Start monitoring briefly
-        def run_app():
-            try:
-                app.start()
-            except Exception:
-                pass
-        
-        app_thread = threading.Thread(target=run_app, daemon=True)
-        app_thread.start()
-        
-        # Wait for processing
-        time.sleep(0.2)
-        
-        # Stop the application
-        app.shutdown()
+        # Process the file directly to test error handling
+        result = app.file_processor.process_file(str(error_file))
+        assert result.success is False
         
         # Check that error file was moved to error folder
         error_files = list(self.error_dir.glob("*.txt"))
         error_logs = list(self.error_dir.glob("*.log"))
         
-        # Should have either moved the file or created error log
-        assert len(error_files) > 0 or len(error_logs) > 0
+        # Should have moved the file and created error log with new format
+        assert len(error_files) > 0  # File should be moved to error folder
+        assert len(error_logs) > 0   # Error log should be created
+        
+        # Verify error log has correct filename format: [filename].[extension].log
+        expected_log = self.error_dir / "empty.txt.log"
+        assert expected_log.exists(), f"Expected error log not found: {expected_log}"
+        
+        # Verify log content
+        log_content = expected_log.read_text()
+        assert "FILE PROCESSING ERROR LOG" in log_content
+        assert "empty or contains only whitespace" in log_content
+    
+    def test_error_file_handling_with_nested_structure(self):
+        """Test error file handling with nested folder structure preservation."""
+        app = FolderFileProcessorApp(env_file=str(self.env_file))
+        
+        # Initialize app
+        assert app.initialize() is True
+        
+        # Create nested folder structure
+        nested_dir = self.source_dir / "documents" / "reports"
+        nested_dir.mkdir(parents=True)
+        
+        # Create a file that will cause processing error in nested structure
+        error_file = nested_dir / "report.pdf"
+        error_file.write_text("")  # Empty file should cause validation error
+        
+        # Process the file directly to test error handling
+        result = app.file_processor.process_file(str(error_file))
+        assert result.success is False
+        
+        # Check that error file was moved to error folder with preserved structure
+        expected_error_file = self.error_dir / "documents" / "reports" / "report.pdf"
+        expected_error_log = self.error_dir / "documents" / "reports" / "report.pdf.log"
+        
+        assert expected_error_file.exists(), f"Error file not found in preserved structure: {expected_error_file}"
+        assert expected_error_log.exists(), f"Error log not found in preserved structure: {expected_error_log}"
+        
+        # Verify log content
+        log_content = expected_error_log.read_text()
+        assert "FILE PROCESSING ERROR LOG" in log_content
+        assert str(error_file) in log_content
 
 
 class TestApplicationIntegrationScenarios:
