@@ -120,4 +120,69 @@
   - Include information about safety measures and error handling
   - Update troubleshooting section with folder cleanup related issues
   - Document the new folder cleanup logging messages
-  - _Requirements: 6.4, 6.5_
+  - _Requirements: 7.4, 7.5_
+
+- [ ] 13. Implement enhanced error log file naming
+- [ ] 13.1 Update ErrorHandler to use new filename format
+  - Modify _get_error_log_path method to create log files with format: [filename].[extension].log
+  - Handle edge cases for files without extensions and files with multiple extensions
+  - Update error log creation to place log files in the same folder as the failed file
+  - Write unit tests for various filename scenarios (abc.pdf → abc.pdf.log, debug.log → debug.log.log)
+  - _Requirements: 4.3_
+
+- [ ] 13.2 Update file processing workflow for new error log format
+  - Modify FileProcessor to use updated ErrorHandler methods
+  - Ensure error logs are created in the correct location within the error folder structure
+  - Update integration tests to verify correct error log placement and naming
+  - _Requirements: 4.3, 4.4_
+
+- [ ] 14. Implement empty folder detection and handling
+- [ ] 14.1 Add empty folder detection to file monitoring
+  - Extend FileMonitor to detect empty folders during source folder scanning
+  - Implement logic to identify folders that contain no files (only empty subfolders or nothing)
+  - Add method to FileManager to move empty folders to error folder with structure preservation
+  - Write unit tests for empty folder detection in various scenarios
+  - _Requirements: 6.1, 6.2_
+
+- [ ] 14.2 Implement empty folder log creation
+  - Add create_empty_folder_log method to ErrorHandler
+  - Create "empty_folder.log" file inside moved empty folders
+  - Include timestamp, original path, and reason in the log file
+  - Write unit tests for empty folder log creation and content verification
+  - _Requirements: 6.3, 6.4_
+
+- [ ] 14.3 Integrate empty folder handling with main workflow
+  - Update FileMonitor to check for and handle empty folders during monitoring
+  - Add logging for empty folder detection and movement at INFO level
+  - Ensure empty folder handling doesn't interfere with regular file processing
+  - Write integration tests for complete empty folder workflow
+  - _Requirements: 6.5_
+
+- [ ] 15. Update comprehensive test suite for new requirements
+- [ ] 15.1 Add tests for enhanced error log naming
+  - Test error log creation with various filename formats
+  - Verify log files are placed in correct locations within error folder structure
+  - Test edge cases for filenames without extensions and complex extensions
+  - _Requirements: 8.4_
+
+- [ ] 15.2 Add tests for empty folder handling
+  - Test completely empty folder detection (no files, no subfolders)
+  - Test that folders with empty subfolders are NOT moved (only completely empty folders)
+  - Verify empty folder movement to error folder with structure preservation
+  - Test empty folder log file creation and content
+  - Test integration with regular file processing workflow
+  - _Requirements: 8.5_
+
+- [ ] 16. Update project documentation for new features
+- [ ] 16.1 Document enhanced error logging
+  - Update README.md to explain new error log filename format
+  - Add examples of error log naming for different file types
+  - Document error log placement within error folder structure
+  - _Requirements: 4.3, 4.4_
+
+- [ ] 16.2 Document empty folder handling
+  - Add section explaining empty folder detection and handling
+  - Document the empty_folder.log file format and content
+  - Explain how empty folder handling integrates with regular processing
+  - Add troubleshooting information for empty folder scenarios
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_

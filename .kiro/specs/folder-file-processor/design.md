@@ -67,6 +67,7 @@ class FileManager:
     def __init__(self, source_folder: str, saved_folder: str, error_folder: str)
     def move_to_saved(self, file_path: str) -> bool
     def move_to_error(self, file_path: str) -> bool
+    def move_empty_folder_to_error(self, folder_path: str) -> bool
     def cleanup_empty_folders(self, file_path: str) -> None
     def _preserve_folder_structure(self, source_path: str, dest_base: str) -> str
     def _ensure_directory_exists(self, directory: str) -> None
@@ -80,6 +81,7 @@ class FileManager:
 ```python
 class ErrorHandler:
     def create_error_log(self, file_path: str, error_message: str) -> None
+    def create_empty_folder_log(self, folder_path: str) -> None
     def _get_error_log_path(self, file_path: str) -> str
     def _write_error_log(self, log_path: str, error_info: Dict) -> None
 ```
@@ -145,12 +147,32 @@ class ErrorLogEntry:
 - **Recovery Mechanisms:** Retry logic for transient failures
 
 ### Error Log Format
+
+#### File Processing Error Log
+**Filename Format:** `[original_filename].[original_extension].log`
+**Examples:** 
+- `document.pdf` → `document.pdf.log`
+- `data.csv` → `data.csv.log`
+- `backup.tar.gz` → `backup.tar.gz.log`
+
+**Content Format:**
 ```
 Timestamp: 2025-01-23 10:30:45
 File: /source/subfolder/document.txt
 Error: Permission denied when reading file
 Stack Trace: [if applicable]
 Additional Context: File size: 1024 bytes, Last modified: 2025-01-23 10:29:12
+```
+
+#### Empty Folder Log
+**Filename:** `empty_folder.log`
+**Content Format:**
+```
+Timestamp: 2025-01-23 10:30:45
+Folder: /source/subfolder/empty_directory
+Reason: Completely empty folder detected (no files, no subfolders) and moved to error folder
+Original Path: /source/subfolder/empty_directory
+Moved To: /error/subfolder/empty_directory
 ```
 
 ## Testing Strategy
@@ -167,7 +189,8 @@ Additional Context: File size: 1024 bytes, Last modified: 2025-01-23 10:29:12
 - **File Monitor Tests:** Event detection, recursive monitoring, error handling
 - **File Processor Tests:** Content reading, processing logic, error scenarios
 - **File Manager Tests:** File movement, folder creation, structure preservation, empty folder cleanup
-- **Error Handler Tests:** Log file creation, error message formatting
+- **Error Handler Tests:** Log file creation with correct filename format, error message formatting, empty folder log creation
+- **Empty Folder Tests:** Empty folder detection, movement to error folder, log file creation
 - **Folder Cleanup Tests:** Empty folder detection, recursive cleanup, permission handling
 - **Integration Tests:** End-to-end workflow testing with temporary directories
 

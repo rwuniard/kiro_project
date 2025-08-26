@@ -48,7 +48,7 @@ This feature involves creating a Python application that monitors a configurable
 
 1. WHEN a file fails to read or process THEN the application SHALL move it to the error folder
 2. WHEN moving a failed file to the error folder THEN the application SHALL preserve the original folder structure relative to the source folder
-3. WHEN a file fails processing THEN the application SHALL create an error log file with the same filename but with .log extension
+3. WHEN a file fails processing THEN the application SHALL create an error log file in the same folder as the failed file with the filename format: [original_filename].[original_extension].log
 4. WHEN creating an error log THEN it SHALL contain detailed information about the error encountered including timestamp and error message
 5. WHEN a file fails to process THEN the application SHALL log the processing failure at INFO level in the application log
 
@@ -66,6 +66,18 @@ This feature involves creating a Python application that monitors a configurable
 
 ### Requirement 6
 
+**User Story:** As a developer, I want completely empty folders to be handled appropriately by moving them to the error folder with documentation, so that I can track and manage empty folder occurrences.
+
+#### Acceptance Criteria
+
+1. WHEN a completely empty folder is detected in the source folder (containing no files AND no subfolders) THEN the application SHALL move the entire empty folder to the error folder
+2. WHEN moving an empty folder to the error folder THEN the application SHALL preserve the original folder structure relative to the source folder
+3. WHEN an empty folder is moved to the error folder THEN the application SHALL create a log file named "empty_folder.log" inside the moved folder
+4. WHEN creating the empty folder log file THEN it SHALL contain timestamp, folder path, and indication that the folder was completely empty
+5. WHEN an empty folder is processed THEN the application SHALL log the empty folder handling at INFO level in the application log
+
+### Requirement 7
+
 **User Story:** As a developer, I want empty folders to be automatically cleaned up after all files are moved, so that the source folder structure remains clean and organized.
 
 #### Acceptance Criteria
@@ -76,7 +88,7 @@ This feature involves creating a Python application that monitors a configurable
 4. WHEN an empty folder is removed THEN the application SHALL log the folder removal at INFO level in the application log
 5. IF a folder cannot be removed due to permissions or system restrictions THEN the application SHALL log a warning but continue processing
 
-### Requirement 7
+### Requirement 8
 
 **User Story:** As a developer, I want comprehensive unit tests that cover all scenarios, so that I can ensure the application works correctly and catch regressions.
 
@@ -85,5 +97,6 @@ This feature involves creating a Python application that monitors a configurable
 1. WHEN unit tests are executed THEN they SHALL cover all file processing scenarios including successful processing
 2. WHEN unit tests are executed THEN they SHALL cover all error handling scenarios including file read failures and permission errors
 3. WHEN unit tests are executed THEN they SHALL verify folder structure preservation for both saved and error folders
-4. WHEN unit tests are executed THEN they SHALL test environment variable configuration and error log creation functionality
-5. WHEN unit tests are executed THEN they SHALL test empty folder cleanup functionality including recursive parent folder removal
+4. WHEN unit tests are executed THEN they SHALL test environment variable configuration and error log creation functionality with correct filename format
+5. WHEN unit tests are executed THEN they SHALL test empty folder detection, movement to error folder, and log file creation
+6. WHEN unit tests are executed THEN they SHALL test empty folder cleanup functionality including recursive parent folder removal
