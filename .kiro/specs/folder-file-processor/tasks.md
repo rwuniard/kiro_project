@@ -138,22 +138,22 @@
 
 - [ ] 14. Implement empty folder detection and handling
 - [ ] 14.1 Add empty folder detection to file monitoring
-  - Extend FileMonitor to detect empty folders during source folder scanning
-  - Implement logic to identify folders that contain no files (only empty subfolders or nothing)
-  - Add method to FileManager to move empty folders to error folder with structure preservation
-  - Write unit tests for empty folder detection in various scenarios
+  - Extend FileMonitor to detect completely empty folders during source folder scanning
+  - Implement logic to identify folders that contain no files AND no subfolders (completely empty)
+  - Add method to FileManager to move completely empty folders to error folder with structure preservation
+  - Write unit tests for empty folder detection ensuring only completely empty folders are detected
   - _Requirements: 6.1, 6.2_
 
 - [ ] 14.2 Implement empty folder log creation
   - Add create_empty_folder_log method to ErrorHandler
-  - Create "empty_folder.log" file inside moved empty folders
-  - Include timestamp, original path, and reason in the log file
+  - Create "empty_folder.log" file inside moved completely empty folders
+  - Include timestamp, original path, and reason (completely empty - no files, no subfolders) in the log file
   - Write unit tests for empty folder log creation and content verification
   - _Requirements: 6.3, 6.4_
 
 - [ ] 14.3 Integrate empty folder handling with main workflow
-  - Update FileMonitor to check for and handle empty folders during monitoring
-  - Add logging for empty folder detection and movement at INFO level
+  - Update FileMonitor to check for and handle completely empty folders during monitoring
+  - Add logging for completely empty folder detection and movement at INFO level
   - Ensure empty folder handling doesn't interfere with regular file processing
   - Write integration tests for complete empty folder workflow
   - _Requirements: 6.5_
@@ -181,7 +181,8 @@
   - _Requirements: 4.3, 4.4_
 
 - [ ] 16.2 Document empty folder handling
-  - Add section explaining empty folder detection and handling
+  - Add section explaining completely empty folder detection and handling
+  - Clarify that only folders with no files AND no subfolders are moved
   - Document the empty_folder.log file format and content
   - Explain how empty folder handling integrates with regular processing
   - Add troubleshooting information for empty folder scenarios
