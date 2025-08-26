@@ -231,6 +231,10 @@ class RAGStoreProcessor(DocumentProcessingInterface):
             # Validate file path
             self.validate_file_path(file_path)
             
+            # Collect file metadata early to avoid race conditions
+            file_size = file_path.stat().st_size
+            file_extension = file_path.suffix
+            
             # Check if file is supported
             if not self.is_supported_file(file_path):
                 return ProcessingResult(
@@ -241,7 +245,7 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                     error_message=f"Unsupported file type: {file_path.suffix}",
                     error_type="unsupported_file_type",
                     metadata={
-                        "file_extension": file_path.suffix,
+                        "file_extension": file_extension,
                         "supported_extensions": list(self.get_supported_extensions())
                     }
                 )
@@ -250,7 +254,7 @@ class RAGStoreProcessor(DocumentProcessingInterface):
             self.logger.info(
                 "Starting document processing",
                 file_path=str(file_path),
-                file_size=file_path.stat().st_size
+                file_size=file_size
             )
             
             documents = self.registry.process_document(file_path)
@@ -263,7 +267,7 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                     processing_time=time.time() - start_time,
                     error_message="No content extracted from document",
                     error_type="empty_document",
-                    metadata={"file_size": file_path.stat().st_size}
+                    metadata={"file_size": file_size}
                 )
             
             # Store embeddings in ChromaDB
@@ -299,8 +303,8 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                     "model_vendor": self.model_vendor.value,
                     "chroma_db_path": str(self.chroma_db_path),
                     "document_processor": processor_name,
-                    "file_size": file_path.stat().st_size,
-                    "file_extension": file_path.suffix
+                    "file_size": file_size,
+                    "file_extension": file_extension
                 }
             )
             
@@ -326,8 +330,8 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                 error_type=error_type,
                 stack_trace=traceback.format_exc(),
                 file_metadata={
-                    "file_size": file_path.stat().st_size if file_path.exists() else 0,
-                    "file_extension": file_path.suffix
+                    "file_size": locals().get('file_size', file_path.stat().st_size if file_path.exists() else 0),
+                    "file_extension": locals().get('file_extension', file_path.suffix)
                 },
                 processing_context={
                     "model_vendor": self.model_vendor.value,
