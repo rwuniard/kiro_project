@@ -39,6 +39,7 @@ src/rag_store/data_source/
 Supported formats:
 - **PDF files** (`.pdf`) - Processed with PyPDFLoader + RecursiveCharacterTextSplitter
 - **Word documents** (`.docx`, `.doc`) - Processed with Docx2txtLoader + RecursiveCharacterTextSplitter
+- **MHT/MHTML files** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + RecursiveCharacterTextSplitter
 - **Text files** (`.txt`) - Processed with CharacterTextSplitter
 - **Markdown files** (`.md`) - Processed with CharacterTextSplitter
 
@@ -69,6 +70,7 @@ src/rag_store/
 ├── document_processor.py   # Universal document processor interface
 ├── pdf_processor.py        # PDF processing and chunking
 ├── word_processor.py       # Word document processing and chunking
+├── mht_processor.py        # MHT/MHTML web archive processing
 ├── text_processor.py       # Text and markdown processing
 ├── logging_config.py       # Structured logging configuration
 ├── store_embeddings.py     # Main ingestion script
@@ -174,6 +176,12 @@ The structured logging is designed for:
 - **Technology**: Docx2txtLoader + RecursiveCharacterTextSplitter
 - **Parameters**: 1000 chars with 150 overlap (balanced for Word content)
 - **Features**: Structured text extraction, metadata enhancement, error handling
+
+### **MHT Processor** (`mht_processor.py`)
+- **Purpose**: Extract and chunk text from MHT/MHTML web archive files
+- **Technology**: UnstructuredLoader + RecursiveCharacterTextSplitter  
+- **Parameters**: 1200 chars with 180 overlap (optimized for HTML content)
+- **Features**: Web archive parsing, HTML structure extraction, metadata enhancement
 
 ### **Text Processor** (`text_processor.py`)
 - **Purpose**: Extract and chunk text from text and markdown files

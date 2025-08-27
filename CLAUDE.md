@@ -103,7 +103,7 @@ This is a sophisticated Python file monitoring and processing application with p
 
 **RAG Store Components (`src/rag_store/`)**:
 - `ProcessorRegistry`: Multi-format document processor factory
-- Specialized processors: PDF (PyPDF), Word (docx2txt), Text/Markdown
+- Specialized processors: PDF (PyPDF), Word (docx2txt), MHT/MHTML (Unstructured), Text/Markdown
 - ChromaDB integration with collection management
 - Support for OpenAI and Google embedding providers
 - Standalone CLI interface for direct document processing
