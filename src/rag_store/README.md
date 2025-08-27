@@ -23,9 +23,40 @@ GOOGLE_API_KEY=your_google_api_key_here
 
 # Optional for OpenAI embeddings
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional for OCR debugging
+# OCR_INVESTIGATE=false
+# OCR_INVESTIGATE_DIR=./ocr_debug
 ```
 
-### 2. Add Documents
+### 2. Install Tesseract OCR (Optional)
+
+For OCR support on image-based PDFs, install Tesseract OCR engine:
+
+```bash
+# macOS
+brew install tesseract
+
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install tesseract-ocr
+
+# Windows (Chocolatey)
+choco install tesseract
+
+# Or download Windows installer from:
+# https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+**Verify installation:**
+```bash
+tesseract --version
+# Should output: tesseract 5.x.x
+```
+
+**Note**: Without Tesseract, the system will still process PDFs but won't perform OCR on image-based content.
+
+### 3. Add Documents
 
 Place your documents in the `data_source/` directory:
 ```
@@ -45,7 +76,7 @@ Supported formats:
 - **Text files** (`.txt`) - Processed with CharacterTextSplitter
 - **Markdown files** (`.md`) - Processed with CharacterTextSplitter
 
-### 3. Run Document Ingestion
+### 4. Run Document Ingestion
 
 ```bash
 # From project root

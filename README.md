@@ -25,6 +25,22 @@ A Python application that monitors a configurable source folder for new files, p
 - `watchdog==3.0.0` - Cross-platform file system event monitoring
 - `python-dotenv==1.0.0` - Environment variable management from .env files
 
+### Document Processing Dependencies (Optional)
+
+For advanced document processing with OCR support:
+
+- **Tesseract OCR Engine** - Required for OCR functionality on image-based PDFs
+  - **macOS**: `brew install tesseract`
+  - **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
+  - **Windows**: Download from [GitHub releases](https://github.com/UB-Mannheim/tesseract/wiki) or use `choco install tesseract`
+  - **Additional Language Packs** (optional): `brew install tesseract-lang` (macOS) or `sudo apt-get install tesseract-ocr-[lang]` (Linux)
+
+- `pytesseract>=0.3.13` - Python wrapper for Tesseract OCR (installed automatically with document processing dependencies)
+- `PyMuPDF>=1.23.0` - PDF processing with OCR support (installed automatically)
+- `Pillow>=10.0.0` - Image processing for OCR pipeline (installed automatically)
+
+**Note**: Document processing with OCR is optional. The application will work without Tesseract installed, but OCR functionality for image-based PDFs will be unavailable.
+
 ### Development Dependencies
 
 - `pytest>=8.0.0` - Unit testing framework
@@ -88,20 +104,32 @@ cp .env.example .env
 Edit the `.env` file with your specific folder paths:
 
 ```env
-# Source folder to monitor for new files
+# Required - Basic file processing
 SOURCE_FOLDER=/path/to/your/source/folder
-
-# Destination folder for successfully processed files
 SAVED_FOLDER=/path/to/your/saved/folder
-
-# Destination folder for files that failed processing
 ERROR_FOLDER=/path/to/your/error/folder
+
+# Optional - Advanced Document Processing with RAG
+ENABLE_DOCUMENT_PROCESSING=true
+DOCUMENT_PROCESSOR_TYPE=rag_store
+MODEL_VENDOR=openai  # or google
+CHROMA_DB_PATH=./data/chroma_db_openai
+
+# Required if using document processing
+OPENAI_API_KEY=your_openai_api_key_here  # if MODEL_VENDOR=openai
+GOOGLE_API_KEY=your_google_api_key_here  # if MODEL_VENDOR=google
+
+# Optional - OCR Investigation (for debugging OCR issues)
+# OCR_INVESTIGATE=false
+# OCR_INVESTIGATE_DIR=./ocr_debug
 ```
 
 **Important Notes:**
 - Use absolute paths for all folder configurations
 - Ensure all specified folders exist or the application will create them
 - The application user must have read/write permissions for all folders
+- **Document Processing**: Requires API keys (OpenAI or Google) and optionally Tesseract OCR for image-based PDFs
+- **OCR Investigation**: When enabled, saves OCR debug files to specified directory for troubleshooting
 
 ## Usage
 
@@ -495,6 +523,44 @@ ERROR: Source folder does not exist: /path/to/source
 mkdir -p /path/to/source /path/to/saved /path/to/error
 ```
 
+#### 5. OCR/Tesseract Installation Issues
+```
+ERROR: TesseractNotFoundError: tesseract is not installed or it's not in your PATH
+```
+**Solution**: Install Tesseract OCR engine:
+```bash
+# macOS
+brew install tesseract
+
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install tesseract-ocr
+
+# Windows (using Chocolatey)
+choco install tesseract
+
+# Or download Windows installer from:
+# https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+**Verify Installation**:
+```bash
+# Check if Tesseract is properly installed
+tesseract --version
+
+# Should output something like: tesseract 5.x.x
+```
+
+#### 6. Document Processing Configuration Issues
+```
+ERROR: Document processor validation failed
+```
+**Common solutions**:
+- **Missing API Keys**: Ensure `OPENAI_API_KEY` or `GOOGLE_API_KEY` is set in `.env`
+- **Invalid Model Vendor**: Set `MODEL_VENDOR=openai` or `MODEL_VENDOR=google`
+- **ChromaDB Path Issues**: Ensure `CHROMA_DB_PATH` directory is writable
+- **OCR Dependencies**: Install pytesseract and Pillow: `pip install pytesseract Pillow`
+
 ### Common Runtime Issues
 
 #### 1. File Processing Failures
@@ -560,6 +626,44 @@ INFO - Moved empty folder to error: /source/project1/empty_dir
 INFO - Created empty folder log: /error/project1/empty_dir/empty_folder.log
 WARNING - Failed to move empty folder /source/folder: Permission denied
 ```
+
+#### 6. OCR and Document Processing Issues
+
+**OCR Not Working on Image-based PDFs:**
+```
+INFO - Page 1 has minimal text (0 chars), attempting enhanced extraction
+WARNING - Page 1 has no text and OCR not available. Install pytesseract and Tesseract for image OCR
+```
+**Solutions**:
+- Install Tesseract OCR engine (see installation instructions above)
+- Install Python dependencies: `pip install pytesseract Pillow`
+- Verify Tesseract is in your system PATH: `tesseract --version`
+
+**OCR Investigation Mode:**
+Enable OCR debugging to troubleshoot OCR issues:
+```env
+# In .env file
+OCR_INVESTIGATE=true
+OCR_INVESTIGATE_DIR=./ocr_debug
+```
+This creates debug files showing OCR extraction results for each page processed.
+
+**Document Processing Performance Issues:**
+- **Large PDFs**: OCR processing can be slow for large image-based PDFs
+- **High Memory Usage**: OCR operations use significant memory for image processing
+- **Solutions**: 
+  - Process files in smaller batches
+  - Increase available system memory
+  - Monitor `logs/application.log` for processing times
+
+**ChromaDB Connection Issues:**
+```
+ERROR: Could not initialize ChromaDB at path: ./data/chroma_db_openai
+```
+**Solutions**:
+- Ensure `CHROMA_DB_PATH` directory exists and is writable
+- Check disk space availability
+- Verify no other processes are using the database
 
 ### Getting Help
 
