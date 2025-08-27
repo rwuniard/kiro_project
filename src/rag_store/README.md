@@ -23,9 +23,40 @@ GOOGLE_API_KEY=your_google_api_key_here
 
 # Optional for OpenAI embeddings
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Optional for OCR debugging
+# OCR_INVESTIGATE=false
+# OCR_INVESTIGATE_DIR=./ocr_debug
 ```
 
-### 2. Add Documents
+### 2. Install Tesseract OCR (Optional)
+
+For OCR support on image-based PDFs, install Tesseract OCR engine:
+
+```bash
+# macOS
+brew install tesseract
+
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install tesseract-ocr
+
+# Windows (Chocolatey)
+choco install tesseract
+
+# Or download Windows installer from:
+# https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+**Verify installation:**
+```bash
+tesseract --version
+# Should output: tesseract 5.x.x
+```
+
+**Note**: Without Tesseract, the system will still process PDFs but won't perform OCR on image-based content.
+
+### 3. Add Documents
 
 Place your documents in the `data_source/` directory:
 ```
@@ -39,13 +70,13 @@ src/rag_store/data_source/
 ```
 
 Supported formats:
-- **PDF files** (`.pdf`) - Processed with PyPDFLoader + RecursiveCharacterTextSplitter
+- **PDF files** (`.pdf`) - Processed with PyMuPDF (with OCR support) + RecursiveCharacterTextSplitter
 - **Word documents** (`.docx`, `.doc`) - Processed with Docx2txtLoader + RecursiveCharacterTextSplitter
 - **MHT/MHTML files** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter
 - **Text files** (`.txt`) - Processed with CharacterTextSplitter
 - **Markdown files** (`.md`) - Processed with CharacterTextSplitter
 
-### 3. Run Document Ingestion
+### 4. Run Document Ingestion
 
 ```bash
 # From project root
@@ -169,10 +200,18 @@ The structured logging is designed for:
 - **Benefits**: Easy to add new document types (Word, Excel, etc.)
 
 ### **PDF Processor** (`pdf_processor.py`)
-- **Purpose**: Extract and chunk text from PDF documents
-- **Technology**: PyPDFLoader + RecursiveCharacterTextSplitter
+- **Purpose**: Extract and chunk text from PDF documents with advanced OCR support for image-based PDFs
+- **Technology**: PyMuPDF + Tesseract OCR + RecursiveCharacterTextSplitter
 - **Parameters**: 1800 chars with 270 overlap (industry best practices)
-- **Features**: Page number tracking, metadata extraction, error handling
+- **Features**: 
+  - **True OCR Support**: Tesseract OCR engine for scanned documents and image-based PDFs
+  - **Multi-layer Text Extraction**: 
+    - Primary: Direct text extraction from PDF structure
+    - Secondary: Structured text blocks for complex layouts  
+    - Tertiary: Tesseract OCR for image content (<50 chars triggers OCR)
+  - **Intelligent Fallback**: Automatic detection and processing of image-based content
+  - **Page Tracking**: Maintains page numbers and document structure
+  - **Enhanced Metadata**: Extraction method tracking (pymupdf_text, pymupdf_blocks, tesseract_ocr)
 
 ### **Word Processor** (`word_processor.py`)
 - **Purpose**: Extract and chunk text from Microsoft Word documents
@@ -217,11 +256,17 @@ The structured logging is designed for:
 ## 📊 Processing Details
 
 ### **PDF Processing**
-- **Loader**: PyPDFLoader (LangChain integration)
+- **Loader**: PyMuPDF (fitz) with Tesseract OCR integration
 - **Splitter**: RecursiveCharacterTextSplitter
 - **Chunk Size**: 1800 characters
-- **Overlap**: 270 characters
-- **Metadata**: Page numbers, document properties, chunk IDs
+- **Overlap**: 270 characters (15% overlap ratio)
+- **OCR Features**: 
+  - **Primary Text Extraction**: Direct text extraction from PDF structure
+  - **Block Extraction**: Structured text block parsing for complex layouts
+  - **Tesseract OCR**: True OCR for image-based content (<50 chars triggers OCR)
+  - **Intelligent Detection**: Automatic identification of image-based pages
+  - **High-Quality Processing**: 300 DPI rendering for optimal OCR accuracy
+- **Metadata**: Page numbers, extraction method (pymupdf_text/blocks/tesseract_ocr), processing details
 
 ### **Word Processing**
 - **Loader**: Docx2txtLoader (LangChain Community)
@@ -412,7 +457,9 @@ langchain = ">=0.3.27"
 langchain-chroma = ">=0.2.5"
 langchain-community = ">=0.3.27"
 langchain-google-genai = ">=2.0.10"
-pypdf = ">=5.1.0"
+pymupdf = ">=1.26.4"
+pytesseract = ">=0.3.13"
+pillow = ">=11.3.0"
 python-dotenv = ">=1.1.1"
 
 # MHT/MHTML processing dependencies

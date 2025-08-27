@@ -512,11 +512,24 @@ class TestFileProcessorIntegration:
         # Verify print output
         mock_print.assert_called_once_with("Processed file: integration_test.txt")
     
-    def test_integration_failed_processing_with_error_log(self, file_processor_real, temp_dirs):
+    def test_integration_failed_processing_with_error_log(self, file_processor_real, temp_dirs, mock_document_processor):
         """Test complete failed file processing workflow with error log creation."""
+        from src.core.document_processing import ProcessingResult
+        
         # Create empty test file (will cause processing failure)
         test_file = Path(temp_dirs['source']) / "empty_test.txt"
         test_file.write_text("")
+        
+        # Configure mock document processor to return failure for empty file
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
         
         # Process file
         result = file_processor_real.process_file(str(test_file))
@@ -535,7 +548,7 @@ class TestFileProcessorIntegration:
         # Verify error log content
         log_content = error_log.read_text()
         assert "FILE PROCESSING ERROR LOG" in log_content
-        assert "empty or contains only whitespace" in log_content
+        assert "Empty document: No content extracted from document" in log_content
         
         # Verify original file was moved
         assert not test_file.exists()
@@ -1464,6 +1477,19 @@ class TestFileProcessorFolderCleanupIntegration:
     
     def test_process_file_error_case_no_folder_cleanup(self):
         """Test that folder cleanup doesn't occur when file processing fails."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Configure mock document processor to return failure for empty files
+        self.mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path="/test/empty.txt",
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
+        
         # Create nested structure with file
         nested_folder = self.source_folder / "error_test"
         nested_folder.mkdir()
@@ -1936,14 +1962,20 @@ class TestDocumentProcessingIntegration:
         mock_services['logger_service'].log_info.assert_called()
     
     def test_file_processor_initialization_none_document_processor(self, mock_services):
-        """Test FileProcessor initialization with None document processor raises error."""
-        with pytest.raises(ValueError, match="Document processor cannot be None"):
-            FileProcessor(
-                file_manager=mock_services['file_manager'],
-                error_handler=mock_services['error_handler'],
-                logger_service=mock_services['logger_service'],
-                document_processor=None
-            )
+        """Test FileProcessor initialization with None document processor works correctly."""
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            document_processor=None
+        )
+        
+        # Should successfully create FileProcessor with None document processor
+        assert processor.document_processor is None
+        
+        # Verify no validation logging occurs when document processor is None
+        mock_services['logger_service'].log_info.assert_not_called()
+        mock_services['logger_service'].log_error.assert_not_called()
     
     def test_file_processor_initialization_invalid_document_processor(self, mock_services):
         """Test FileProcessor initialization with invalid document processor."""

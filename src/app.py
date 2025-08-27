@@ -201,6 +201,19 @@ class FolderFileProcessorApp:
             print("Application initialization complete.")
             return True
             
+        except RuntimeError as e:
+            # RuntimeError exceptions (like dependency failures) should propagate
+            # to allow callers to handle them appropriately
+            error_msg = f"Failed to initialize application: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            
+            if self.logger_service:
+                self.logger_service.log_error(error_msg, e)
+            
+            # Ensure proper cleanup on initialization failure
+            self._cleanup_on_failure()
+            raise  # Re-raise the RuntimeError
+            
         except Exception as e:
             error_msg = f"Failed to initialize application: {str(e)}"
             print(f"ERROR: {error_msg}")
