@@ -5,6 +5,7 @@ A Python application that monitors a configurable source folder for new files, p
 ## Features
 
 - **Real-time File Monitoring**: Uses file system events to detect new files immediately
+- **Existing Files Processing**: Automatically processes files already present in source folder on startup
 - **Configurable Folders**: Source, saved, and error folders configurable via environment variables
 - **Folder Structure Preservation**: Maintains original directory structure when moving files
 - **Automatic Folder Cleanup**: Removes empty folders after successful file processing
@@ -119,9 +120,10 @@ python main.py
 The application will:
 1. Load configuration from `.env` file
 2. Initialize all components (logging, file manager, processor, monitor)
-3. Start monitoring the source folder
-4. Process files as they are detected
-5. Continue running until stopped with Ctrl+C
+3. **Process any existing files** already present in the source folder
+4. Start monitoring the source folder for new files
+5. Process files as they are detected
+6. Continue running until stopped with Ctrl+C
 
 ### Application Output
 
@@ -141,6 +143,10 @@ Initializing file processor...
 Initializing file monitor...
 Application initialization complete.
 Starting file system monitoring...
+Performing initial scan for existing files
+Processing existing file: document.txt
+Processing existing file: reports/report.pdf
+Initial scan processed 2 existing files
 Monitoring folder: /path/to/source
 Application is running. Press Ctrl+C to stop.
 ```

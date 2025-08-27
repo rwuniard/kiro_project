@@ -302,7 +302,8 @@ class FileMonitor:
                 
                 self.logger.log_info(f"Started monitoring folder: {self.source_folder}")
                 
-                # Perform initial scan for empty folders
+                # Perform initial scans
+                self._perform_initial_file_scan()
                 self._perform_initial_empty_folder_scan()
                 
                 return
@@ -477,6 +478,84 @@ class FileMonitor:
         except Exception as e:
             self.logger.log_error(f"Error during initial empty folder scan: {e}")
             # Don't fail monitoring startup due to empty folder scan issues
+    
+    def _perform_initial_file_scan(self) -> None:
+        """
+        Perform initial scan for existing files when monitoring starts.
+        
+        This ensures that any files present when monitoring begins are processed
+        immediately, not just files created after the application starts.
+        """
+        try:
+            self.logger.log_info("Performing initial scan for existing files")
+            processed_count = self._process_existing_files()
+            
+            if processed_count > 0:
+                self.logger.log_info(f"Initial scan processed {processed_count} existing files")
+            else:
+                self.logger.log_info("Initial scan found no files to process")
+                
+        except Exception as e:
+            self.logger.log_error(f"Error during initial file scan: {e}")
+            # Don't fail monitoring startup due to initial file scan issues
+    
+    def _process_existing_files(self) -> int:
+        """
+        Recursively scan source folder and process all existing files.
+        
+        Returns:
+            int: Number of files processed
+        """
+        processed_count = 0
+        
+        try:
+            source_path = Path(self.source_folder)
+            
+            if not source_path.exists():
+                self.logger.log_error(f"Source folder does not exist: {self.source_folder}")
+                return 0
+            
+            # Recursively find all files in source directory
+            for file_path in source_path.rglob('*'):
+                if file_path.is_file():
+                    try:
+                        self.logger.log_info(f"Processing existing file: {file_path.relative_to(source_path)}")
+                        
+                        # Process the file using the same logic as file events
+                        self.file_processor.process_file(str(file_path))
+                        processed_count += 1
+                        
+                    except Exception as e:
+                        self.logger.log_error(f"Error processing existing file {file_path}: {e}")
+                        # Continue processing other files even if one fails
+            
+        except Exception as e:
+            self.logger.log_error(f"Error scanning existing files: {e}")
+        
+        return processed_count
+    
+    def trigger_existing_files_scan(self) -> int:
+        """
+        Manually trigger a scan and processing of existing files.
+        
+        This can be called on demand to process files that may have been missed
+        or to reprocess files in the source directory.
+        
+        Returns:
+            int: Number of files processed
+        """
+        try:
+            self.logger.log_info("Manual existing files scan triggered")
+            processed_count = self._process_existing_files()
+            
+            if processed_count > 0:
+                self.logger.log_info(f"Manual scan processed {processed_count} existing files")
+            
+            return processed_count
+            
+        except Exception as e:
+            self.logger.log_error(f"Error during manual existing files scan: {e}")
+            return 0
     
     def trigger_empty_folder_check(self) -> int:
         """
