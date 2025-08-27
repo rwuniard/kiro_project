@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  kiro-app:
+    build: .
+    container_name: kiro-processor
+    restart: unless-stopped
+    
+    environment:
+      # Application settings
+      - SOURCE_FOLDER=/app/data/source
+      - SAVED_FOLDER=/app/data/saved
+      - ERROR_FOLDER=/app/data/error
+      - LOG_LEVEL=INFO
+      
+      # RAG Store settings (set in .env file)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+    volumes:
+      # Persistent data storage
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+      
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Add monitoring with Prometheus
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: kiro-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  kiro_data:
+    driver: local

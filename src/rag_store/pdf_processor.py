@@ -148,7 +148,7 @@ class PDFProcessor(DocumentProcessor):
                     # If still no text and OCR is available, perform true OCR
                     if (not text.strip() or len(text.strip()) < 50) and OCR_AVAILABLE:
                         logger.info(f"Performing Tesseract OCR on page {page_num + 1}")
-                        ocr_text = self._perform_ocr_on_page(page)
+                        ocr_text = self._perform_ocr_on_page(page, page_num + 1, str(pdf_path))
                         if ocr_text and len(ocr_text.strip()) > len(text.strip()):
                             text = ocr_text
                             extraction_method = "tesseract_ocr"
@@ -225,12 +225,14 @@ class PDFProcessor(DocumentProcessor):
             )
             raise Exception(f"Error processing PDF {pdf_path}: {e!s}")
 
-    def _perform_ocr_on_page(self, page) -> str:
+    def _perform_ocr_on_page(self, page, page_num: int, pdf_path: str) -> str:
         """
         Perform Tesseract OCR on a PDF page.
         
         Args:
             page: PyMuPDF page object
+            page_num: Page number (1-based)
+            pdf_path: Path to the PDF file being processed
             
         Returns:
             str: OCR-extracted text
@@ -254,11 +256,74 @@ class PDFProcessor(DocumentProcessor):
             # Clean up
             pix = None
             
-            return ocr_text.strip()
+            ocr_result = ocr_text.strip()
+            
+            # Write OCR investigation files if enabled
+            self._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+            
+            return ocr_result
             
         except Exception as e:
             logger.warning(f"OCR failed on page: {e}")
             return ""
+    
+    def _write_ocr_investigation_file(self, ocr_result: str, page_num: int, pdf_path: str) -> None:
+        """
+        Write OCR results to temporary files for investigation when OCR_INVESTIGATE=true.
+        
+        Args:
+            ocr_result: Text extracted from OCR
+            page_num: Page number (1-based)
+            pdf_path: Path to the PDF file being processed
+        """
+        import os
+        from pathlib import Path
+        
+        # Only write files if OCR_INVESTIGATE is enabled
+        if os.getenv('OCR_INVESTIGATE', 'false').lower() != 'true':
+            return
+            
+        try:
+            # Get OCR investigation directory from environment variable
+            ocr_dir = os.getenv('OCR_INVESTIGATE_DIR', './ocr_debug')
+            
+            # Create directory if it doesn't exist
+            Path(ocr_dir).mkdir(parents=True, exist_ok=True)
+            
+            # Create a safe filename from PDF path
+            pdf_name = Path(pdf_path).stem
+            safe_pdf_name = "".join(c for c in pdf_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            
+            # Create investigation filename with full path
+            debug_filename = Path(ocr_dir) / f"ocr_investigation_{safe_pdf_name}_page_{page_num}.txt"
+            
+            # Write OCR results to file
+            with open(debug_filename, 'w', encoding='utf-8') as f:
+                f.write(f"OCR Investigation Results\n")
+                f.write(f"========================\n\n")
+                f.write(f"PDF File: {pdf_path}\n")
+                f.write(f"Page Number: {page_num}\n")
+                f.write(f"OCR Result Length: {len(ocr_result)} characters\n")
+                f.write(f"OCR Result Empty: {'Yes' if not ocr_result else 'No'}\n")
+                f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                
+                if ocr_result:
+                    f.write(f"OCR Text Preview (first 300 chars):\n")
+                    f.write(f"{'=' * 40}\n")
+                    f.write(f"{ocr_result[:300]}\n")
+                    if len(ocr_result) > 300:
+                        f.write(f"... (truncated, see full text below)\n")
+                    
+                    f.write(f"\n\nFull OCR Text:\n")
+                    f.write(f"{'=' * 40}\n")
+                    f.write(ocr_result)
+                else:
+                    f.write("OCR returned no text for this page.\n")
+                    
+            logger.info(f"OCR investigation file written: {debug_filename}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to write OCR investigation file for page {page_num}: {e}")
 
     # Legacy method for backward compatibility
     def pdf_to_documents_recursive(

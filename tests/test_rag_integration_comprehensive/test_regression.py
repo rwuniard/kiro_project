@@ -381,7 +381,7 @@ class TestDocumentProcessingDisabledMode(BaseRAGIntegrationTest):
 class TestBackwardCompatibilityWithExistingTests(BaseRAGIntegrationTest):
     """Test backward compatibility with existing test patterns and expectations."""
     
-def test_existing_test_patterns_still_work(self):
+    def test_existing_test_patterns_still_work(self):
         """Test that existing test patterns and assertions still work."""
         # This test mimics patterns from existing test files
         

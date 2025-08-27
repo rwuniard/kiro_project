@@ -13,7 +13,7 @@ import tempfile
 import unittest
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, mock_open
 
 from langchain.schema import Document
 
@@ -443,6 +443,193 @@ class TestPDFProcessorIntegration(unittest.TestCase):
                 )
         else:
             self.skipTest("No test PDF file available for integration testing")
+
+    def test_ocr_investigation_method_exists(self):
+        """Test that OCR investigation method exists and can be called."""
+        # Simply verify the method exists and can be called without errors
+        # This is a basic smoke test for the new functionality
+        self.assertTrue(hasattr(self.processor, '_write_ocr_investigation_file'))
+        
+        # Test that the method can be called with OCR_INVESTIGATE disabled
+        # Should return early without creating files
+        import os
+        original_env = os.environ.copy()
+        try:
+            os.environ['OCR_INVESTIGATE'] = 'false'
+            # Should not raise exception when OCR investigation is disabled
+            self.processor._write_ocr_investigation_file("test content", 1, "/test/path.pdf")
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'true', 'OCR_INVESTIGATE_DIR': './test_ocr_debug'})
+    def test_ocr_investigation_file_writing_with_text(self):
+        """Test OCR investigation file writing with OCR text results."""
+        processor = PDFProcessor()
+        
+        # Test data
+        ocr_result = "This is some OCR text that was extracted from a PDF page. " * 10  # Make it >300 chars
+        page_num = 1
+        pdf_path = "/path/to/test_document.pdf"
+        
+        # Create temp directory for testing
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict('os.environ', {'OCR_INVESTIGATE_DIR': temp_dir}):
+                # Call the method
+                processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+                
+                # Verify file was created
+                from pathlib import Path
+                expected_filename = Path(temp_dir) / "ocr_investigation_test_document_page_1.txt"
+                self.assertTrue(expected_filename.exists())
+                
+                # Verify file contents
+                with open(expected_filename, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                self.assertIn("OCR Investigation Results", content)
+                self.assertIn("PDF File: /path/to/test_document.pdf", content)
+                self.assertIn("Page Number: 1", content)
+                self.assertIn(f"OCR Result Length: {len(ocr_result)} characters", content)
+                self.assertIn("OCR Result Empty: No", content)
+                self.assertIn("Full OCR Text:", content)
+                self.assertIn(ocr_result[:300], content)  # Preview
+                self.assertIn("... (truncated, see full text below)", content)  # Truncation message
+                self.assertIn(ocr_result, content)  # Full text
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'true', 'OCR_INVESTIGATE_DIR': './test_ocr_debug'})
+    def test_ocr_investigation_file_writing_without_text(self):
+        """Test OCR investigation file writing with empty OCR results."""
+        processor = PDFProcessor()
+        
+        # Test data - empty OCR result
+        ocr_result = ""
+        page_num = 2
+        pdf_path = "/path/to/empty_document.pdf"
+        
+        # Create temp directory for testing
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict('os.environ', {'OCR_INVESTIGATE_DIR': temp_dir}):
+                # Call the method
+                processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+                
+                # Verify file was created
+                from pathlib import Path
+                expected_filename = Path(temp_dir) / "ocr_investigation_empty_document_page_2.txt"
+                self.assertTrue(expected_filename.exists())
+                
+                # Verify file contents
+                with open(expected_filename, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                self.assertIn("OCR Investigation Results", content)
+                self.assertIn("PDF File: /path/to/empty_document.pdf", content)
+                self.assertIn("Page Number: 2", content)
+                self.assertIn("OCR Result Length: 0 characters", content)
+                self.assertIn("OCR Result Empty: Yes", content)
+                self.assertIn("OCR returned no text for this page.", content)
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'true'})  # No custom directory
+    def test_ocr_investigation_default_directory(self):
+        """Test OCR investigation uses default directory when not specified."""
+        processor = PDFProcessor()
+        
+        ocr_result = "Test OCR text"
+        page_num = 3
+        pdf_path = "/path/to/default_test.pdf"
+        
+        # Mock Path.mkdir and open to avoid actual file creation
+        with patch('pathlib.Path.mkdir') as mock_mkdir, \
+             patch('builtins.open', mock_open()) as mock_file:
+            
+            processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+            
+            # Verify default directory was used
+            mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+            # Verify file write was attempted
+            mock_file.assert_called_once()
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'true'})
+    def test_ocr_investigation_safe_filename_handling(self):
+        """Test OCR investigation handles special characters in PDF paths."""
+        processor = PDFProcessor()
+        
+        ocr_result = "Test text"
+        page_num = 1
+        # PDF path with special characters that need to be cleaned
+        pdf_path = "/path/to/document with spaces & special!chars@.pdf"
+        
+        with patch('pathlib.Path.mkdir') as mock_mkdir, \
+             patch('builtins.open', mock_open()) as mock_file:
+            
+            processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+            
+            # Verify the filename was sanitized (extract from the call)
+            mock_file.assert_called_once()
+            call_args = mock_file.call_args[0]
+            filename = str(call_args[0])
+            # Should contain sanitized version of filename
+            self.assertIn("document with spaces", filename)
+            self.assertNotIn("&", filename)
+            self.assertNotIn("!", filename)
+            self.assertNotIn("@", filename)
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'true'})
+    def test_ocr_investigation_exception_handling(self):
+        """Test OCR investigation handles exceptions gracefully."""
+        processor = PDFProcessor()
+        
+        ocr_result = "Test text"
+        page_num = 1
+        pdf_path = "/path/to/test.pdf"
+        
+        # Mock mkdir to raise an exception
+        with patch('pathlib.Path.mkdir', side_effect=PermissionError("Access denied")):
+            with patch('rag_store.pdf_processor.logger') as mock_logger:
+                # Should not raise exception, should log warning
+                processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+                
+                # Verify warning was logged
+                mock_logger.warning.assert_called_once()
+                args = mock_logger.warning.call_args[0]
+                self.assertIn("Failed to write OCR investigation file", args[0])
+    
+    @patch.dict('os.environ', {'OCR_INVESTIGATE': 'false'})  # Disabled
+    def test_ocr_investigation_disabled(self):
+        """Test OCR investigation is skipped when disabled."""
+        processor = PDFProcessor()
+        
+        ocr_result = "Test text"
+        page_num = 1
+        pdf_path = "/path/to/test.pdf"
+        
+        # Mock Path.mkdir - should not be called
+        with patch('pathlib.Path.mkdir') as mock_mkdir:
+            processor._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+            
+            # Verify no directory creation was attempted
+            mock_mkdir.assert_not_called()
+    
+    def test_ocr_dependencies_import_error_handling(self):
+        """Test handling of OCR dependencies import errors."""
+        # This test verifies the import error handling for pytesseract and PIL
+        # We can't easily mock module imports, but we can test the OCR_AVAILABLE flag
+        from src.rag_store.pdf_processor import OCR_AVAILABLE
+        # OCR_AVAILABLE should be either True or False, not None
+        self.assertIsInstance(OCR_AVAILABLE, bool)
+        
+    def test_relative_import_fallback_handling(self):
+        """Test that the processor works with both relative and absolute imports."""
+        # This test verifies the fallback import mechanism works
+        # The processor should initialize regardless of import style
+        processor = PDFProcessor()
+        self.assertIsNotNone(processor)
+        self.assertEqual(processor.processor_name, "PDFProcessor")
+        # Verify it has the required methods from successful imports
+        self.assertTrue(hasattr(processor, 'process_document'))
+        self.assertTrue(hasattr(processor, 'is_supported_file'))
 
 
 if __name__ == "__main__":

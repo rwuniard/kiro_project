@@ -193,3 +193,7 @@ logs/
 # ChromaDB database files
 *.sqlite3
 data/chroma_db_*/
+
+# OCR Investigation debug files (temporary files created when OCR_INVESTIGATE=true)
+ocr_investigation_*.txt
+ocr_debug/
