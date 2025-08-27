@@ -1,15 +1,16 @@
 # RAG Store - Document Ingestion Service
 
-A professional document processing and storage service for RAG (Retrieval-Augmented Generation) systems with **universal document processor interface**. Converts PDF, text, and markdown documents into searchable vector embeddings using ChromaDB.
+A professional document processing and storage service for RAG (Retrieval-Augmented Generation) systems with **universal document processor interface**. Converts PDF, Word, MHT/MHTML, text, and markdown documents into searchable vector embeddings using ChromaDB.
 
 ## 🎯 Purpose
 
 RAG Store is the **ingestion microservice** that:
-- Processes PDF, text, and markdown documents using universal interface
+- Processes PDF, Word, MHT/MHTML, text, and markdown documents using universal interface
 - Converts them into vector embeddings
 - Stores them in ChromaDB for semantic search
 - Optimizes chunking for better search quality
 - Supports extensible document processor architecture
+- Features robust error handling with fallback parsing for problematic files
 
 ## 🚀 Quick Start
 
@@ -31,6 +32,7 @@ Place your documents in the `data_source/` directory:
 src/rag_store/data_source/
 ├── your_document.pdf
 ├── report.docx
+├── web_archive.mht
 ├── facts.txt
 ├── documentation.md
 └── other_files.pdf
@@ -39,7 +41,7 @@ src/rag_store/data_source/
 Supported formats:
 - **PDF files** (`.pdf`) - Processed with PyPDFLoader + RecursiveCharacterTextSplitter
 - **Word documents** (`.docx`, `.doc`) - Processed with Docx2txtLoader + RecursiveCharacterTextSplitter
-- **MHT/MHTML files** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + RecursiveCharacterTextSplitter
+- **MHT/MHTML files** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter
 - **Text files** (`.txt`) - Processed with CharacterTextSplitter
 - **Markdown files** (`.md`) - Processed with CharacterTextSplitter
 
@@ -64,7 +66,8 @@ src/rag_store/
 ├── .env                     # Environment variables
 ├── data_source/            # Input documents directory
 │   ├── *.pdf              # PDF documents
-│   ├── *.docx             # Word documents
+│   ├── *.docx             # Word documents  
+│   ├── *.mht              # MHT/MHTML web archives
 │   ├── *.txt              # Text documents
 │   └── *.md               # Markdown documents
 ├── document_processor.py   # Universal document processor interface
@@ -178,10 +181,16 @@ The structured logging is designed for:
 - **Features**: Structured text extraction, metadata enhancement, error handling
 
 ### **MHT Processor** (`mht_processor.py`)
-- **Purpose**: Extract and chunk text from MHT/MHTML web archive files
-- **Technology**: UnstructuredLoader + RecursiveCharacterTextSplitter  
+- **Purpose**: Extract and chunk text from MHT/MHTML web archive files with robust error handling
+- **Technology**: Dual-parser architecture with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter  
 - **Parameters**: 1200 chars with 180 overlap (optimized for HTML content)
-- **Features**: Web archive parsing, HTML structure extraction, metadata enhancement
+- **Features**: 
+  - **Primary Parser**: UnstructuredLoader with element mode and fast strategy
+  - **Fallback Parser**: Manual MIME email parser for problematic MHT files with email-style headers
+  - **HTML Text Extraction**: BeautifulSoup and regex-based conversion with proper entity decoding
+  - **Enhanced Metadata**: Extraction method tracking, title preservation, content type detection
+  - **Error Recovery**: Graceful fallback when UnstructuredLoader fails with FileType.UNK errors
+- **Troubleshooting**: Resolves issues with MHT files that have email-style headers causing UnstructuredLoader failures
 
 ### **Text Processor** (`text_processor.py`)
 - **Purpose**: Extract and chunk text from text and markdown files
@@ -221,6 +230,18 @@ The structured logging is designed for:
 - **Overlap**: 150 characters
 - **Separators**: Paragraphs, lines, words, characters
 - **Supported**: `.docx`, `.doc` files
+
+### **MHT/MHTML Processing**
+- **Primary Loader**: UnstructuredLoader (element mode, fast strategy)
+- **Fallback Parser**: Python email library for MIME structure parsing
+- **Text Extractor**: BeautifulSoup with regex fallback for HTML-to-text conversion
+- **Splitter**: RecursiveCharacterTextSplitter
+- **Chunk Size**: 1200 characters
+- **Overlap**: 180 characters (15% overlap ratio)
+- **Separators**: HTML-friendly separators (`\n\n`, `\n`, ` `, `""`)
+- **Supported**: `.mht`, `.mhtml` files
+- **Error Handling**: Automatic fallback for files with email-style headers that cause UnstructuredLoader FileType.UNK errors
+- **Metadata**: Extraction method, title preservation, content type, source format
 
 ### **Text Processing** 
 - **Loader**: TextLoader (LangChain)
@@ -393,6 +414,11 @@ langchain-community = ">=0.3.27"
 langchain-google-genai = ">=2.0.10"
 pypdf = ">=5.1.0"
 python-dotenv = ">=1.1.1"
+
+# MHT/MHTML processing dependencies
+unstructured = ">=0.18.14"
+langchain-unstructured = ">=0.1.6"
+beautifulsoup4 = ">=4.13.5"
 
 # Logging and observability
 structlog = ">=24.1.0"
