@@ -8,11 +8,20 @@ Uses PyMuPDF for OCR capabilities to handle image-based PDFs.
 
 import time
 import fitz  # PyMuPDF
+from io import BytesIO
 
 from pathlib import Path
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+# OCR dependencies (optional)
+try:
+    import pytesseract
+    from PIL import Image
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 try:
     from .document_processor import DocumentProcessor
@@ -122,19 +131,30 @@ class PDFProcessor(DocumentProcessor):
                 
                 # Try to extract text normally first
                 text = page.get_text()
+                extraction_method = "pymupdf_text"
                 
                 # If no text found or very little text, try OCR
                 if not text.strip() or len(text.strip()) < 50:
-                    logger.info(f"Page {page_num + 1} has minimal text, attempting OCR")
-                    # Get page as image and perform OCR-like text extraction
-                    # PyMuPDF can extract text from images within PDFs
-                    text = page.get_text("text")
+                    logger.info(f"Page {page_num + 1} has minimal text ({len(text.strip())} chars), attempting enhanced extraction")
                     
-                    # If still no text, try different extraction methods
+                    # Try different PyMuPDF extraction methods first
                     if not text.strip():
                         # Try extracting from text blocks
                         blocks = page.get_text("blocks")
                         text = "\n".join([block[4] for block in blocks if len(block) > 4])
+                        if text.strip():
+                            extraction_method = "pymupdf_blocks"
+                    
+                    # If still no text and OCR is available, perform true OCR
+                    if (not text.strip() or len(text.strip()) < 50) and OCR_AVAILABLE:
+                        logger.info(f"Performing Tesseract OCR on page {page_num + 1}")
+                        ocr_text = self._perform_ocr_on_page(page)
+                        if ocr_text and len(ocr_text.strip()) > len(text.strip()):
+                            text = ocr_text
+                            extraction_method = "tesseract_ocr"
+                    
+                    elif not text.strip() and not OCR_AVAILABLE:
+                        logger.warning(f"Page {page_num + 1} has no text and OCR not available. Install pytesseract and Tesseract for image OCR.")
                 
                 if text.strip():
                     # Create Document object for this page
@@ -143,7 +163,7 @@ class PDFProcessor(DocumentProcessor):
                         metadata={
                             "page": page_num + 1,
                             "source": str(pdf_path),
-                            "extraction_method": "pymupdf_ocr"
+                            "extraction_method": extraction_method
                         }
                     )
                     pages.append(page_doc)
@@ -204,6 +224,41 @@ class PDFProcessor(DocumentProcessor):
                 context=context, error=e, error_type="pdf_processing_error"
             )
             raise Exception(f"Error processing PDF {pdf_path}: {e!s}")
+
+    def _perform_ocr_on_page(self, page) -> str:
+        """
+        Perform Tesseract OCR on a PDF page.
+        
+        Args:
+            page: PyMuPDF page object
+            
+        Returns:
+            str: OCR-extracted text
+        """
+        if not OCR_AVAILABLE:
+            return ""
+            
+        try:
+            # Convert page to image (300 DPI for good OCR quality)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))  # 2x scaling = ~300 DPI
+            img_data = pix.pil_tobytes(format="PNG")
+            
+            # Convert to PIL Image
+            img = Image.open(BytesIO(img_data))
+            
+            # Perform OCR with Tesseract
+            # Use optimal OCR settings for document text
+            custom_config = r'--oem 3 --psm 6'
+            ocr_text = pytesseract.image_to_string(img, config=custom_config)
+            
+            # Clean up
+            pix = None
+            
+            return ocr_text.strip()
+            
+        except Exception as e:
+            logger.warning(f"OCR failed on page: {e}")
+            return ""
 
     # Legacy method for backward compatibility
     def pdf_to_documents_recursive(

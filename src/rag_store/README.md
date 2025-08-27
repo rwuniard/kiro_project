@@ -169,15 +169,18 @@ The structured logging is designed for:
 - **Benefits**: Easy to add new document types (Word, Excel, etc.)
 
 ### **PDF Processor** (`pdf_processor.py`)
-- **Purpose**: Extract and chunk text from PDF documents with OCR support for image-based PDFs
-- **Technology**: PyMuPDF + RecursiveCharacterTextSplitter
+- **Purpose**: Extract and chunk text from PDF documents with advanced OCR support for image-based PDFs
+- **Technology**: PyMuPDF + Tesseract OCR + RecursiveCharacterTextSplitter
 - **Parameters**: 1800 chars with 270 overlap (industry best practices)
 - **Features**: 
-  - **OCR Support**: Automatically handles image-based PDFs and scanned documents
-  - **Multi-layer Text Extraction**: Primary text extraction with OCR fallback for minimal content
-  - **Block-based Extraction**: Fallback to structured text blocks for complex layouts
+  - **True OCR Support**: Tesseract OCR engine for scanned documents and image-based PDFs
+  - **Multi-layer Text Extraction**: 
+    - Primary: Direct text extraction from PDF structure
+    - Secondary: Structured text blocks for complex layouts  
+    - Tertiary: Tesseract OCR for image content (<50 chars triggers OCR)
+  - **Intelligent Fallback**: Automatic detection and processing of image-based content
   - **Page Tracking**: Maintains page numbers and document structure
-  - **Enhanced Metadata**: Processing method tracking and extraction details
+  - **Enhanced Metadata**: Extraction method tracking (pymupdf_text, pymupdf_blocks, tesseract_ocr)
 
 ### **Word Processor** (`word_processor.py`)
 - **Purpose**: Extract and chunk text from Microsoft Word documents
@@ -222,16 +225,17 @@ The structured logging is designed for:
 ## 📊 Processing Details
 
 ### **PDF Processing**
-- **Loader**: PyMuPDF (fitz) with OCR capabilities
+- **Loader**: PyMuPDF (fitz) with Tesseract OCR integration
 - **Splitter**: RecursiveCharacterTextSplitter
 - **Chunk Size**: 1800 characters
 - **Overlap**: 270 characters (15% overlap ratio)
 - **OCR Features**: 
   - **Primary Text Extraction**: Direct text extraction from PDF structure
-  - **OCR Fallback**: Automatic OCR for pages with minimal text (<50 chars)
   - **Block Extraction**: Structured text block parsing for complex layouts
-  - **Image-based PDF Support**: Full OCR processing for scanned documents
-- **Metadata**: Page numbers, extraction method, processing details, chunk IDs
+  - **Tesseract OCR**: True OCR for image-based content (<50 chars triggers OCR)
+  - **Intelligent Detection**: Automatic identification of image-based pages
+  - **High-Quality Processing**: 300 DPI rendering for optimal OCR accuracy
+- **Metadata**: Page numbers, extraction method (pymupdf_text/blocks/tesseract_ocr), processing details
 
 ### **Word Processing**
 - **Loader**: Docx2txtLoader (LangChain Community)
@@ -423,6 +427,8 @@ langchain-chroma = ">=0.2.5"
 langchain-community = ">=0.3.27"
 langchain-google-genai = ">=2.0.10"
 pymupdf = ">=1.26.4"
+pytesseract = ">=0.3.13"
+pillow = ">=11.3.0"
 python-dotenv = ">=1.1.1"
 
 # MHT/MHTML processing dependencies

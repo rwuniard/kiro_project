@@ -281,6 +281,7 @@ class TestPDFProcessor(unittest.TestCase):
             # Don't check total_chunks since it depends on how the splitter works
 
     @patch("rag_store.pdf_processor.fitz.open")
+    @patch("rag_store.pdf_processor.OCR_AVAILABLE", True)
     def test_ocr_fallback_for_image_based_pdf(self, mock_fitz_open):
         """Test OCR fallback when PDF contains minimal text (image-based)."""
         # Setup mock PyMuPDF document
@@ -290,31 +291,31 @@ class TestPDFProcessor(unittest.TestCase):
         
         # Create mock page that initially returns minimal text (triggering OCR)
         mock_page = Mock()
-        # First call returns minimal text, triggering OCR attempt
-        mock_page.get_text.side_effect = ["", "OCR extracted text from image"]
-        # Mock the blocks fallback as well
-        mock_page.get_text.return_value = "OCR extracted text from image"
+        # First call returns minimal text (empty), triggering OCR attempt
+        mock_page.get_text.return_value = ""  # Triggers OCR
+        mock_page.get_text.side_effect = None  # Reset side_effect
         mock_doc.__getitem__ = Mock(return_value=mock_page)
 
-        # Create temporary PDF file
-        pdf_path = self.temp_dir_path / "image_pdf.pdf"
-        pdf_path.touch()
+        # Mock the OCR method to return successful OCR text
+        with patch.object(self.processor, '_perform_ocr_on_page', return_value="OCR extracted text from image"):
+            # Create temporary PDF file
+            pdf_path = self.temp_dir_path / "image_pdf.pdf"
+            pdf_path.touch()
 
-        # Call the method
-        result = self.processor.pdf_to_documents_recursive(pdf_path)
+            # Call the method
+            result = self.processor.pdf_to_documents_recursive(pdf_path)
 
-        # Verify OCR was attempted (get_text called multiple times)
-        self.assertGreater(mock_page.get_text.call_count, 1)
-        
-        # Verify result contains OCR text
-        self.assertIsInstance(result, list)
-        self.assertGreater(len(result), 0)
-        
-        if result:
-            # Verify OCR metadata is present
-            self.assertEqual(result[0].metadata["loader_type"], "PyMuPDF_OCR")
-            # Verify content was extracted
-            self.assertIn("OCR extracted", result[0].page_content)
+            # Verify result contains OCR text
+            self.assertIsInstance(result, list)
+            self.assertGreater(len(result), 0)
+            
+            if result:
+                # Verify OCR metadata is present - note the metadata structure changed
+                self.assertEqual(result[0].metadata["loader_type"], "PyMuPDF_OCR")
+                # Verify content was extracted
+                self.assertIn("OCR extracted", result[0].page_content)
+                # Verify extraction method shows OCR was used
+                self.assertEqual(result[0].metadata["extraction_method"], "tesseract_ocr")
 
     @patch("rag_store.pdf_processor.fitz.open")
     def test_ocr_blocks_fallback(self, mock_fitz_open):
@@ -358,6 +359,31 @@ class TestPDFProcessor(unittest.TestCase):
             self.assertIn("Block 1 text content", content)
             self.assertIn("Block 2 more content", content)
             self.assertEqual(result[0].metadata["loader_type"], "PyMuPDF_OCR")
+
+    @patch("rag_store.pdf_processor.fitz.open")
+    @patch("rag_store.pdf_processor.OCR_AVAILABLE", False)
+    def test_ocr_not_available_fallback(self, mock_fitz_open):
+        """Test behavior when OCR is not available."""
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 1
+        
+        # Create mock page that returns no text
+        mock_page = Mock()
+        mock_page.get_text.return_value = ""
+        mock_doc.__getitem__ = Mock(return_value=mock_page)
+
+        # Create temporary PDF file
+        pdf_path = self.temp_dir_path / "no_ocr_pdf.pdf"
+        pdf_path.touch()
+
+        # Call the method
+        result = self.processor.pdf_to_documents_recursive(pdf_path)
+
+        # Should return empty result since no OCR is available and no text found
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 0)
 
 
 class TestPDFProcessorIntegration(unittest.TestCase):
