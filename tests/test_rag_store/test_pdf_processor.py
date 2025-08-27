@@ -69,25 +69,22 @@ class TestPDFProcessor(unittest.TestCase):
             with self.subTest(filename=filename):
                 self.assertFalse(self.processor.is_pdf_file(Path(filename)))
 
-    @patch("rag_store.pdf_processor.PyPDFLoader")
-    def test_pdf_to_documents_recursive_default_params(self, mock_loader_class):
-        """Test pdf_to_documents_recursive with default parameters."""
-        # Setup mock objects
-        mock_loader = Mock()
-        mock_loader_class.return_value = mock_loader
-
-        # Create sample pages that would be returned by loader.load()
-        sample_pages = [
-            Document(
-                page_content="Sample content 1",
-                metadata={"source": "test.pdf", "page": 0},
-            ),
-            Document(
-                page_content="Sample content 2",
-                metadata={"source": "test.pdf", "page": 1},
-            ),
-        ]
-        mock_loader.load.return_value = sample_pages
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_pdf_to_documents_recursive_default_params(self, mock_fitz_open):
+        """Test pdf_to_documents_recursive with default parameters using PyMuPDF."""
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 2
+        
+        # Create mock pages
+        mock_page1 = Mock()
+        mock_page1.get_text.return_value = "Sample content from page 1"
+        mock_page2 = Mock()
+        mock_page2.get_text.return_value = "Sample content from page 2"
+        
+        # Configure mock document indexing
+        mock_doc.__getitem__ = Mock(side_effect=[mock_page1, mock_page2])
 
         # Create a temporary PDF file path
         pdf_path = self.temp_dir_path / "test.pdf"
@@ -96,13 +93,13 @@ class TestPDFProcessor(unittest.TestCase):
         # Call the method
         result = self.processor.pdf_to_documents_recursive(pdf_path)
 
-        # Verify loader was created with correct path
-        mock_loader_class.assert_called_once_with(str(pdf_path))
+        # Verify fitz.open was called with correct path
+        mock_fitz_open.assert_called_once_with(str(pdf_path))
 
-        # Verify loader.load was called
-        mock_loader.load.assert_called_once()
+        # Verify document close was called
+        mock_doc.close.assert_called_once()
 
-        # Verify returned documents (the text splitter will create chunks from the pages)
+        # Verify returned documents
         self.assertIsInstance(result, list)
         self.assertGreater(len(result), 0)
 
@@ -122,6 +119,7 @@ class TestPDFProcessor(unittest.TestCase):
                 "chunk_size",
                 "chunk_overlap",
                 "splitting_method",
+                "loader_type"
             }
 
             # Check expected metadata keys are present
@@ -137,16 +135,20 @@ class TestPDFProcessor(unittest.TestCase):
             self.assertEqual(
                 doc.metadata["splitting_method"], "RecursiveCharacterTextSplitter"
             )
+            self.assertEqual(doc.metadata["loader_type"], "PyMuPDF_OCR")
 
-    @patch("rag_store.pdf_processor.PyPDFLoader")
-    def test_pdf_to_documents_recursive_custom_params(self, mock_loader_class):
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_pdf_to_documents_recursive_custom_params(self, mock_fitz_open):
         """Test pdf_to_documents_recursive with custom parameters."""
-        # Setup mock
-        mock_loader = Mock()
-        mock_loader_class.return_value = mock_loader
-        mock_loader.load.return_value = [
-            Document(page_content="Test content", metadata={})
-        ]
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 1
+        
+        # Create mock page
+        mock_page = Mock()
+        mock_page.get_text.return_value = "Test content for custom parameters"
+        mock_doc.__getitem__ = Mock(return_value=mock_page)
 
         # Create temporary PDF file
         pdf_path = self.temp_dir_path / "custom_test.pdf"
@@ -166,13 +168,13 @@ class TestPDFProcessor(unittest.TestCase):
             self.assertEqual(result[0].metadata["chunk_size"], custom_chunk_size)
             self.assertEqual(result[0].metadata["chunk_overlap"], custom_overlap)
 
-    @patch("rag_store.pdf_processor.PyPDFLoader")
-    def test_pdf_to_documents_recursive_empty_result(self, mock_loader_class):
-        """Test pdf_to_documents_recursive when loader returns empty list."""
-        # Setup mock to return empty list
-        mock_loader = Mock()
-        mock_loader_class.return_value = mock_loader
-        mock_loader.load.return_value = []
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_pdf_to_documents_recursive_empty_result(self, mock_fitz_open):
+        """Test pdf_to_documents_recursive when document has no pages."""
+        # Setup mock to return document with no pages
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 0
 
         # Create temporary PDF file
         pdf_path = self.temp_dir_path / "empty_test.pdf"
@@ -184,12 +186,15 @@ class TestPDFProcessor(unittest.TestCase):
         # Verify empty result
         self.assertEqual(len(result), 0)
         self.assertIsInstance(result, list)
+        
+        # Verify document was closed
+        mock_doc.close.assert_called_once()
 
-    @patch("rag_store.pdf_processor.PyPDFLoader")
-    def test_pdf_to_documents_recursive_loader_exception(self, mock_loader_class):
-        """Test pdf_to_documents_recursive when PyPDFLoader raises an exception."""
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_pdf_to_documents_recursive_loader_exception(self, mock_fitz_open):
+        """Test pdf_to_documents_recursive when PyMuPDF raises an exception."""
         # Setup mock to raise exception
-        mock_loader_class.side_effect = Exception("PDF loading failed")
+        mock_fitz_open.side_effect = Exception("PDF loading failed")
 
         # Create temporary PDF file
         pdf_path = self.temp_dir_path / "error_test.pdf"
@@ -202,64 +207,157 @@ class TestPDFProcessor(unittest.TestCase):
         self.assertIn("Error processing PDF", str(context.exception))
         self.assertIn("PDF loading failed", str(context.exception))
 
-    def test_pdf_to_documents_recursive_nonexistent_file(self):
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_pdf_to_documents_recursive_nonexistent_file(self, mock_fitz_open):
         """Test pdf_to_documents_recursive with non-existent file."""
         # Create path to non-existent file
         nonexistent_path = self.temp_dir_path / "nonexistent.pdf"
 
-        # The method should still try to process (PyPDFLoader will handle the error)
-        # We expect it to raise an exception when PyPDFLoader tries to load
-        with patch("rag_store.pdf_processor.PyPDFLoader") as mock_loader_class:
-            mock_loader_class.side_effect = FileNotFoundError("File not found")
+        # The method should still try to process (PyMuPDF will handle the error)
+        # We expect it to raise an exception when fitz.open tries to load
+        mock_fitz_open.side_effect = FileNotFoundError("File not found")
 
-            with self.assertRaises(FileNotFoundError):
-                self.processor.pdf_to_documents_recursive(nonexistent_path)
+        with self.assertRaises(FileNotFoundError):
+            self.processor.pdf_to_documents_recursive(nonexistent_path)
 
-    def test_metadata_document_id_extraction(self):
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_metadata_document_id_extraction(self, mock_fitz_open):
         """Test that document_id is correctly extracted from file path."""
-        with patch("rag_store.pdf_processor.PyPDFLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader_class.return_value = mock_loader
-            mock_loader.load.return_value = [Document(page_content="Test", metadata={})]
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 1
+        
+        # Create mock page
+        mock_page = Mock()
+        mock_page.get_text.return_value = "Test content"
+        mock_doc.__getitem__ = Mock(return_value=mock_page)
 
-            # Test various file names - updated expected format for new interface
-            test_cases = [
-                ("simple.pdf", "simple_pdf"),
-                ("complex_document_name.pdf", "complex_document_name_pdf"),
-                ("document with spaces.pdf", "document with spaces_pdf"),
-                ("123_numbers.pdf", "123_numbers_pdf"),
-            ]
+        # Test various file names - updated expected format for new interface
+        test_cases = [
+            ("simple.pdf", "simple_pdf"),
+            ("complex_document_name.pdf", "complex_document_name_pdf"),
+            ("document with spaces.pdf", "document with spaces_pdf"),
+            ("123_numbers.pdf", "123_numbers_pdf"),
+        ]
 
-            for filename, expected_id in test_cases:
-                with self.subTest(filename=filename):
-                    pdf_path = self.temp_dir_path / filename
-                    pdf_path.touch()
+        for filename, expected_id in test_cases:
+            with self.subTest(filename=filename):
+                pdf_path = self.temp_dir_path / filename
+                pdf_path.touch()
 
-                    result = self.processor.pdf_to_documents_recursive(pdf_path)
-                    if result:
-                        self.assertEqual(result[0].metadata["document_id"], expected_id)
+                result = self.processor.pdf_to_documents_recursive(pdf_path)
+                if result:
+                    self.assertEqual(result[0].metadata["document_id"], expected_id)
 
-    def test_chunk_numbering_sequence(self):
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_chunk_numbering_sequence(self, mock_fitz_open):
         """Test that chunks are numbered sequentially starting from 0."""
-        with patch("rag_store.pdf_processor.PyPDFLoader") as mock_loader_class:
-            mock_loader = Mock()
-            mock_loader_class.return_value = mock_loader
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 3
+        
+        # Create mock pages with enough content to generate multiple chunks
+        mock_pages = []
+        page_contents = []
+        for i in range(3):
+            mock_page = Mock()
+            content = f"This is content for page {i}. " * 100  # Enough content to create chunks
+            mock_page.get_text.return_value = content
+            page_contents.append(content)
+            mock_pages.append(mock_page)
+        
+        mock_doc.__getitem__ = Mock(side_effect=mock_pages)
 
-            # Create multiple sample pages (these will be split by RecursiveCharacterTextSplitter)
-            sample_pages = [
-                Document(page_content=f"Content {i}", metadata={}) for i in range(3)
-            ]
-            mock_loader.load.return_value = sample_pages
+        pdf_path = self.temp_dir_path / "multi_chunk.pdf"
+        pdf_path.touch()
 
-            pdf_path = self.temp_dir_path / "multi_chunk.pdf"
-            pdf_path.touch()
+        result = self.processor.pdf_to_documents_recursive(pdf_path)
 
-            result = self.processor.pdf_to_documents_recursive(pdf_path)
+        # Verify sequential numbering (new interface generates chunk_id strings)
+        for i, doc in enumerate(result):
+            self.assertEqual(doc.metadata["chunk_id"], f"chunk_{i}")
+            # Don't check total_chunks since it depends on how the splitter works
 
-            # Verify sequential numbering (new interface generates chunk_id strings)
-            for i, doc in enumerate(result):
-                self.assertEqual(doc.metadata["chunk_id"], f"chunk_{i}")
-                # Don't check total_chunks since it depends on how the splitter works
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_ocr_fallback_for_image_based_pdf(self, mock_fitz_open):
+        """Test OCR fallback when PDF contains minimal text (image-based)."""
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 1
+        
+        # Create mock page that initially returns minimal text (triggering OCR)
+        mock_page = Mock()
+        # First call returns minimal text, triggering OCR attempt
+        mock_page.get_text.side_effect = ["", "OCR extracted text from image"]
+        # Mock the blocks fallback as well
+        mock_page.get_text.return_value = "OCR extracted text from image"
+        mock_doc.__getitem__ = Mock(return_value=mock_page)
+
+        # Create temporary PDF file
+        pdf_path = self.temp_dir_path / "image_pdf.pdf"
+        pdf_path.touch()
+
+        # Call the method
+        result = self.processor.pdf_to_documents_recursive(pdf_path)
+
+        # Verify OCR was attempted (get_text called multiple times)
+        self.assertGreater(mock_page.get_text.call_count, 1)
+        
+        # Verify result contains OCR text
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+        
+        if result:
+            # Verify OCR metadata is present
+            self.assertEqual(result[0].metadata["loader_type"], "PyMuPDF_OCR")
+            # Verify content was extracted
+            self.assertIn("OCR extracted", result[0].page_content)
+
+    @patch("rag_store.pdf_processor.fitz.open")
+    def test_ocr_blocks_fallback(self, mock_fitz_open):
+        """Test OCR blocks fallback when standard text extraction fails completely."""
+        # Setup mock PyMuPDF document
+        mock_doc = Mock()
+        mock_fitz_open.return_value = mock_doc
+        mock_doc.page_count = 1
+        
+        # Create mock page that returns empty text but has text blocks
+        mock_page = Mock()
+        # Both get_text() calls return empty
+        mock_page.get_text.return_value = ""
+        # But get_text("blocks") returns structured data
+        def get_text_side_effect(mode=None):
+            if mode == "blocks":
+                # Return mock blocks data (x0, y0, x1, y1, text, block_no, block_type)
+                return [
+                    (0, 0, 100, 20, "Block 1 text content", 0, 0),
+                    (0, 25, 100, 45, "Block 2 more content", 1, 0),
+                ]
+            return ""
+        
+        mock_page.get_text.side_effect = get_text_side_effect
+        mock_doc.__getitem__ = Mock(return_value=mock_page)
+
+        # Create temporary PDF file
+        pdf_path = self.temp_dir_path / "blocks_pdf.pdf"
+        pdf_path.touch()
+
+        # Call the method
+        result = self.processor.pdf_to_documents_recursive(pdf_path)
+
+        # Verify result contains text from blocks
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+        
+        if result:
+            # Verify blocks extraction worked
+            content = result[0].page_content
+            self.assertIn("Block 1 text content", content)
+            self.assertIn("Block 2 more content", content)
+            self.assertEqual(result[0].metadata["loader_type"], "PyMuPDF_OCR")
 
 
 class TestPDFProcessorIntegration(unittest.TestCase):

@@ -24,6 +24,7 @@ dependencies = [
     "cryptography>=3.1",
     "unstructured[html]>=0.18.14",
     "langchain-unstructured>=0.1.6",
+    "pymupdf>=1.26.4",
 ]
 
 [dependency-groups]

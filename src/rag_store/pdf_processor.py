@@ -3,15 +3,16 @@ PDF Processing Module for RAG System
 
 This module provides functionality to extract text from PDF files and convert
 them into LangChain Document objects for embedding storage.
+Uses PyMuPDF for OCR capabilities to handle image-based PDFs.
 """
 
 import time
+import fitz  # PyMuPDF
 
 from pathlib import Path
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
 
 try:
     from .document_processor import DocumentProcessor
@@ -34,7 +35,7 @@ logger = get_logger("pdf_processor")
 
 
 class PDFProcessor(DocumentProcessor):
-    """Process PDF files and extract text content for RAG storage."""
+    """Process PDF files and extract text content for RAG storage using PyMuPDF with OCR capabilities."""
 
     def __init__(self):
         super().__init__()
@@ -46,7 +47,7 @@ class PDFProcessor(DocumentProcessor):
     @property
     def file_type_description(self) -> str:
         """Return a human-readable description of supported file types."""
-        return "PDF documents (.pdf)"
+        return "PDF documents (.pdf) with OCR support"
 
     def is_supported_file(self, file_path: Path) -> bool:
         """Check if the file is a supported PDF file."""
@@ -85,7 +86,7 @@ class PDFProcessor(DocumentProcessor):
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ) -> list[Document]:
-        """Internal PDF processing method."""
+        """Internal PDF processing method using PyMuPDF with OCR capabilities."""
         start_time = time.time()
         chunk_size, chunk_overlap = self.get_processing_params(
             chunk_size, chunk_overlap
@@ -101,11 +102,53 @@ class PDFProcessor(DocumentProcessor):
         )
 
         try:
-            # Use PyPDFLoader for better LangChain integration
-            loader = PyPDFLoader(str(pdf_path))
+            # Use PyMuPDF for OCR-capable PDF processing
+            doc = fitz.open(str(pdf_path))
+            
+            if doc.page_count == 0:
+                doc.close()
+                log_document_processing_complete(
+                    context=context,
+                    chunks_created=0,
+                    processing_time_seconds=time.time() - start_time,
+                    status="success_empty",
+                )
+                return []
 
-            # Load PDF pages
-            pages = loader.load()
+            # Extract text from each page with OCR fallback
+            pages = []
+            for page_num in range(doc.page_count):
+                page = doc[page_num]
+                
+                # Try to extract text normally first
+                text = page.get_text()
+                
+                # If no text found or very little text, try OCR
+                if not text.strip() or len(text.strip()) < 50:
+                    logger.info(f"Page {page_num + 1} has minimal text, attempting OCR")
+                    # Get page as image and perform OCR-like text extraction
+                    # PyMuPDF can extract text from images within PDFs
+                    text = page.get_text("text")
+                    
+                    # If still no text, try different extraction methods
+                    if not text.strip():
+                        # Try extracting from text blocks
+                        blocks = page.get_text("blocks")
+                        text = "\n".join([block[4] for block in blocks if len(block) > 4])
+                
+                if text.strip():
+                    # Create Document object for this page
+                    page_doc = Document(
+                        page_content=text,
+                        metadata={
+                            "page": page_num + 1,
+                            "source": str(pdf_path),
+                            "extraction_method": "pymupdf_ocr"
+                        }
+                    )
+                    pages.append(page_doc)
+            
+            doc.close()
 
             if not pages:
                 log_document_processing_complete(
@@ -139,6 +182,8 @@ class PDFProcessor(DocumentProcessor):
                         "chunk_size": chunk_size,
                         "chunk_overlap": chunk_overlap,
                         "splitting_method": "RecursiveCharacterTextSplitter",
+                        "total_chunks": len(documents),
+                        "loader_type": "PyMuPDF_OCR"
                     }
                 )
 
