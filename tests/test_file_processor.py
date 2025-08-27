@@ -64,12 +64,42 @@ class TestFileProcessor:
         }
     
     @pytest.fixture
-    def file_processor(self, mock_services):
+    def mock_document_processor(self):
+        """Create mock document processor for existing tests."""
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        mock_processor = Mock(spec=DocumentProcessingInterface)
+        mock_processor.get_processor_name.return_value = "MockProcessor"
+        mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        mock_processor.initialize.return_value = True
+        mock_processor.is_supported_file.return_value = True
+        mock_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        mock_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+        
+        return mock_processor
+
+    @pytest.fixture
+    def file_processor(self, mock_services, mock_document_processor):
         """Create FileProcessor instance with mock services."""
         return FileProcessor(
             file_manager=mock_services['file_manager'],
             error_handler=mock_services['error_handler'],
-            logger_service=mock_services['logger_service']
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor
         )
     
     def test_process_file_success(self, file_processor, mock_services, temp_dirs):
@@ -130,34 +160,60 @@ class TestFileProcessor:
         mock_services['error_handler'].create_error_log.assert_called_once()
         mock_services['file_manager'].move_to_error.assert_called_once_with(directory_path)
     
-    def test_process_empty_file(self, file_processor, mock_services, temp_dirs):
+    def test_process_empty_file(self, file_processor, mock_services, mock_document_processor, temp_dirs):
         """Test processing an empty file."""
+        from src.core.document_processing import ProcessingResult
+        
         # Create empty test file
         test_file = Path(temp_dirs['source']) / "empty_file.txt"
         test_file.write_text("")
+        
+        # Configure mock document processor to return empty document error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
         
         result = file_processor.process_file(str(test_file))
         
         # Verify result
         assert result.success is False
         assert result.file_path == str(test_file)
-        assert "empty or contains only whitespace" in result.error_message
+        assert "Empty document" in result.error_message
         
         # Verify error handling
         mock_services['error_handler'].create_error_log.assert_called_once()
         mock_services['file_manager'].move_to_error.assert_called_once()
     
-    def test_process_whitespace_only_file(self, file_processor, mock_services, temp_dirs):
+    def test_process_whitespace_only_file(self, file_processor, mock_services, mock_document_processor, temp_dirs):
         """Test processing a file with only whitespace."""
+        from src.core.document_processing import ProcessingResult
+        
         # Create whitespace-only test file
         test_file = Path(temp_dirs['source']) / "whitespace_file.txt"
         test_file.write_text("   \n\t  \n   ")
+        
+        # Configure mock document processor to return empty document error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 10}
+        )
         
         result = file_processor.process_file(str(test_file))
         
         # Verify result
         assert result.success is False
-        assert "empty or contains only whitespace" in result.error_message
+        assert "Empty document" in result.error_message
     
     @patch('builtins.open', side_effect=PermissionError("Permission denied"))
     def test_process_file_permission_error(self, mock_open, file_processor, mock_services, temp_dirs):
@@ -175,20 +231,18 @@ class TestFileProcessor:
         mock_services['error_handler'].create_error_log.assert_called_once()
         mock_services['file_manager'].move_to_error.assert_called_once()
     
-    def test_process_file_unicode_decode_error(self, file_processor, mock_services, temp_dirs):
-        """Test processing file with unicode decode error."""
+    def test_process_file_unicode_decode_error(self, file_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test processing file with unicode decode error handled by document processor."""
         test_file = Path(temp_dirs['source']) / "binary_file.txt"
         test_file.write_text("content")  # Create file first
         
-        # Mock the _read_file_content method to test encoding fallback
-        with patch.object(file_processor, '_read_file_content') as mock_read:
-            mock_read.return_value = "decoded content"
-            
-            result = file_processor.process_file(str(test_file))
-            
-            # Should succeed with fallback
-            assert result.success is True
-            mock_read.assert_called_once_with(str(test_file))
+        # Document processor should handle encoding issues internally
+        # and return success if it can process the file
+        result = file_processor.process_file(str(test_file))
+        
+        # Should succeed as document processor handles encoding
+        assert result.success is True
+        mock_document_processor.process_document.assert_called_once()
     
     @patch('builtins.open')
     def test_process_file_unicode_decode_error_both_encodings_fail(self, mock_open, file_processor, mock_services, temp_dirs):
@@ -228,11 +282,24 @@ class TestFileProcessor:
         mock_services['error_handler'].create_error_log.assert_called_once()
         mock_services['file_manager'].move_to_error.assert_called_once()
     
-    def test_process_file_move_to_error_fails(self, file_processor, mock_services, temp_dirs):
+    def test_process_file_move_to_error_fails(self, file_processor, mock_services, mock_document_processor, temp_dirs):
         """Test when moving to error folder fails."""
+        from src.core.document_processing import ProcessingResult
+        
         # Create a test file that will cause processing to fail
         test_file = Path(temp_dirs['source']) / "empty_file.txt"
         test_file.write_text("")
+        
+        # Configure mock document processor to return failure
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
         
         # Mock move_to_error to fail
         mock_services['file_manager'].move_to_error.side_effect = Exception("Move failed")
@@ -255,32 +322,64 @@ class TestFileProcessor:
         
         assert content == test_content
     
-    def test_perform_processing_success(self, file_processor, mock_services):
-        """Test successful file processing logic."""
-        content = "This is valid content\nWith multiple lines"
-        file_path = "/path/to/test_file.txt"
+    def test_perform_processing_success(self, file_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test successful document processing logic."""
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "test_file.txt"
+        test_file.write_text("This is valid content\nWith multiple lines")
         
         # Should not raise any exception
-        file_processor._perform_processing(content, file_path)
+        file_processor._perform_processing(str(test_file))
         
         # Should log processing information
         mock_services['logger_service'].log_info.assert_called()
+        
+        # Should call document processor
+        mock_document_processor.process_document.assert_called_once()
     
-    def test_perform_processing_empty_content(self, file_processor, mock_services):
+    def test_perform_processing_empty_content(self, file_processor, mock_services, mock_document_processor, temp_dirs):
         """Test processing with empty content."""
-        content = ""
-        file_path = "/path/to/test_file.txt"
+        from src.core.document_processing import ProcessingResult
         
-        with pytest.raises(ValueError, match="empty or contains only whitespace"):
-            file_processor._perform_processing(content, file_path)
+        # Create empty test file
+        test_file = Path(temp_dirs['source']) / "empty_file.txt"
+        test_file.write_text("")
+        
+        # Configure mock document processor to return empty document error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
+        
+        with pytest.raises(ValueError, match="Empty document"):
+            file_processor._perform_processing(str(test_file))
     
-    def test_perform_processing_whitespace_content(self, file_processor, mock_services):
+    def test_perform_processing_whitespace_content(self, file_processor, mock_services, mock_document_processor, temp_dirs):
         """Test processing with whitespace-only content."""
-        content = "   \n\t  \n   "
-        file_path = "/path/to/test_file.txt"
+        from src.core.document_processing import ProcessingResult
         
-        with pytest.raises(ValueError, match="empty or contains only whitespace"):
-            file_processor._perform_processing(content, file_path)
+        # Create whitespace-only test file
+        test_file = Path(temp_dirs['source']) / "whitespace_file.txt"
+        test_file.write_text("   \n\t  \n   ")
+        
+        # Configure mock document processor to return empty document error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 10}
+        )
+        
+        with pytest.raises(ValueError, match="Empty document"):
+            file_processor._perform_processing(str(test_file))
     
     def test_read_file_content_encoding_fallback(self, file_processor, temp_dirs):
         """Test encoding fallback in _read_file_content method."""
@@ -350,12 +449,42 @@ class TestFileProcessorIntegration:
         }
     
     @pytest.fixture
-    def file_processor_real(self, real_services):
+    def mock_document_processor(self):
+        """Create mock document processor for integration tests."""
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        mock_processor = Mock(spec=DocumentProcessingInterface)
+        mock_processor.get_processor_name.return_value = "MockProcessor"
+        mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        mock_processor.initialize.return_value = True
+        mock_processor.is_supported_file.return_value = True
+        mock_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        mock_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+        
+        return mock_processor
+
+    @pytest.fixture
+    def file_processor_real(self, real_services, mock_document_processor):
         """Create FileProcessor with real services."""
         return FileProcessor(
             file_manager=real_services['file_manager'],
             error_handler=real_services['error_handler'],
-            logger_service=real_services['logger_service']
+            logger_service=real_services['logger_service'],
+            document_processor=mock_document_processor
         )
     
     def test_integration_successful_processing(self, file_processor_real, temp_dirs):
@@ -464,12 +593,42 @@ class TestErrorHandlingAndResilience:
             }
     
     @pytest.fixture
-    def file_processor_with_retry(self, mock_services, retry_config):
+    def mock_document_processor(self):
+        """Create mock document processor for resilience tests."""
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        mock_processor = Mock(spec=DocumentProcessingInterface)
+        mock_processor.get_processor_name.return_value = "MockProcessor"
+        mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        mock_processor.initialize.return_value = True
+        mock_processor.is_supported_file.return_value = True
+        mock_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        mock_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+        
+        return mock_processor
+
+    @pytest.fixture
+    def file_processor_with_retry(self, mock_services, retry_config, mock_document_processor):
         """Create FileProcessor with retry configuration."""
         return FileProcessor(
             file_manager=mock_services['file_manager'],
             error_handler=mock_services['error_handler'],
             logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor,
             retry_config=retry_config
         )
     
@@ -941,12 +1100,42 @@ class TestFileProcessorAdditionalCoverage:
         }
     
     @pytest.fixture
-    def file_processor(self, mock_services):
+    def mock_document_processor(self):
+        """Create mock document processor for additional coverage tests."""
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        mock_processor = Mock(spec=DocumentProcessingInterface)
+        mock_processor.get_processor_name.return_value = "MockProcessor"
+        mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        mock_processor.initialize.return_value = True
+        mock_processor.is_supported_file.return_value = True
+        mock_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        mock_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+        
+        return mock_processor
+
+    @pytest.fixture
+    def file_processor(self, mock_services, mock_document_processor):
         """Create FileProcessor instance with mock services."""
         return FileProcessor(
             file_manager=mock_services['file_manager'],
             error_handler=mock_services['error_handler'],
-            logger_service=mock_services['logger_service']
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor
         )
     
     def test_validate_file_access_permission_error(self, file_processor, temp_dirs):
@@ -1075,11 +1264,37 @@ class TestFileProcessorFolderCleanupIntegration:
         self.error_handler = ErrorHandler(str(self.error_folder))
         self.logger_service = LoggerService()
         
+        # Create mock document processor
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        self.mock_document_processor = Mock(spec=DocumentProcessingInterface)
+        self.mock_document_processor.get_processor_name.return_value = "MockProcessor"
+        self.mock_document_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        self.mock_document_processor.initialize.return_value = True
+        self.mock_document_processor.is_supported_file.return_value = True
+        self.mock_document_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        self.mock_document_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+
         # Create FileProcessor with real services
         self.file_processor = FileProcessor(
             self.file_manager,
             self.error_handler,
-            self.logger_service
+            self.logger_service,
+            self.mock_document_processor
         )
     
     def teardown_method(self):
@@ -1292,11 +1507,37 @@ class TestFileProcessorEmptyFolderHandling:
         self.mock_error_handler = Mock()
         self.mock_logger = Mock()
         
+        # Create mock document processor
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        self.mock_document_processor = Mock(spec=DocumentProcessingInterface)
+        self.mock_document_processor.get_processor_name.return_value = "MockProcessor"
+        self.mock_document_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        self.mock_document_processor.initialize.return_value = True
+        self.mock_document_processor.is_supported_file.return_value = True
+        self.mock_document_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        self.mock_document_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+
         # Initialize FileProcessor
         self.file_processor = FileProcessor(
             self.mock_file_manager,
             self.mock_error_handler,
-            self.mock_logger
+            self.mock_logger,
+            self.mock_document_processor
         )
     
     def teardown_method(self):
@@ -1599,3 +1840,386 @@ class TestFileProcessorEmptyFolderHandling:
         # Note: The empty folder logging uses the relative path which returns "test.txt" in this mock setup
         # This is expected behavior as the mock returns "test.txt" for any path
         assert any("Successfully processed completely empty folder:" in str(call) for call in self.mock_logger.log_info.call_args_list)
+
+
+class TestDocumentProcessingIntegration:
+    """Test cases for document processing integration in FileProcessor."""
+    
+    @pytest.fixture
+    def mock_document_processor(self):
+        """Create mock document processor for testing."""
+        from src.core.document_processing import DocumentProcessingInterface, ProcessingResult
+        
+        mock_processor = Mock(spec=DocumentProcessingInterface)
+        mock_processor.get_processor_name.return_value = "MockProcessor"
+        mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf', '.docx'}
+        mock_processor.initialize.return_value = True
+        mock_processor.is_supported_file.return_value = True
+        mock_processor.cleanup.return_value = None
+        
+        # Default successful processing result
+        mock_processor.process_document.return_value = ProcessingResult(
+            success=True,
+            file_path="/test/file.txt",
+            processor_used="MockProcessor",
+            chunks_created=5,
+            processing_time=1.5,
+            metadata={
+                'document_processor': 'TextProcessor',
+                'file_size': 1024,
+                'model_vendor': 'google',
+                'file_extension': '.txt'
+            }
+        )
+        
+        return mock_processor
+    
+    @pytest.fixture
+    def mock_services(self, temp_dirs):
+        """Create mock services for testing."""
+        file_manager = Mock(spec=FileManager)
+        error_handler = Mock(spec=ErrorHandler)
+        logger_service = Mock(spec=LoggerService)
+        
+        # Configure file_manager mocks
+        file_manager.move_to_saved.return_value = True
+        file_manager.move_to_error.return_value = True
+        file_manager.get_relative_path.return_value = "test_file.txt"
+        file_manager.cleanup_empty_folders.return_value = []
+        
+        return {
+            'file_manager': file_manager,
+            'error_handler': error_handler,
+            'logger_service': logger_service
+        }
+    
+    @pytest.fixture
+    def temp_dirs(self):
+        """Create temporary directories for testing."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source_dir = temp_path / "source"
+            saved_dir = temp_path / "saved"
+            error_dir = temp_path / "error"
+            
+            source_dir.mkdir()
+            saved_dir.mkdir()
+            error_dir.mkdir()
+            
+            yield {
+                'source': str(source_dir),
+                'saved': str(saved_dir),
+                'error': str(error_dir),
+                'temp': str(temp_path)
+            }
+    
+    @pytest.fixture
+    def file_processor_with_doc_processor(self, mock_services, mock_document_processor):
+        """Create FileProcessor with document processor."""
+        return FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor
+        )
+    
+    def test_file_processor_initialization_with_document_processor(self, mock_services, mock_document_processor):
+        """Test FileProcessor initialization with document processor."""
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor
+        )
+        
+        assert processor.document_processor == mock_document_processor
+        mock_services['logger_service'].log_info.assert_called()
+    
+    def test_file_processor_initialization_none_document_processor(self, mock_services):
+        """Test FileProcessor initialization with None document processor raises error."""
+        with pytest.raises(ValueError, match="Document processor cannot be None"):
+            FileProcessor(
+                file_manager=mock_services['file_manager'],
+                error_handler=mock_services['error_handler'],
+                logger_service=mock_services['logger_service'],
+                document_processor=None
+            )
+    
+    def test_file_processor_initialization_invalid_document_processor(self, mock_services):
+        """Test FileProcessor initialization with invalid document processor."""
+        # Create a class that doesn't implement all required methods
+        class InvalidProcessor:
+            def get_supported_extensions(self):
+                return {'.txt'}
+            # Missing other required methods like initialize, process_document, etc.
+        
+        invalid_processor = InvalidProcessor()
+        
+        with pytest.raises(ValueError, match="Document processor missing required method"):
+            FileProcessor(
+                file_manager=mock_services['file_manager'],
+                error_handler=mock_services['error_handler'],
+                logger_service=mock_services['logger_service'],
+                document_processor=invalid_processor
+            )
+    
+    def test_document_processing_success(self, file_processor_with_doc_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test successful document processing workflow."""
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "test_document.txt"
+        test_file.write_text("Test content")
+        
+        # Configure mock to return correct filename
+        mock_services['file_manager'].get_relative_path.return_value = "test_document.txt"
+        
+        # Process file
+        with patch('builtins.print') as mock_print:
+            result = file_processor_with_doc_processor.process_file(str(test_file))
+        
+        # Verify result
+        assert result.success is True
+        assert result.file_path == str(test_file)
+        assert result.processing_time > 0
+        
+        # Verify document processor was called
+        mock_document_processor.process_document.assert_called_once()
+        call_args = mock_document_processor.process_document.call_args[0][0]
+        assert str(call_args) == str(test_file)
+        
+        # Verify file was moved to saved folder
+        mock_services['file_manager'].move_to_saved.assert_called_once_with(str(test_file))
+        
+        # Verify detailed logging
+        mock_services['logger_service'].log_info.assert_called()
+        log_calls = mock_services['logger_service'].log_info.call_args_list
+        processing_log = [call for call in log_calls if 'Document processing completed' in str(call)]
+        assert len(processing_log) > 0
+        
+        # Verify print output
+        mock_print.assert_called_once_with("Processed file: test_document.txt")
+    
+    def test_document_processing_unsupported_file_type(self, file_processor_with_doc_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test document processing with unsupported file type."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "unsupported.xyz"
+        test_file.write_text("Test content")
+        
+        # Mock document processor to return unsupported file type error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="Unsupported file type: .xyz",
+            error_type="unsupported_file_type",
+            metadata={
+                'file_extension': '.xyz',
+                'supported_extensions': ['.txt', '.pdf', '.docx']
+            }
+        )
+        
+        # Process file
+        result = file_processor_with_doc_processor.process_file(str(test_file))
+        
+        # Verify result
+        assert result.success is False
+        assert "Unsupported file type" in result.error_message
+        
+        # Verify file was moved to error folder
+        mock_services['file_manager'].move_to_error.assert_called_once_with(str(test_file))
+        mock_services['error_handler'].create_error_log.assert_called_once()
+    
+    def test_document_processing_empty_document(self, file_processor_with_doc_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test document processing with empty document."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "empty.txt"
+        test_file.write_text("")
+        
+        # Mock document processor to return empty document error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="No content extracted from document",
+            error_type="empty_document",
+            metadata={'file_size': 0}
+        )
+        
+        # Process file
+        result = file_processor_with_doc_processor.process_file(str(test_file))
+        
+        # Verify result
+        assert result.success is False
+        assert "Empty document" in result.error_message
+        
+        # Verify error handling
+        mock_services['file_manager'].move_to_error.assert_called_once()
+        mock_services['error_handler'].create_error_log.assert_called_once()
+    
+    def test_document_processing_initialization_error(self, file_processor_with_doc_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test document processing with initialization error."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "test.txt"
+        test_file.write_text("Test content")
+        
+        # Mock document processor to return initialization error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.0,
+            error_message="Processor not initialized",
+            error_type="initialization_error"
+        )
+        
+        # Process file
+        result = file_processor_with_doc_processor.process_file(str(test_file))
+        
+        # Verify result
+        assert result.success is False
+        assert "Processor not initialized" in result.error_message
+        
+        # Verify error handling
+        mock_services['file_manager'].move_to_error.assert_called_once()
+    
+    def test_document_processing_with_enhanced_error_info(self, file_processor_with_doc_processor, mock_services, mock_document_processor, temp_dirs):
+        """Test document processing with DocumentProcessingError in metadata."""
+        from src.core.document_processing import ProcessingResult, DocumentProcessingError
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "error_test.txt"
+        test_file.write_text("Test content")
+        
+        # Create DocumentProcessingError
+        processing_error = DocumentProcessingError(
+            file_path=str(test_file),
+            processor_type="MockProcessor",
+            error_message="API rate limit exceeded",
+            error_type="rate_limit_error",
+            stack_trace="Mock stack trace",
+            file_metadata={'file_size': 100},
+            processing_context={'model_vendor': 'google'}
+        )
+        
+        # Mock document processor to return error with enhanced info
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.5,
+            error_message="API rate limit exceeded",
+            error_type="rate_limit_error",
+            metadata={'processing_error': processing_error}
+        )
+        
+        # Process file
+        result = file_processor_with_doc_processor.process_file(str(test_file))
+        
+        # Verify result
+        assert result.success is False
+        assert "Document processing failed" in result.error_message
+        
+        # Verify error handling
+        mock_services['file_manager'].move_to_error.assert_called_once()
+        # Should call enhanced error logging since DocumentProcessingError is present
+        mock_services['error_handler'].create_document_processing_error_log.assert_called_once()
+    
+    def test_error_classification_document_processing_errors(self, file_processor_with_doc_processor):
+        """Test error classification for document processing specific errors."""
+        processor = file_processor_with_doc_processor
+        
+        # Test permanent document processing errors
+        assert processor._classify_error(ValueError("Unsupported file type")) == ErrorType.PERMANENT
+        assert processor._classify_error(ValueError("Empty document")) == ErrorType.PERMANENT
+        assert processor._classify_error(RuntimeError("Processor not initialized")) == ErrorType.PERMANENT
+        assert processor._classify_error(ValueError("Invalid file format")) == ErrorType.PERMANENT
+        
+        # Test transient document processing errors
+        assert processor._classify_error(RuntimeError("API rate limit exceeded")) == ErrorType.TRANSIENT
+        assert processor._classify_error(RuntimeError("Connection timeout")) == ErrorType.TRANSIENT
+        assert processor._classify_error(RuntimeError("Network error")) == ErrorType.TRANSIENT
+        assert processor._classify_error(RuntimeError("ChromaDB connection failed")) == ErrorType.TRANSIENT
+        assert processor._classify_error(RuntimeError("Embedding generation failed")) == ErrorType.TRANSIENT
+    
+    def test_document_processing_retry_on_transient_errors(self, mock_services, mock_document_processor, temp_dirs):
+        """Test that document processing retries on transient errors."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Create processor with retry config
+        retry_config = RetryConfig(max_attempts=3, base_delay=0.01)
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor,
+            retry_config=retry_config
+        )
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "retry_test.txt"
+        test_file.write_text("Test content")
+        
+        # Mock document processor to fail with transient error then succeed
+        mock_document_processor.process_document.side_effect = [
+            RuntimeError("API rate limit exceeded"),  # Transient error
+            ProcessingResult(
+                success=True,
+                file_path=str(test_file),
+                processor_used="MockProcessor",
+                chunks_created=3,
+                processing_time=1.0
+            )
+        ]
+        
+        # Process file
+        with patch('builtins.print'):
+            result = processor.process_file(str(test_file))
+        
+        # Should succeed after retry
+        assert result.success is True
+        assert mock_document_processor.process_document.call_count == 2
+        assert processor.stats['retries_attempted'] == 1
+    
+    def test_document_processing_no_retry_on_permanent_errors(self, mock_services, mock_document_processor, temp_dirs):
+        """Test that document processing doesn't retry on permanent errors."""
+        from src.core.document_processing import ProcessingResult
+        
+        # Create processor with retry config
+        retry_config = RetryConfig(max_attempts=3, base_delay=0.01)
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service'],
+            document_processor=mock_document_processor,
+            retry_config=retry_config
+        )
+        
+        # Create test file
+        test_file = Path(temp_dirs['source']) / "permanent_error_test.xyz"
+        test_file.write_text("Test content")
+        
+        # Mock document processor to fail with permanent error
+        mock_document_processor.process_document.return_value = ProcessingResult(
+            success=False,
+            file_path=str(test_file),
+            processor_used="MockProcessor",
+            processing_time=0.1,
+            error_message="Unsupported file type: .xyz",
+            error_type="unsupported_file_type"
+        )
+        
+        # Process file
+        result = processor.process_file(str(test_file))
+        
+        # Should fail without retry
+        assert result.success is False
+        assert mock_document_processor.process_document.call_count == 1
+        assert processor.stats['retries_attempted'] == 0
+        assert processor.stats['failed_permanent'] == 1

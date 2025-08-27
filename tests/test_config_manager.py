@@ -4,7 +4,7 @@ import os
 import tempfile
 import pytest
 from unittest.mock import patch, mock_open
-from src.config.config_manager import ConfigManager, AppConfig
+from src.config.config_manager import ConfigManager, AppConfig, DocumentProcessingConfig
 
 
 class TestAppConfig:
@@ -13,30 +13,36 @@ class TestAppConfig:
     def test_validate_valid_config(self):
         """Test validation with valid configuration."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            doc_config = DocumentProcessingConfig(enable_processing=False)  # Disable to avoid API key requirements
             config = AppConfig(
                 source_folder=temp_dir,
                 saved_folder="/path/to/saved",
-                error_folder="/path/to/error"
+                error_folder="/path/to/error",
+                document_processing=doc_config
             )
             errors = config.validate()
             assert errors == []
     
     def test_validate_missing_source_folder(self):
         """Test validation with missing source folder."""
+        doc_config = DocumentProcessingConfig(enable_processing=False)
         config = AppConfig(
             source_folder="",
             saved_folder="/path/to/saved",
-            error_folder="/path/to/error"
+            error_folder="/path/to/error",
+            document_processing=doc_config
         )
         errors = config.validate()
         assert "SOURCE_FOLDER is required but not provided" in errors
     
     def test_validate_nonexistent_source_folder(self):
         """Test validation with non-existent source folder."""
+        doc_config = DocumentProcessingConfig(enable_processing=False)
         config = AppConfig(
             source_folder="/nonexistent/path",
             saved_folder="/path/to/saved",
-            error_folder="/path/to/error"
+            error_folder="/path/to/error",
+            document_processing=doc_config
         )
         errors = config.validate()
         assert any("SOURCE_FOLDER path does not exist" in error for error in errors)
@@ -44,10 +50,12 @@ class TestAppConfig:
     def test_validate_source_folder_not_directory(self):
         """Test validation when source folder is not a directory."""
         with tempfile.NamedTemporaryFile() as temp_file:
+            doc_config = DocumentProcessingConfig(enable_processing=False)
             config = AppConfig(
                 source_folder=temp_file.name,
                 saved_folder="/path/to/saved",
-                error_folder="/path/to/error"
+                error_folder="/path/to/error",
+                document_processing=doc_config
             )
             errors = config.validate()
             assert any("SOURCE_FOLDER is not a directory" in error for error in errors)
@@ -55,10 +63,12 @@ class TestAppConfig:
     def test_validate_missing_saved_folder(self):
         """Test validation with missing saved folder."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            doc_config = DocumentProcessingConfig(enable_processing=False)
             config = AppConfig(
                 source_folder=temp_dir,
                 saved_folder="",
-                error_folder="/path/to/error"
+                error_folder="/path/to/error",
+                document_processing=doc_config
             )
             errors = config.validate()
             assert "SAVED_FOLDER is required but not provided" in errors
@@ -66,10 +76,12 @@ class TestAppConfig:
     def test_validate_missing_error_folder(self):
         """Test validation with missing error folder."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            doc_config = DocumentProcessingConfig(enable_processing=False)
             config = AppConfig(
                 source_folder=temp_dir,
                 saved_folder="/path/to/saved",
-                error_folder=""
+                error_folder="",
+                document_processing=doc_config
             )
             errors = config.validate()
             assert "ERROR_FOLDER is required but not provided" in errors
@@ -139,7 +151,8 @@ class TestConfigManager:
             config = {
                 'SOURCE_FOLDER': temp_dir,
                 'SAVED_FOLDER': '/saved',
-                'ERROR_FOLDER': '/error'
+                'ERROR_FOLDER': '/error',
+                'ENABLE_DOCUMENT_PROCESSING': 'false'  # Disable to avoid API key requirements
             }
             
             result = manager.validate_config(config)
@@ -156,7 +169,10 @@ class TestConfigManager:
             'ERROR_FOLDER': ''
         }
         
-        with pytest.raises(ValueError) as exc_info:
+        # Import the new exception type
+        from src.config.config_manager import ConfigurationValidationError
+        
+        with pytest.raises(ConfigurationValidationError) as exc_info:
             manager.validate_config(config)
         
         error_message = str(exc_info.value)
@@ -188,7 +204,8 @@ class TestConfigManager:
             config = {
                 'SOURCE_FOLDER': temp_dir,
                 'SAVED_FOLDER': '/saved',
-                'ERROR_FOLDER': '/error'
+                'ERROR_FOLDER': '/error',
+                'ENABLE_DOCUMENT_PROCESSING': 'false'  # Disable to avoid API key requirements
             }
             
             manager.validate_config(config)
@@ -200,13 +217,14 @@ class TestConfigManager:
     @patch.dict(os.environ, {
         'SOURCE_FOLDER': '/source',
         'SAVED_FOLDER': '/saved',
-        'ERROR_FOLDER': '/error'
+        'ERROR_FOLDER': '/error',
+        'ENABLE_DOCUMENT_PROCESSING': 'false'
     })
     def test_initialize_success(self):
         """Test successful initialization (load and validate in one step)."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Override the SOURCE_FOLDER to use a real directory for validation
-            with patch.dict(os.environ, {'SOURCE_FOLDER': temp_dir}):
+            with patch.dict(os.environ, {'SOURCE_FOLDER': temp_dir, 'ENABLE_DOCUMENT_PROCESSING': 'false'}):
                 manager = ConfigManager(env_file=None)
                 config = manager.initialize()
                 
@@ -220,7 +238,10 @@ class TestConfigManager:
         with patch.dict(os.environ, {}, clear=True):
             manager = ConfigManager(env_file=None)
             
-            with pytest.raises(ValueError) as exc_info:
+            # Import the new exception type
+            from src.config.config_manager import ConfigurationValidationError
+            
+            with pytest.raises(ConfigurationValidationError) as exc_info:
                 manager.initialize()
             
             assert "Configuration validation failed:" in str(exc_info.value)

@@ -18,6 +18,17 @@ from src.core.file_manager import FileManager
 from src.core.file_processor import FileProcessor, RetryConfig
 from src.core.file_monitor import FileMonitor
 
+# Import document processing components with graceful fallback
+try:
+    from src.core.rag_store_processor import RAGStoreProcessor
+    from src.core.document_processing import DocumentProcessingInterface
+    DOCUMENT_PROCESSING_AVAILABLE = True
+except ImportError as e:
+    # Document processing dependencies not available
+    RAGStoreProcessor = None
+    DocumentProcessingInterface = None
+    DOCUMENT_PROCESSING_AVAILABLE = False
+
 
 class FolderFileProcessorApp:
     """
@@ -45,6 +56,7 @@ class FolderFileProcessorApp:
         self.file_manager: Optional[FileManager] = None
         self.file_processor: Optional[FileProcessor] = None
         self.file_monitor: Optional[FileMonitor] = None
+        self.document_processor: Optional[DocumentProcessingInterface] = None
         
         # Application state
         self.config: Optional[AppConfig] = None
@@ -81,13 +93,44 @@ class FolderFileProcessorApp:
             print(f"  Saved folder: {self.config.saved_folder}")
             print(f"  Error folder: {self.config.error_folder}")
             
+            # Step 1.1: Validate document processing configuration
+            if self.config.document_processing.enable_processing:
+                print("Validating document processing configuration...")
+                try:
+                    # Validate dependencies if document processing is enabled
+                    dependency_errors = self.config_manager.validate_dependencies()
+                    if dependency_errors:
+                        error_msg = "Document processing dependencies validation failed:\n" + "\n".join(f"- {error}" for error in dependency_errors)
+                        print(f"ERROR: {error_msg}")
+                        raise RuntimeError(error_msg)
+                    
+                    print(f"Document processing configuration validated:")
+                    print(f"  Processor type: {self.config.document_processing.processor_type}")
+                    print(f"  Model vendor: {self.config.document_processing.model_vendor}")
+                    print(f"  ChromaDB path: {self.config.document_processing.chroma_db_path}")
+                    
+                except Exception as e:
+                    error_msg = f"Document processing configuration validation failed: {str(e)}"
+                    print(f"ERROR: {error_msg}")
+                    raise RuntimeError(error_msg) from e
+            else:
+                print("Document processing is disabled - skipping validation")
+            
             # Step 2: Initialize logging service
             print("Setting up logging...")
             self.logger_service = LoggerService.setup_logger(
                 log_file_path=self.log_file,
                 logger_name="folder_file_processor"
             )
-            self.logger_service.log_info("Application initialization started")
+            
+            # Log initialization start with configuration details
+            doc_processing_status = "enabled" if self.config.document_processing.enable_processing else "disabled"
+            self.logger_service.log_info(f"Application initialization started - Document processing: {doc_processing_status}")
+            
+            if self.config.document_processing.enable_processing:
+                self.logger_service.log_info(f"Document processing config - Vendor: {self.config.document_processing.model_vendor}, "
+                                           f"Processor: {self.config.document_processing.processor_type}, "
+                                           f"ChromaDB: {self.config.document_processing.chroma_db_path}")
             
             # Step 3: Initialize error handler
             print("Initializing error handler...")
@@ -104,7 +147,33 @@ class FolderFileProcessorApp:
                 error_folder=self.config.error_folder
             )
             
-            # Step 5: Initialize file processor with retry configuration
+            # Step 5: Initialize document processor if document processing is enabled
+            if self.config.document_processing.enable_processing:
+                if not DOCUMENT_PROCESSING_AVAILABLE:
+                    error_msg = "Document processing is enabled but required dependencies are not available. Please install RAG store dependencies."
+                    print(f"ERROR: {error_msg}")
+                    if self.logger_service:
+                        self.logger_service.log_error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                print("Initializing document processor...")
+                try:
+                    self.document_processor = RAGStoreProcessor()
+                    processor_config = self.config.document_processing.to_processor_config()
+                    self.document_processor.initialize(processor_config)
+                    print(f"Document processing enabled with {self.config.document_processing.model_vendor} embeddings")
+                    self.logger_service.log_info(f"Document processor initialized successfully with {self.config.document_processing.model_vendor} vendor")
+                except Exception as e:
+                    error_msg = f"Failed to initialize document processor: {str(e)}"
+                    print(f"ERROR: {error_msg}")
+                    if self.logger_service:
+                        self.logger_service.log_error(error_msg, e)
+                    raise RuntimeError(error_msg) from e
+            else:
+                print("Document processing disabled in configuration")
+                self.logger_service.log_info("Document processing disabled - files will be processed without RAG integration")
+            
+            # Step 6: Initialize file processor with retry configuration
             print("Initializing file processor...")
             retry_config = RetryConfig(
                 max_attempts=3,
@@ -116,10 +185,11 @@ class FolderFileProcessorApp:
                 file_manager=self.file_manager,
                 error_handler=self.error_handler,
                 logger_service=self.logger_service,
-                retry_config=retry_config
+                retry_config=retry_config,
+                document_processor=self.document_processor
             )
             
-            # Step 6: Initialize file monitor
+            # Step 7: Initialize file monitor
             print("Initializing file monitor...")
             self.file_monitor = FileMonitor(
                 source_folder=self.config.source_folder,
@@ -137,7 +207,19 @@ class FolderFileProcessorApp:
             
             if self.logger_service:
                 self.logger_service.log_error(error_msg, e)
+            else:
+                # If logger service is not available, try to create a basic one for error logging
+                try:
+                    temp_logger = LoggerService.setup_logger(
+                        log_file_path=self.log_file,
+                        logger_name="folder_file_processor_error"
+                    )
+                    temp_logger.log_error(error_msg, e)
+                except:
+                    pass  # If we can't log, at least we printed the error
             
+            # Ensure proper cleanup on initialization failure
+            self._cleanup_on_failure()
             return False
     
     def start(self) -> None:
@@ -167,12 +249,25 @@ class FolderFileProcessorApp:
             self.logger_service.log_error(error_msg, e)
             raise RuntimeError(error_msg) from e
     
+    def _cleanup_on_failure(self) -> None:
+        """Cleanup partially initialized components on initialization failure."""
+        try:
+            if self.document_processor:
+                self.document_processor.cleanup()
+        except Exception as e:
+            print(f"Warning: Error during cleanup: {e}")
+    
     def _validate_initialization(self) -> bool:
         """Validate that all required components are initialized."""
         required_components = [
             self.config_manager, self.logger_service, self.error_handler,
             self.file_manager, self.file_processor, self.file_monitor, self.config
         ]
+        
+        # Document processor is only required if document processing is enabled
+        if self.config and self.config.document_processing.enable_processing:
+            required_components.append(self.document_processor)
+        
         return all(component is not None for component in required_components)
     
     def _run_main_loop(self) -> None:
@@ -236,12 +331,66 @@ class FolderFileProcessorApp:
                 print(f"ERROR: {error_msg}")
                 return False
             
+            # Check document processing health if enabled
+            if self.config.document_processing.enable_processing and self.document_processor:
+                if not self._check_document_processor_health():
+                    return False
+            
             # Log health check success
             self.logger_service.log_info("Health check passed - all components operational")
             return True
             
         except Exception as e:
             error_msg = f"Health check failed: {str(e)}"
+            self.logger_service.log_error(error_msg, e)
+            print(f"ERROR: {error_msg}")
+            return False
+    
+    def _check_document_processor_health(self) -> bool:
+        """
+        Check document processor health including ChromaDB connectivity and embedding model availability.
+        
+        Returns:
+            bool: True if document processor is healthy, False otherwise
+        """
+        try:
+            # Check if ChromaDB path is still accessible
+            chroma_path = Path(self.config.document_processing.chroma_db_path)
+            if not chroma_path.parent.exists():
+                error_msg = f"ChromaDB parent directory no longer exists: {chroma_path.parent}"
+                self.logger_service.log_error(error_msg)
+                print(f"ERROR: {error_msg}")
+                return False
+            
+            # Check if ChromaDB path is writable
+            import os
+            if not os.access(chroma_path.parent, os.W_OK):
+                error_msg = f"ChromaDB parent directory is not writable: {chroma_path.parent}"
+                self.logger_service.log_error(error_msg)
+                print(f"ERROR: {error_msg}")
+                return False
+            
+            # Test document processor functionality with a simple health check
+            # This will verify that the processor is still properly initialized
+            try:
+                # Check if processor can report supported extensions (basic functionality test)
+                supported_extensions = self.document_processor.get_supported_extensions()
+                if not supported_extensions:
+                    error_msg = "Document processor reports no supported file extensions"
+                    self.logger_service.log_error(error_msg)
+                    print(f"WARNING: {error_msg}")
+                    # This is a warning, not a failure - continue monitoring
+                
+            except Exception as e:
+                error_msg = f"Document processor health check failed: {str(e)}"
+                self.logger_service.log_error(error_msg, e)
+                print(f"ERROR: {error_msg}")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            error_msg = f"Document processor health check error: {str(e)}"
             self.logger_service.log_error(error_msg, e)
             print(f"ERROR: {error_msg}")
             return False
@@ -255,7 +404,7 @@ class FolderFileProcessorApp:
             # Get monitoring statistics
             monitoring_stats = self.file_monitor.get_monitoring_stats()
             
-            # Log comprehensive statistics
+            # Build base statistics message
             stats_msg = (
                 f"Application Statistics - "
                 f"Total processed: {processing_stats['total_processed']}, "
@@ -267,10 +416,47 @@ class FolderFileProcessorApp:
                 f"Duplicate events filtered: {monitoring_stats.get('duplicate_events_filtered', 0)}"
             )
             
+            # Add document processing statistics if enabled
+            if self.config.document_processing.enable_processing and self.document_processor:
+                doc_stats = self._get_document_processing_stats()
+                if doc_stats:
+                    stats_msg += f", Document processing - {doc_stats}"
+            
             self.logger_service.log_info(stats_msg)
             
         except Exception as e:
             self.logger_service.log_error(f"Failed to report statistics: {e}")
+    
+    def _get_document_processing_stats(self) -> str:
+        """
+        Get document processing performance and error statistics.
+        
+        Returns:
+            str: Formatted document processing statistics
+        """
+        try:
+            # Get document processing specific statistics from the processor
+            # Note: This would need to be implemented in the RAGStoreProcessor
+            # For now, we'll provide basic status information
+            
+            stats_parts = []
+            
+            # Add processor status
+            stats_parts.append(f"Processor: {self.config.document_processing.processor_type}")
+            stats_parts.append(f"Vendor: {self.config.document_processing.model_vendor}")
+            
+            # Add ChromaDB status
+            chroma_path = Path(self.config.document_processing.chroma_db_path)
+            if chroma_path.exists():
+                stats_parts.append("ChromaDB: accessible")
+            else:
+                stats_parts.append("ChromaDB: not created yet")
+            
+            return ", ".join(stats_parts)
+            
+        except Exception as e:
+            self.logger_service.log_error(f"Failed to get document processing stats: {e}")
+            return "Document processing stats unavailable"
     
     def shutdown(self) -> None:
         """
@@ -283,6 +469,16 @@ class FolderFileProcessorApp:
             if self.file_monitor:
                 print("Stopping file monitor...")
                 self.file_monitor.stop_monitoring()
+            
+            # Cleanup document processor
+            if self.document_processor:
+                print("Cleaning up document processor...")
+                try:
+                    self.document_processor.cleanup()
+                except Exception as e:
+                    print(f"Warning: Error during document processor cleanup: {e}")
+                    if self.logger_service:
+                        self.logger_service.log_error(f"Document processor cleanup error: {e}")
             
             # Reset signal handlers to default
             signal.signal(signal.SIGINT, signal.SIG_DFL)

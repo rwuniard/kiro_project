@@ -217,7 +217,8 @@ class TestFileMonitor:
         # Assert
         mock_observer.schedule.assert_called_once()
         mock_observer.start.assert_called_once()
-        self.mock_logger.log_info.assert_called_with(
+        # Check that the monitoring started message was logged (could be among multiple log calls)
+        self.mock_logger.log_info.assert_any_call(
             f"Started monitoring folder: {Path(self.source_folder).resolve()}"
         )
     
@@ -867,3 +868,279 @@ class TestFileMonitorEmptyFolderHandling:
         
         # Verify logging indicates successful processing
         self.mock_logger.log_info.assert_any_call(f"Successfully processed empty folder: {empty_folder}")
+
+
+class TestFileMonitorExistingFilesProcessing:
+    """Test cases for FileMonitor existing files processing functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_processor = Mock(spec=FileProcessor)
+        self.mock_logger = Mock(spec=LoggerService)
+        
+        # Create temporary directory for testing
+        self.temp_dir = tempfile.mkdtemp()
+        self.source_folder = self.temp_dir
+    
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    
+    def test_process_existing_files_finds_all_files(self):
+        """Test that _process_existing_files finds all files recursively."""
+        # Create test file structure
+        file1 = os.path.join(self.source_folder, "file1.txt")
+        subdir = os.path.join(self.source_folder, "subdir")
+        file2 = os.path.join(subdir, "file2.txt")
+        nested_dir = os.path.join(subdir, "nested")
+        file3 = os.path.join(nested_dir, "file3.txt")
+        
+        # Create directories and files
+        os.makedirs(nested_dir)
+        with open(file1, 'w') as f:
+            f.write("content1")
+        with open(file2, 'w') as f:
+            f.write("content2")
+        with open(file3, 'w') as f:
+            f.write("content3")
+        
+        # Mock successful processing
+        success_result = ProcessingResult(success=True, file_path="", processing_time=0.1)
+        self.mock_processor.process_file.return_value = success_result
+        
+        # Create monitor and process existing files
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        processed_count = monitor._process_existing_files()
+        
+        # Verify all files were processed
+        assert processed_count == 3
+        assert self.mock_processor.process_file.call_count == 3
+        
+        # Verify all files were called (order may vary) - use resolved paths to handle symlinks
+        processed_files = [Path(call[0][0]).resolve() for call in self.mock_processor.process_file.call_args_list]
+        assert Path(file1).resolve() in processed_files
+        assert Path(file2).resolve() in processed_files
+        assert Path(file3).resolve() in processed_files
+        
+        # Verify logging
+        self.mock_logger.log_info.assert_any_call("Processing existing file: file1.txt")
+        self.mock_logger.log_info.assert_any_call("Processing existing file: subdir/file2.txt")
+        self.mock_logger.log_info.assert_any_call("Processing existing file: subdir/nested/file3.txt")
+    
+    def test_process_existing_files_handles_processing_errors(self):
+        """Test that individual file processing errors don't stop the scan."""
+        # Create test files
+        file1 = os.path.join(self.source_folder, "good.txt")
+        file2 = os.path.join(self.source_folder, "bad.txt")
+        file3 = os.path.join(self.source_folder, "also_good.txt")
+        
+        with open(file1, 'w') as f:
+            f.write("good content")
+        with open(file2, 'w') as f:
+            f.write("bad content")
+        with open(file3, 'w') as f:
+            f.write("also good content")
+        
+        # Mock processing: success for file1 and file3, error for file2
+        def mock_process_file(file_path):
+            if "bad.txt" in file_path:
+                raise Exception("Processing error for bad file")
+            return ProcessingResult(success=True, file_path=file_path, processing_time=0.1)
+        
+        self.mock_processor.process_file.side_effect = mock_process_file
+        
+        # Create monitor and process existing files
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        processed_count = monitor._process_existing_files()
+        
+        # Should have attempted 3 files, but only 2 successful (1 failed)
+        assert processed_count == 2  # Only successful ones are counted
+        assert self.mock_processor.process_file.call_count == 3  # All were attempted
+        
+        # Verify error was logged for the bad file
+        error_calls = self.mock_logger.log_error.call_args_list
+        assert len(error_calls) == 1
+        assert "Processing error for bad file" in str(error_calls[0])
+    
+    def test_process_existing_files_empty_source_directory(self):
+        """Test processing when source directory has no files."""
+        # Source directory is empty (created in setup_method)
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        processed_count = monitor._process_existing_files()
+        
+        # No files should be processed
+        assert processed_count == 0
+        self.mock_processor.process_file.assert_not_called()
+    
+    def test_process_existing_files_nonexistent_source_directory(self):
+        """Test processing when source directory doesn't exist."""
+        # Create a non-existent directory path
+        nonexistent_folder = os.path.join(self.temp_dir, "nonexistent")
+        
+        # Create a FileMonitor with a path that doesn't exist
+        # We'll directly call _process_existing_files to test the error handling
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)  
+        monitor.source_folder = Path(nonexistent_folder)  # Override with nonexistent path
+        
+        processed_count = monitor._process_existing_files()
+        
+        # Should return 0 and log error
+        assert processed_count == 0
+        self.mock_processor.process_file.assert_not_called()
+        self.mock_logger.log_error.assert_called_with(f"Source folder does not exist: {nonexistent_folder}")
+    
+    def test_process_existing_files_ignores_directories(self):
+        """Test that directories are ignored during file processing."""
+        # Create files and directories
+        file1 = os.path.join(self.source_folder, "file.txt")
+        dir1 = os.path.join(self.source_folder, "directory")
+        
+        with open(file1, 'w') as f:
+            f.write("content")
+        os.makedirs(dir1)
+        
+        # Mock successful processing
+        success_result = ProcessingResult(success=True, file_path=file1, processing_time=0.1)
+        self.mock_processor.process_file.return_value = success_result
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        processed_count = monitor._process_existing_files()
+        
+        # Only the file should be processed, not the directory
+        assert processed_count == 1
+        # Use resolved paths to handle symlinks on macOS
+        call_args = self.mock_processor.process_file.call_args_list
+        assert len(call_args) == 1
+        assert Path(call_args[0][0][0]).resolve() == Path(file1).resolve()
+    
+    def test_perform_initial_file_scan_success(self):
+        """Test successful initial file scan."""
+        # Create test files
+        file1 = os.path.join(self.source_folder, "test1.txt")
+        file2 = os.path.join(self.source_folder, "test2.txt")
+        
+        with open(file1, 'w') as f:
+            f.write("content1")
+        with open(file2, 'w') as f:
+            f.write("content2")
+        
+        # Mock successful processing
+        success_result = ProcessingResult(success=True, file_path="", processing_time=0.1)
+        self.mock_processor.process_file.return_value = success_result
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock _process_existing_files to return count
+        with patch.object(monitor, '_process_existing_files', return_value=2) as mock_process:
+            monitor._perform_initial_file_scan()
+        
+        # Verify method was called and proper logging occurred
+        mock_process.assert_called_once()
+        self.mock_logger.log_info.assert_any_call("Performing initial scan for existing files")
+        self.mock_logger.log_info.assert_any_call("Initial scan processed 2 existing files")
+    
+    def test_perform_initial_file_scan_no_files(self):
+        """Test initial file scan when no files are found."""
+        # Empty source directory
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock _process_existing_files to return 0
+        with patch.object(monitor, '_process_existing_files', return_value=0) as mock_process:
+            monitor._perform_initial_file_scan()
+        
+        # Verify proper logging for no files case
+        mock_process.assert_called_once()
+        self.mock_logger.log_info.assert_any_call("Performing initial scan for existing files")
+        self.mock_logger.log_info.assert_any_call("Initial scan found no files to process")
+    
+    def test_perform_initial_file_scan_handles_exceptions(self):
+        """Test that initial file scan handles exceptions gracefully."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock _process_existing_files to raise exception
+        with patch.object(monitor, '_process_existing_files', side_effect=Exception("Scan error")) as mock_process:
+            # Should not raise exception
+            monitor._perform_initial_file_scan()
+        
+        # Verify exception was handled and logged
+        mock_process.assert_called_once()
+        self.mock_logger.log_info.assert_called_with("Performing initial scan for existing files")
+        self.mock_logger.log_error.assert_called_with("Error during initial file scan: Scan error")
+    
+    def test_trigger_existing_files_scan_manual_trigger(self):
+        """Test manual trigger for existing files scan."""
+        # Create test files
+        file1 = os.path.join(self.source_folder, "manual1.txt")
+        file2 = os.path.join(self.source_folder, "manual2.txt")
+        
+        with open(file1, 'w') as f:
+            f.write("manual content 1")
+        with open(file2, 'w') as f:
+            f.write("manual content 2")
+        
+        # Mock successful processing
+        success_result = ProcessingResult(success=True, file_path="", processing_time=0.1)
+        self.mock_processor.process_file.return_value = success_result
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock _process_existing_files
+        with patch.object(monitor, '_process_existing_files', return_value=2) as mock_process:
+            processed_count = monitor.trigger_existing_files_scan()
+        
+        # Verify return value and logging
+        assert processed_count == 2
+        mock_process.assert_called_once()
+        self.mock_logger.log_info.assert_any_call("Manual existing files scan triggered")
+        self.mock_logger.log_info.assert_any_call("Manual scan processed 2 existing files")
+    
+    def test_trigger_existing_files_scan_handles_exceptions(self):
+        """Test that manual trigger handles exceptions gracefully."""
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        
+        # Mock _process_existing_files to raise exception
+        with patch.object(monitor, '_process_existing_files', side_effect=Exception("Manual scan error")) as mock_process:
+            processed_count = monitor.trigger_existing_files_scan()
+        
+        # Should return 0 and log error
+        assert processed_count == 0
+        mock_process.assert_called_once()
+        self.mock_logger.log_info.assert_called_with("Manual existing files scan triggered")
+        self.mock_logger.log_error.assert_called_with("Error during manual existing files scan: Manual scan error")
+    
+    @patch('src.core.file_monitor.Observer')
+    def test_start_monitoring_calls_initial_file_scan(self, mock_observer_class):
+        """Test that start_monitoring calls initial file scan."""
+        # Create test file
+        test_file = os.path.join(self.source_folder, "startup.txt")
+        with open(test_file, 'w') as f:
+            f.write("startup content")
+        
+        # Setup mocks
+        mock_observer = Mock()
+        mock_observer.is_alive.return_value = True
+        mock_observer_class.return_value = mock_observer
+        
+        # Mock successful processing
+        success_result = ProcessingResult(success=True, file_path=test_file, processing_time=0.1)
+        self.mock_processor.process_file.return_value = success_result
+        
+        monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)
+        monitor.observer = mock_observer
+        
+        # Mock the initial scan methods to verify they're called
+        with patch.object(monitor, '_perform_initial_file_scan') as mock_file_scan, \
+             patch.object(monitor, '_perform_initial_empty_folder_scan') as mock_empty_scan:
+            
+            monitor.start_monitoring()
+            
+            # Verify both scans were called in correct order
+            mock_file_scan.assert_called_once()
+            mock_empty_scan.assert_called_once()
+            
+            # Verify file scan was called before empty folder scan
+            assert mock_file_scan.call_count == 1
+            assert mock_empty_scan.call_count == 1

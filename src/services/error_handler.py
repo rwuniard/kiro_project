@@ -8,8 +8,11 @@ including error log file creation and detailed error information logging.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 import traceback
+
+if TYPE_CHECKING:
+    from src.core.document_processing import DocumentProcessingError
 
 
 class ErrorHandler:
@@ -230,3 +233,123 @@ class ErrorHandler:
             log_file.write(f"Moved To: {log_info['moved_to']}\n\n")
             
             log_file.write("=" * 50 + "\n")
+    
+    def create_document_processing_error_log(self, file_path: str, error_message: str, 
+                                           exception: Optional[Exception] = None,
+                                           doc_processing_error: Optional['DocumentProcessingError'] = None) -> None:
+        """
+        Create an enhanced error log file for document processing failures.
+        
+        Args:
+            file_path: Path to the file that failed processing
+            error_message: Description of the error that occurred
+            exception: Optional exception object for additional details
+            doc_processing_error: Optional DocumentProcessingError for enhanced context
+        """
+        try:
+            error_log_path = self._get_error_log_path(file_path)
+            error_info = self._build_document_processing_error_info(
+                file_path, error_message, exception, doc_processing_error
+            )
+            self._write_document_processing_error_log(error_log_path, error_info)
+        except Exception as e:
+            # If we can't write the error log, at least try to log to console
+            print(f"Failed to create document processing error log for {file_path}: {str(e)}")
+    
+    def _build_document_processing_error_info(self, file_path: str, error_message: str, 
+                                            exception: Optional[Exception] = None,
+                                            doc_processing_error: Optional['DocumentProcessingError'] = None) -> Dict[str, Any]:
+        """
+        Build comprehensive error information dictionary for document processing errors.
+        
+        Args:
+            file_path: Path to the file that failed
+            error_message: Error description
+            exception: Optional exception for stack trace
+            doc_processing_error: Optional DocumentProcessingError for enhanced context
+            
+        Returns:
+            Dictionary containing all error information
+        """
+        # Start with basic error info
+        error_info = self._build_error_info(file_path, error_message, exception)
+        
+        # Add document processing specific information if available
+        if doc_processing_error:
+            error_info.update({
+                'processor_type': doc_processing_error.processor_type,
+                'document_error_type': doc_processing_error.error_type,
+                'document_error_message': doc_processing_error.error_message,
+                'processing_timestamp': doc_processing_error.timestamp.isoformat(),
+                'file_metadata': doc_processing_error.file_metadata,
+                'processing_context': doc_processing_error.processing_context
+            })
+            
+            # Add stack trace from DocumentProcessingError if available
+            if doc_processing_error.stack_trace:
+                error_info['document_stack_trace'] = doc_processing_error.stack_trace
+        
+        return error_info
+    
+    def _write_document_processing_error_log(self, log_path: Path, error_info: Dict[str, Any]) -> None:
+        """
+        Write the document processing error information to the log file.
+        
+        Args:
+            log_path: Path where the error log should be written
+            error_info: Dictionary containing error details
+        """
+        with open(log_path, 'w', encoding='utf-8') as log_file:
+            log_file.write("=" * 60 + "\n")
+            log_file.write("DOCUMENT PROCESSING ERROR LOG\n")
+            log_file.write("=" * 60 + "\n\n")
+            
+            # Basic error information
+            log_file.write(f"Timestamp: {error_info['timestamp']}\n")
+            log_file.write(f"File: {error_info['file_path']}\n")
+            log_file.write(f"Error: {error_info['error_message']}\n\n")
+            
+            # Document processing specific information
+            if 'processor_type' in error_info:
+                log_file.write("Document Processing Information:\n")
+                log_file.write(f"  Processor Type: {error_info['processor_type']}\n")
+                log_file.write(f"  Document Error Type: {error_info['document_error_type']}\n")
+                log_file.write(f"  Document Error Message: {error_info['document_error_message']}\n")
+                log_file.write(f"  Processing Timestamp: {error_info['processing_timestamp']}\n\n")
+            
+            # File information
+            log_file.write("File Information:\n")
+            log_file.write(f"  Size: {error_info['file_size']} bytes\n")
+            log_file.write(f"  Last Modified: {error_info['last_modified']}\n")
+            
+            # Enhanced file metadata from document processing
+            if 'file_metadata' in error_info and error_info['file_metadata']:
+                log_file.write("  Document Metadata:\n")
+                for key, value in error_info['file_metadata'].items():
+                    log_file.write(f"    {key}: {value}\n")
+            log_file.write("\n")
+            
+            # Processing context information
+            if 'processing_context' in error_info and error_info['processing_context']:
+                log_file.write("Processing Context:\n")
+                for key, value in error_info['processing_context'].items():
+                    log_file.write(f"  {key}: {value}\n")
+                log_file.write("\n")
+            
+            # Exception information
+            if 'exception_type' in error_info:
+                log_file.write(f"Exception Type: {error_info['exception_type']}\n\n")
+            
+            # Stack traces
+            if 'stack_trace' in error_info:
+                log_file.write("Application Stack Trace:\n")
+                for line in error_info['stack_trace']:
+                    log_file.write(line)
+                log_file.write("\n")
+            
+            if 'document_stack_trace' in error_info:
+                log_file.write("Document Processing Stack Trace:\n")
+                log_file.write(error_info['document_stack_trace'])
+                log_file.write("\n")
+            
+            log_file.write("=" * 60 + "\n")
