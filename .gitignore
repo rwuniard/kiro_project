@@ -186,3 +186,7 @@ Desktop.ini
 # Add any project-specific files or folders here
 logs/
 *.log
+
+# ChromaDB database files
+*.sqlite3
+data/chroma_db_*/
