@@ -10,7 +10,7 @@ A Python application that monitors a configurable source folder for new files, p
 - **Folder Structure Preservation**: Maintains original directory structure when moving files
 - **Automatic Folder Cleanup**: Removes empty folders after successful file processing
 - **Comprehensive Error Handling**: Graceful error handling with detailed logging
-- **Retry Logic**: Automatic retry for transient file system errors
+- **Intelligent Retry Logic**: Exponential backoff retry for transient errors including API timeouts, network issues, and file system errors
 - **Detailed Logging**: Both console and file logging with configurable levels
 - **Graceful Shutdown**: Proper cleanup and shutdown handling
 
@@ -707,14 +707,44 @@ convert /path/to/document.doc as a Writer document -> /tmp/document.docx using f
 - **Metadata Cleaning**: Complex metadata from UnstructuredLoader is filtered for ChromaDB compatibility
 - **Both Formats**: Supports both .doc (Word 97-2003) and .docx (Word 2007+) formats seamlessly
 
+**Retry Mechanism and Error Recovery:**
+The application includes intelligent retry logic for transient errors, particularly API timeouts:
+
+```
+INFO - File processing failed on attempt 1 (transient error), retrying in 1.0s: Error embedding content: 504 Deadline Exceeded
+INFO - File processing failed on attempt 2 (transient error), retrying in 2.0s: Error embedding content: 504 Deadline Exceeded
+INFO - File processing completed successfully on attempt 3
+```
+
+**Retry Configuration:**
+- **Max Attempts**: 3 retries per file
+- **Exponential Backoff**: 1s → 2s → 4s → 8s delays (capped at 10s maximum)
+- **Smart Classification**: Distinguishes between permanent errors (no retry) and transient errors (retry with backoff)
+- **Automatic Retry**: Google API timeouts (504 Deadline Exceeded), network errors, rate limits, and temporary service issues
+
+**Transient Errors (Will Retry):**
+- API rate limits and quota exceeded
+- Connection timeouts and network errors
+- Google embedding API timeouts (504 Deadline Exceeded)
+- ChromaDB temporary issues
+- Service unavailable errors
+
+**Permanent Errors (No Retry):**
+- Unsupported file types
+- Corrupted or malformed files
+- Invalid document structure
+- Authentication/API key issues
+
 **Document Processing Performance Issues:**
 - **Large PDFs**: OCR processing can be slow for large image-based PDFs  
+- **API Timeouts**: Large documents may timeout during embedding generation (automatically retried up to 3 times)
 - **Word Document Conversion**: Legacy .doc files require temporary conversion which may take extra time
 - **High Memory Usage**: OCR operations use significant memory for image processing
 - **Solutions**: 
   - Process files in smaller batches
   - Increase available system memory
-  - Monitor `logs/application.log` for processing times
+  - Monitor `logs/application.log` for processing times and retry attempts
+  - Large files may take up to ~3-4 minutes total with retries
 
 **ChromaDB Connection Issues:**
 ```
