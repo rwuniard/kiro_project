@@ -175,7 +175,7 @@ class ProcessorRegistry:
 
     def get_processor_for_file(self, file_path: Path) -> DocumentProcessor | None:
         """
-        Get the appropriate processor for a file.
+        Get the appropriate processor for a file using smart content detection.
 
         Args:
             file_path: Path to the file
@@ -183,11 +183,37 @@ class ProcessorRegistry:
         Returns:
             DocumentProcessor instance or None if no processor found
         """
+        # Import file detection here to avoid circular imports
+        try:
+            from .file_detection import FileContentDetector
+        except ImportError:
+            from file_detection import FileContentDetector
+        
         extension = file_path.suffix.lower()
-        processor_name = self._extension_map.get(extension)
-
-        if processor_name:
-            return self._processors.get(processor_name)
+        
+        # Special handling for .doc files - they might actually be RTF
+        if extension == '.doc':
+            try:
+                # Check if we should route to RTF processor instead
+                if FileContentDetector.should_use_rtf_processor(file_path):
+                    # Look for RTF processor and mark it as handling this .doc file
+                    rtf_processor = self._processors.get('RTFProcessor')
+                    if rtf_processor:
+                        # Temporarily allow .doc files for this processor instance
+                        rtf_processor._handling_doc_with_rtf_content = True
+                        return rtf_processor
+            except Exception:
+                # If file detection fails, fall back to normal extension-based routing
+                pass
+            # Use Word processor (default behavior for .doc files)
+            processor_name = self._extension_map.get(extension)
+            if processor_name:
+                return self._processors.get(processor_name)
+        else:
+            # Normal extension-based routing
+            processor_name = self._extension_map.get(extension)
+            if processor_name:
+                return self._processors.get(processor_name)
 
         return None
 

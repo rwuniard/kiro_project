@@ -103,7 +103,8 @@ This is a sophisticated Python file monitoring and processing application with p
 
 **RAG Store Components (`src/rag_store/`)**:
 - `ProcessorRegistry`: Multi-format document processor factory
-- Specialized processors: PDF (PyPDF), Word (docx2txt), MHT/MHTML (Unstructured), Text/Markdown
+- Specialized processors: PDF (PyMuPDF with OCR), RTF (UnstructuredRTF), Word (UnstructuredLoader), MHT/MHTML (Unstructured), Text/Markdown
+- Smart file detection: Automatically detects RTF content in .doc files and routes to appropriate processor
 - ChromaDB integration with collection management
 - Support for OpenAI and Google embedding providers
 - Standalone CLI interface for direct document processing
@@ -163,6 +164,68 @@ CHROMA_DB_PATH=./data/chroma_db_openai
 OPENAI_API_KEY=your_key_here  # if using OpenAI
 GOOGLE_API_KEY=your_key_here  # if using Google
 ```
+
+## System Requirements
+
+### Document Processing Dependencies
+
+The application requires the following system dependencies for full document processing capabilities:
+
+#### RTF Processing
+**macOS (using Homebrew):**
+```bash
+brew install pandoc
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install pandoc
+```
+
+**Windows:**
+- Install pandoc from https://pandoc.org/installing.html
+- Or use chocolatey: `choco install pandoc`
+
+#### Legacy Microsoft Word (.doc) Processing
+**macOS (using Homebrew):**
+```bash
+brew install --cask libreoffice
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libreoffice
+```
+
+**Windows:**
+- Download from https://www.libreoffice.org/download/download-libreoffice/
+- Or use chocolatey: `choco install libreoffice`
+
+#### OCR Processing (PDF image extraction)
+**macOS (using Homebrew):**
+```bash
+brew install tesseract
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install tesseract-ocr
+```
+
+**Windows:**
+- Download from [GitHub releases](https://github.com/UB-Mannheim/tesseract/wiki)
+- Or use chocolatey: `choco install tesseract`
+
+**Verify Installation:**
+```bash
+pandoc --version
+libreoffice --version
+tesseract --version
+```
+
+### Smart File Processing Features
+- **RTF Detection**: Automatically detects RTF content in files with `.doc` extensions and routes to appropriate processor
+- **OCR Processing**: Automatically applies OCR to PDF pages with no text content when tesseract is available
 
 ## Development Notes
 

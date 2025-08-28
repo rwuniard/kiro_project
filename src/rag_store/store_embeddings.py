@@ -14,6 +14,7 @@ try:
     from .document_processor import ProcessorRegistry
     from .logging_config import get_logger
     from .pdf_processor import PDFProcessor
+    from .rtf_processor import RTFProcessor
     from .text_processor import TextProcessor
     from .word_processor import WordProcessor
 except ImportError:
@@ -21,6 +22,7 @@ except ImportError:
     from document_processor import ProcessorRegistry
     from logging_config import get_logger
     from pdf_processor import PDFProcessor
+    from rtf_processor import RTFProcessor
     from text_processor import TextProcessor
     from word_processor import WordProcessor
 
@@ -48,12 +50,13 @@ def get_document_processor_registry() -> ProcessorRegistry:
     Initialize and return a document processor registry with all supported processors.
 
     Returns:
-        ProcessorRegistry configured with PDF, Text, and Word processors
+        ProcessorRegistry configured with PDF, RTF, Text, and Word processors
     """
     registry = ProcessorRegistry()
 
     # Register all available processors
     registry.register_processor(PDFProcessor())
+    registry.register_processor(RTFProcessor())
     registry.register_processor(TextProcessor())
     registry.register_processor(WordProcessor())
 

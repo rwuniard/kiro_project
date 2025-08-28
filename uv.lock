@@ -1110,7 +1110,7 @@ dependencies = [
     { name = "python-docx" },
     { name = "python-dotenv" },
     { name = "structlog" },
-    { name = "unstructured" },
+    { name = "unstructured", extra = ["rtf"] },
     { name = "watchdog" },
 ]
 
@@ -1141,7 +1141,7 @@ requires-dist = [
     { name = "python-docx", specifier = ">=0.8.11" },
     { name = "python-dotenv", specifier = "==1.0.0" },
     { name = "structlog", specifier = ">=24.1.0" },
-    { name = "unstructured", extras = ["html"], specifier = ">=0.18.14" },
+    { name = "unstructured", extras = ["html", "rtf"], specifier = ">=0.18.14" },
     { name = "watchdog", specifier = "==3.0.0" },
 ]
 
@@ -2303,6 +2303,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pypandoc"
+version = "1.15"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/88/26e650d053df5f3874aa3c05901a14166ce3271f58bfe114fd776987efbd/pypandoc-1.15.tar.gz", hash = "sha256:ea25beebe712ae41d63f7410c08741a3cab0e420f6703f95bc9b3a749192ce13", size = 32940, upload-time = "2025-01-08T17:39:58.705Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/06/0763e0ccc81754d3eadb21b2cb86cf21bdedc9b52698c2ad6785db7f0a4e/pypandoc-1.15-py3-none-any.whl", hash = "sha256:4ededcc76c8770f27aaca6dff47724578428eca84212a31479403a9731fc2b16", size = 21321, upload-time = "2025-01-08T17:39:09.928Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2971,6 +2980,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/99/7c/39380d2a2fdb53db3581ddd5ef271dab9afa5fe0d31d92837fcb4252fae3/unstructured-0.18.14.tar.gz", hash = "sha256:c23760dd38dd6eca924a2803a005318f4ddc8af6a69388a7ce9d5b7fbc4b51bf", size = 1690988, upload-time = "2025-08-26T13:26:04.437Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/36/5c6b09f8d4152445015916d3be672471c1b52a71951f22af85d2cece6ad0/unstructured-0.18.14-py3-none-any.whl", hash = "sha256:cc6fadcf2f84fb6d910dd87bcbd54d8b6e2593ce29b851af167bc786d9263f73", size = 1778832, upload-time = "2025-08-26T13:26:02.58Z" },
+]
+
+[package.optional-dependencies]
+rtf = [
+    { name = "pypandoc" },
 ]
 
 [[package]]

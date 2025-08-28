@@ -24,8 +24,11 @@ FROM python:3.12-slim as production
 
 # Install runtime system dependencies
 RUN apt-get update && apt-get install -y \
+    pandoc \
     tesseract-ocr \
     tesseract-ocr-eng \
+    libreoffice \
+    libmagic1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \

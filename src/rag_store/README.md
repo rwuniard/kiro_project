@@ -29,9 +29,13 @@ OPENAI_API_KEY=your_openai_api_key_here
 # OCR_INVESTIGATE_DIR=./ocr_debug
 ```
 
-### 2. Install Tesseract OCR (Optional)
+### 2. Install System Dependencies
 
-For OCR support on image-based PDFs, install Tesseract OCR engine:
+The RAG Store requires several system dependencies for full document processing capabilities:
+
+#### Tesseract OCR (Optional - PDF Image Processing)
+
+For OCR support on image-based PDFs:
 
 ```bash
 # macOS
@@ -48,13 +52,69 @@ choco install tesseract
 # https://github.com/UB-Mannheim/tesseract/wiki
 ```
 
-**Verify installation:**
+#### Pandoc (Required - RTF Processing)
+
+For RTF document processing:
+
 ```bash
-tesseract --version
-# Should output: tesseract 5.x.x
+# macOS
+brew install pandoc
+
+# Ubuntu/Debian
+sudo apt-get install pandoc
+
+# Windows
+# Download from https://pandoc.org/installing.html
+# Or use chocolatey:
+choco install pandoc
 ```
 
-**Note**: Without Tesseract, the system will still process PDFs but won't perform OCR on image-based content.
+#### LibreOffice (Required - Legacy .doc Processing)
+
+For legacy Microsoft Word (.doc) file processing:
+
+```bash
+# macOS
+brew install --cask libreoffice
+
+# Ubuntu/Debian
+sudo apt-get install libreoffice
+
+# Windows
+# Download from https://www.libreoffice.org/download/download-libreoffice/
+# Or use chocolatey:
+choco install libreoffice
+```
+
+#### libmagic (Optional - Enhanced File Type Detection)
+
+For improved file type detection by the `unstructured` library:
+
+```bash
+# macOS
+brew install libmagic
+
+# Ubuntu/Debian
+sudo apt-get install libmagic1
+
+# Windows
+# Windows users: libmagic is not readily available, but file processing will still work
+# The unstructured library will fall back to extension-based detection
+```
+
+**Verify installations:**
+```bash
+tesseract --version    # Should output: tesseract 5.x.x
+pandoc --version       # Should output: pandoc 3.x.x
+libreoffice --version  # Should output: LibreOffice 7.x.x
+file --version         # Should show libmagic availability
+```
+
+**Notes**: 
+- Without Tesseract: PDFs will still process but won't perform OCR on image-based content
+- Without Pandoc: RTF files will fail to process
+- Without LibreOffice: Legacy .doc files will fail to process (modern .docx files will still work)
+- Without libmagic: File type detection relies on extensions only, may show warnings but processing continues
 
 ### 3. Add Documents
 
@@ -63,18 +123,20 @@ Place your documents in the `data_source/` directory:
 src/rag_store/data_source/
 ├── your_document.pdf
 ├── report.docx
+├── legacy_doc.doc
+├── rich_text.rtf
 ├── web_archive.mht
 ├── facts.txt
 ├── documentation.md
-└── other_files.pdf
+└── plain_text.text
 ```
 
 Supported formats:
-- **PDF files** (`.pdf`) - Processed with PyMuPDF (with OCR support) + RecursiveCharacterTextSplitter
-- **Word documents** (`.docx`, `.doc`) - Processed with Docx2txtLoader + RecursiveCharacterTextSplitter
-- **MHT/MHTML files** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter
-- **Text files** (`.txt`) - Processed with CharacterTextSplitter
-- **Markdown files** (`.md`) - Processed with CharacterTextSplitter
+- **PDF files** (`.pdf`) - Processed with PyMuPDF + OCR support + RecursiveCharacterTextSplitter
+- **Microsoft Word documents** (`.docx`, `.doc`) - Processed with UnstructuredLoader + RecursiveCharacterTextSplitter
+- **Rich Text Format** (`.rtf`) - Processed with UnstructuredRTFLoader + RecursiveCharacterTextSplitter  
+- **MHT/MHTML web archives** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter
+- **Text documents** (`.txt`, `.md`, `.text`) - Processed with TextLoader + CharacterTextSplitter
 
 ### 4. Run Document Ingestion
 
@@ -215,9 +277,9 @@ The structured logging is designed for:
 
 ### **Word Processor** (`word_processor.py`)
 - **Purpose**: Extract and chunk text from Microsoft Word documents
-- **Technology**: Docx2txtLoader + RecursiveCharacterTextSplitter
+- **Technology**: UnstructuredLoader + RecursiveCharacterTextSplitter
 - **Parameters**: 1000 chars with 150 overlap (balanced for Word content)
-- **Features**: Structured text extraction, metadata enhancement, error handling
+- **Features**: Legacy .doc and modern .docx support, LibreOffice conversion for .doc files, metadata enhancement, error handling
 
 ### **MHT Processor** (`mht_processor.py`)
 - **Purpose**: Extract and chunk text from MHT/MHTML web archive files with robust error handling
@@ -231,11 +293,17 @@ The structured logging is designed for:
   - **Error Recovery**: Graceful fallback when UnstructuredLoader fails with FileType.UNK errors
 - **Troubleshooting**: Resolves issues with MHT files that have email-style headers causing UnstructuredLoader failures
 
+### **RTF Processor** (`rtf_processor.py`)
+- **Purpose**: Extract and chunk text from Rich Text Format documents
+- **Technology**: UnstructuredRTFLoader + RecursiveCharacterTextSplitter
+- **Parameters**: 800 chars with 120 overlap (balanced for RTF content)
+- **Features**: RTF format support, smart .doc file detection (RTF content with .doc extension), metadata enhancement, requires Pandoc
+
 ### **Text Processor** (`text_processor.py`)
 - **Purpose**: Extract and chunk text from text and markdown files
 - **Technology**: TextLoader + CharacterTextSplitter
 - **Parameters**: 300 chars with 50 overlap (optimized for text content)
-- **Features**: Multiple encoding support, markdown processing, chunk metadata
+- **Features**: Multiple encoding support (.txt, .md, .text), markdown processing, chunk metadata
 
 ### **Logging Configuration** (`logging_config.py`)
 - **Purpose**: Centralized logging configuration with structured JSON output
@@ -269,12 +337,12 @@ The structured logging is designed for:
 - **Metadata**: Page numbers, extraction method (pymupdf_text/blocks/tesseract_ocr), processing details
 
 ### **Word Processing**
-- **Loader**: Docx2txtLoader (LangChain Community)
+- **Loader**: UnstructuredLoader (with LibreOffice backend for .doc conversion)
 - **Splitter**: RecursiveCharacterTextSplitter
 - **Chunk Size**: 1000 characters
 - **Overlap**: 150 characters
 - **Separators**: Paragraphs, lines, words, characters
-- **Supported**: `.docx`, `.doc` files
+- **Supported**: `.docx`, `.doc` files (requires LibreOffice for legacy .doc)
 
 ### **MHT/MHTML Processing**
 - **Primary Loader**: UnstructuredLoader (element mode, fast strategy)
@@ -287,6 +355,16 @@ The structured logging is designed for:
 - **Supported**: `.mht`, `.mhtml` files
 - **Error Handling**: Automatic fallback for files with email-style headers that cause UnstructuredLoader FileType.UNK errors
 - **Metadata**: Extraction method, title preservation, content type, source format
+
+### **RTF Processing**
+- **Loader**: UnstructuredRTFLoader (LangChain Community)
+- **Splitter**: RecursiveCharacterTextSplitter
+- **Chunk Size**: 800 characters
+- **Overlap**: 120 characters (15% overlap ratio)
+- **Separators**: Paragraphs, lines, words, characters
+- **Supported**: `.rtf` files
+- **Smart Detection**: Automatically detects RTF content in files with `.doc` extensions
+- **Requirements**: Pandoc system dependency for RTF parsing
 
 ### **Text Processing** 
 - **Loader**: TextLoader (LangChain)
@@ -452,20 +530,27 @@ python -m unittest tests.test_rag_store -v
 ```toml
 # Core dependencies
 chromadb = ">=1.0.17"
-docx2txt = ">=0.8"
 langchain = ">=0.3.27"
 langchain-chroma = ">=0.2.5"
 langchain-community = ">=0.3.27"
 langchain-google-genai = ">=2.0.10"
+langchain-openai = ">=0.2.0"
 pymupdf = ">=1.26.4"
 pytesseract = ">=0.3.13"
 pillow = ">=11.3.0"
 python-dotenv = ">=1.1.1"
 
-# MHT/MHTML processing dependencies
+# Document processing dependencies
 unstructured = ">=0.18.14"
 langchain-unstructured = ">=0.1.6"
 beautifulsoup4 = ">=4.13.5"
+
+# Additional dependencies for compatibility
+docx2txt = ">=0.8"           # Legacy compatibility (not actively used)
+google-generativeai = ">=0.3.0"
+PyPDF2 = ">=3.0.0"          # Backup PDF processor
+python-docx = ">=0.8.11"    # Backup Word processor
+cryptography = ">=3.1"      # Security for embeddings
 
 # Logging and observability
 structlog = ">=24.1.0"

@@ -35,6 +35,7 @@ The document processing system supports the following file formats:
 
 - **PDF Documents** (`.pdf`) - With full OCR support for image-based PDFs
 - **Microsoft Word Documents** - Both legacy (`.doc`) and modern (`.docx`) formats using UnstructuredLoader
+- **Rich Text Format** (`.rtf`) - RTF documents with smart detection for RTF content in `.doc` files
 - **Text Files** (`.txt`, `.md`, `.text`) - Plain text and Markdown documents
 - **Web Archive Files** (`.mht`, `.mhtml`) - MHTML web archive documents
 
@@ -44,13 +45,33 @@ The document processing system supports the following file formats:
   - **macOS**: `brew install tesseract`
   - **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
   - **Windows**: Download from [GitHub releases](https://github.com/UB-Mannheim/tesseract/wiki) or use `choco install tesseract`
-  - **Additional Language Packs** (optional): `brew install tesseract-lang` (macOS) or `sudo apt-get install tesseract-ocr-[lang]` (Linux)
 
-- `pytesseract>=0.3.13` - Python wrapper for Tesseract OCR (installed automatically with document processing dependencies)
-- `PyMuPDF>=1.23.0` - PDF processing with OCR support (installed automatically)
-- `Pillow>=10.0.0` - Image processing for OCR pipeline (installed automatically)
+- **Pandoc** - Required for RTF document processing
+  - **macOS**: `brew install pandoc`
+  - **Ubuntu/Debian**: `sudo apt-get install pandoc`
+  - **Windows**: Download from [pandoc.org](https://pandoc.org/installing.html) or use `choco install pandoc`
 
-**Note**: Document processing with OCR is optional. The application will work without Tesseract installed, but OCR functionality for image-based PDFs will be unavailable.
+- **LibreOffice** - Required for legacy Microsoft Word (`.doc`) file processing
+  - **macOS**: `brew install --cask libreoffice`
+  - **Ubuntu/Debian**: `sudo apt-get install libreoffice`
+  - **Windows**: Download from [LibreOffice.org](https://www.libreoffice.org/download/download-libreoffice/) or use `choco install libreoffice`
+
+- **libmagic** (Optional) - Enhanced file type detection
+  - **macOS**: `brew install libmagic`
+  - **Ubuntu/Debian**: `sudo apt-get install libmagic1`
+  - **Windows**: Not readily available, but file processing continues without it
+
+**Python Dependencies** (installed automatically):
+- `pytesseract>=0.3.13` - Python wrapper for Tesseract OCR
+- `PyMuPDF>=1.23.0` - PDF processing with OCR support
+- `unstructured>=0.18.14` - Document parsing with LibreOffice backend
+- `python-magic>=0.4.27` - File type detection using libmagic
+
+**Notes**: 
+- Without Tesseract: PDFs process but no OCR on image-based content
+- Without Pandoc: RTF files will fail to process
+- Without LibreOffice: Legacy .doc files will fail (modern .docx still works)
+- Without libmagic: File type detection relies on extensions, may show warnings
 
 ### Development Dependencies
 
