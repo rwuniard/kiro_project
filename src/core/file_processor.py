@@ -513,7 +513,11 @@ class FileProcessor:
             'embedding generation failed',
             'rate limit exceeded',
             'quota exceeded',
-            'server overloaded'
+            'server overloaded',
+            'deadline exceeded',
+            '504 deadline exceeded',
+            'timeout',
+            'googlegenerativeaierror'
         ]):
             return ErrorType.TRANSIENT
         
@@ -570,7 +574,10 @@ class FileProcessor:
                 'network',
                 'temporary',
                 'quota',
-                'overloaded'
+                'overloaded',
+                'deadline exceeded',
+                '504 deadline exceeded',
+                'googlegenerativeaierror'
             ]):
                 return ErrorType.TRANSIENT
             else:
