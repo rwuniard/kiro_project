@@ -410,6 +410,56 @@ class FileManager:
             self.logger.warning(f"Could not check if folder is completely empty {folder_path}: {e}")
             return False
     
+    def should_process_as_empty_folder(self, folder_path: str) -> bool:
+        """
+        Determine if a folder should be processed as an empty folder.
+        
+        A folder should NOT be processed as empty if files from it have already 
+        been moved to either the saved or error folder (indicating it originally had content 
+        that was processed, regardless of success/failure).
+        
+        This prevents race conditions where folders become empty due to file processing
+        and then get incorrectly treated as "originally empty" folders.
+        
+        Args:
+            folder_path: Path to the folder to check
+            
+        Returns:
+            bool: True if folder should be processed as empty, False otherwise
+        """
+        # First check if folder is actually completely empty
+        if not self.is_completely_empty_folder(folder_path):
+            return False
+        
+        # Check if saved/error folders already contain files from this source location
+        try:
+            folder_path_resolved = Path(folder_path).resolve()
+            relative_path = folder_path_resolved.relative_to(self.source_folder.resolve())
+            
+            # Check both saved and error folder equivalents
+            for dest_folder, folder_type in [(self.saved_folder, "saved"), (self.error_folder, "error")]:
+                equivalent_folder = dest_folder / relative_path
+                
+                if equivalent_folder.exists():
+                    # Check for any actual files (exclude empty_folder.log)
+                    for item in equivalent_folder.iterdir():
+                        if item.is_file() and item.name != "empty_folder.log":
+                            self.logger.debug(
+                                f"Folder {folder_path} should not be processed as empty - "
+                                f"found processed files in {folder_type} folder: {item}"
+                            )
+                            return False  # Found files that were processed from this folder
+                            
+        except ValueError:
+            # Folder not under source folder, process normally
+            self.logger.debug(f"Folder {folder_path} is not under source folder, processing as empty")
+            pass
+        except Exception as e:
+            # If we can't check, err on the side of caution and allow processing
+            self.logger.warning(f"Could not check if folder {folder_path} had processed files: {e}")
+        
+        return True  # Safe to process as empty folder
+    
     def move_empty_folder_to_error(self, folder_path: str) -> bool:
         """
         Move a completely empty folder to the error folder with structure preservation.
@@ -423,9 +473,9 @@ class FileManager:
         try:
             source_folder_path = Path(folder_path).resolve()
             
-            # Validate it's actually a completely empty folder
-            if not self.is_completely_empty_folder(folder_path):
-                self.logger.warning(f"Folder is not completely empty, cannot move: {folder_path}")
+            # Validate it's actually a completely empty folder that should be processed
+            if not self.should_process_as_empty_folder(folder_path):
+                self.logger.warning(f"Folder should not be processed as empty, cannot move: {folder_path}")
                 return False
             
             # Calculate destination path with structure preservation

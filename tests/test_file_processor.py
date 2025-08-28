@@ -1577,7 +1577,7 @@ class TestFileProcessorEmptyFolderHandling:
         empty_folder.mkdir()
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         self.mock_file_manager.get_relative_path.return_value = "empty_test"
         
@@ -1591,7 +1591,7 @@ class TestFileProcessorEmptyFolderHandling:
         assert result.processing_time > 0
         
         # Verify method calls
-        self.mock_file_manager.is_completely_empty_folder.assert_called_once_with(str(empty_folder))
+        self.mock_file_manager.should_process_as_empty_folder.assert_called_once_with(str(empty_folder))
         self.mock_file_manager.move_empty_folder_to_error.assert_called_once_with(str(empty_folder))
         self.mock_error_handler.create_empty_folder_log.assert_called_once_with(str(empty_folder))
         
@@ -1606,7 +1606,7 @@ class TestFileProcessorEmptyFolderHandling:
         (folder_with_sub / "subfolder").mkdir()
         
         # Mock FileManager to return False for empty check
-        self.mock_file_manager.is_completely_empty_folder.return_value = False
+        self.mock_file_manager.should_process_as_empty_folder.return_value = False
         
         # Process folder
         result = self.file_processor.process_empty_folder(str(folder_with_sub))
@@ -1614,16 +1614,16 @@ class TestFileProcessorEmptyFolderHandling:
         # Verify result
         assert result.success is False
         assert result.file_path == str(folder_with_sub)
-        assert "Folder is not completely empty" in result.error_message
+        assert "should not be processed as empty (may have had processed files)" in result.error_message
         assert result.processing_time > 0
         
         # Verify only empty check was called
-        self.mock_file_manager.is_completely_empty_folder.assert_called_once_with(str(folder_with_sub))
+        self.mock_file_manager.should_process_as_empty_folder.assert_called_once_with(str(folder_with_sub))
         self.mock_file_manager.move_empty_folder_to_error.assert_not_called()
         self.mock_error_handler.create_empty_folder_log.assert_not_called()
         
         # Verify error logging
-        self.mock_logger.log_error.assert_called_with(f"Folder is not completely empty: {folder_with_sub}")
+        self.mock_logger.log_error.assert_called_with(f"Folder should not be processed as empty (may have had processed files): {folder_with_sub}")
     
     def test_process_empty_folder_move_fails(self):
         """Test processing when moving empty folder to error folder fails."""
@@ -1632,7 +1632,7 @@ class TestFileProcessorEmptyFolderHandling:
         empty_folder.mkdir()
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = False  # Move fails
         
         # Process empty folder
@@ -1645,7 +1645,7 @@ class TestFileProcessorEmptyFolderHandling:
         assert result.processing_time > 0
         
         # Verify method calls
-        self.mock_file_manager.is_completely_empty_folder.assert_called_once_with(str(empty_folder))
+        self.mock_file_manager.should_process_as_empty_folder.assert_called_once_with(str(empty_folder))
         self.mock_file_manager.move_empty_folder_to_error.assert_called_once_with(str(empty_folder))
         self.mock_error_handler.create_empty_folder_log.assert_not_called()  # Should not create log if move fails
         
@@ -1659,7 +1659,7 @@ class TestFileProcessorEmptyFolderHandling:
         empty_folder.mkdir()
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         self.mock_file_manager.get_relative_path.return_value = "log_fail_test"
         
@@ -1690,7 +1690,7 @@ class TestFileProcessorEmptyFolderHandling:
         empty_folder.mkdir()
         
         # Mock FileManager to raise exception
-        self.mock_file_manager.is_completely_empty_folder.side_effect = Exception("General error")
+        self.mock_file_manager.should_process_as_empty_folder.side_effect = Exception("General error")
         
         # Process empty folder
         result = self.file_processor.process_empty_folder(str(empty_folder))
@@ -1715,7 +1715,7 @@ class TestFileProcessorEmptyFolderHandling:
         nested_empty.mkdir(parents=True)
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         self.mock_file_manager.get_relative_path.return_value = "level1/level2/empty_nested"
         
@@ -1736,7 +1736,7 @@ class TestFileProcessorEmptyFolderHandling:
         empty_folder.mkdir()
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         self.mock_file_manager.get_relative_path.return_value = None  # Relative path fails
         
@@ -1755,7 +1755,7 @@ class TestFileProcessorEmptyFolderHandling:
         nonexistent_folder = str(self.source_folder / "nonexistent")
         
         # Mock FileManager to return False for empty check
-        self.mock_file_manager.is_completely_empty_folder.return_value = False
+        self.mock_file_manager.should_process_as_empty_folder.return_value = False
         
         # Process folder
         result = self.file_processor.process_empty_folder(nonexistent_folder)
@@ -1763,10 +1763,10 @@ class TestFileProcessorEmptyFolderHandling:
         # Verify result
         assert result.success is False
         assert result.file_path == nonexistent_folder
-        assert "Folder is not completely empty" in result.error_message
+        assert "should not be processed as empty (may have had processed files)" in result.error_message
         
         # Verify only empty check was called
-        self.mock_file_manager.is_completely_empty_folder.assert_called_once_with(nonexistent_folder)
+        self.mock_file_manager.should_process_as_empty_folder.assert_called_once_with(nonexistent_folder)
         self.mock_file_manager.move_empty_folder_to_error.assert_not_called()
     
     def test_process_empty_folder_timing_measurement(self):
@@ -1784,7 +1784,7 @@ class TestFileProcessorEmptyFolderHandling:
             time.sleep(0.1)  # Simulate some processing time
             return True
         
-        self.mock_file_manager.is_completely_empty_folder.side_effect = slow_empty_check
+        self.mock_file_manager.should_process_as_empty_folder.side_effect = slow_empty_check
         self.mock_file_manager.move_empty_folder_to_error.side_effect = slow_move
         self.mock_file_manager.get_relative_path.return_value = "timing_test"
         
@@ -1806,7 +1806,7 @@ class TestFileProcessorEmptyFolderHandling:
             empty_folders.append(str(folder))
         
         # Mock FileManager methods
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         self.mock_file_manager.get_relative_path.side_effect = lambda path: Path(path).name
         
@@ -1823,7 +1823,7 @@ class TestFileProcessorEmptyFolderHandling:
             assert result.error_message is None
         
         # Verify all folders were processed
-        assert self.mock_file_manager.is_completely_empty_folder.call_count == 3
+        assert self.mock_file_manager.should_process_as_empty_folder.call_count == 3
         assert self.mock_file_manager.move_empty_folder_to_error.call_count == 3
         assert self.mock_error_handler.create_empty_folder_log.call_count == 3
     
@@ -1843,7 +1843,7 @@ class TestFileProcessorEmptyFolderHandling:
         self.mock_file_manager.get_relative_path.return_value = "test.txt"
         
         # Mock FileManager for empty folder processing
-        self.mock_file_manager.is_completely_empty_folder.return_value = True
+        self.mock_file_manager.should_process_as_empty_folder.return_value = True
         self.mock_file_manager.move_empty_folder_to_error.return_value = True
         
         # Process regular file

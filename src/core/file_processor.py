@@ -762,9 +762,9 @@ class FileProcessor:
         start_time = datetime.now()
         
         try:
-            # Validate it's actually a completely empty folder
-            if not self.file_manager.is_completely_empty_folder(folder_path):
-                error_message = f"Folder is not completely empty: {folder_path}"
+            # Validate it's actually a completely empty folder that should be processed
+            if not self.file_manager.should_process_as_empty_folder(folder_path):
+                error_message = f"Folder should not be processed as empty (may have had processed files): {folder_path}"
                 self.logger.log_error(error_message)
                 return ProcessingResult(
                     success=False,

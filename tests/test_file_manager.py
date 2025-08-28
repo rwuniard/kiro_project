@@ -855,32 +855,27 @@ class TestEmptyFolderHandling:
         error_folder_path = self.error_folder / "with_subfolder"
         assert not error_folder_path.exists()
     
-    def test_move_empty_folder_to_error_handles_destination_conflict(self):
-        """Test empty folder movement handles destination conflicts."""
+    def test_move_empty_folder_to_error_prevents_processing_when_files_exist_in_error(self):
+        """Test empty folder movement is prevented when files already exist in error folder at same path."""
         # Create completely empty folder
         empty_folder = self.source_folder / "conflict_test"
         empty_folder.mkdir()
         
-        # Create conflicting folder in error directory
+        # Create folder with files in error directory (simulating previous file processing)
         conflict_folder = self.error_folder / "conflict_test"
         conflict_folder.mkdir()
         (conflict_folder / "existing_file.txt").write_text("existing content")
         
-        # Move to error folder (should resolve conflict)
+        # Move should be prevented because files exist in error folder (indicating original content)
         result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
         
-        # Verify move was successful
-        assert result is True
-        assert not empty_folder.exists()
+        # Verify move was prevented (this is the new correct behavior)
+        assert result is False
+        assert empty_folder.exists()  # Source folder should still exist
         
-        # Verify original conflict folder still exists
+        # Verify original error folder still exists untouched
         assert conflict_folder.exists()
         assert (conflict_folder / "existing_file.txt").exists()
-        
-        # Verify new folder was created with conflict resolution
-        resolved_folder = self.error_folder / "conflict_test_001"
-        assert resolved_folder.exists()
-        assert resolved_folder.is_dir()
     
     def test_move_empty_folder_to_error_permission_error(self):
         """Test empty folder movement handles permission errors gracefully."""
@@ -1101,32 +1096,84 @@ class TestEmptyFolderHandling:
         # Verify original folder no longer exists
         assert not deep_empty_folder.exists()
     
-    def test_move_empty_folder_to_error_destination_conflict(self):
-        """Test moving empty folder when destination already exists."""
+    def test_move_empty_folder_to_error_prevented_when_files_exist_in_error(self):
+        """Test moving empty folder is prevented when files already exist in error directory at same path."""
         # Create empty folder
         empty_folder = self.source_folder / "conflict_test"
         empty_folder.mkdir()
         
-        # Create conflicting folder in error directory
+        # Create folder with files in error directory (simulating previous processing)
         conflicting_folder = self.error_folder / "conflict_test"
         conflicting_folder.mkdir()
         (conflicting_folder / "existing.txt").write_text("existing content")
         
-        # Move empty folder (should resolve conflict)
+        # Move should be prevented due to existing files in error folder
         result = self.file_manager.move_empty_folder_to_error(str(empty_folder))
         
-        assert result is True
+        assert result is False
         
-        # Verify original folder no longer exists
-        assert not empty_folder.exists()
+        # Verify original source folder still exists (move was prevented)
+        assert empty_folder.exists()
         
         # Verify conflicting folder still exists with its content
         assert conflicting_folder.exists()
         assert (conflicting_folder / "existing.txt").exists()
+    
+    def test_should_process_as_empty_folder_truly_empty(self):
+        """Test should_process_as_empty_folder with truly empty folder."""
+        empty_folder = self.source_folder / "truly_empty"
+        empty_folder.mkdir()
         
-        # Verify moved folder exists with resolved name
-        resolved_folder = self.error_folder / "conflict_test_001"
-        assert resolved_folder.exists()
+        result = self.file_manager.should_process_as_empty_folder(str(empty_folder))
+        assert result is True
+    
+    def test_should_process_as_empty_folder_files_in_saved(self):
+        """Test should_process_as_empty_folder prevents processing when files exist in saved folder."""
+        # Create empty source folder
+        empty_folder = self.source_folder / "became_empty"
+        empty_folder.mkdir()
+        
+        # Create equivalent folder with files in saved directory
+        saved_equivalent = self.saved_folder / "became_empty"
+        saved_equivalent.mkdir()
+        (saved_equivalent / "processed_file.txt").write_text("content")
+        
+        result = self.file_manager.should_process_as_empty_folder(str(empty_folder))
+        assert result is False
+    
+    def test_should_process_as_empty_folder_files_in_error(self):
+        """Test should_process_as_empty_folder prevents processing when files exist in error folder."""
+        # Create empty source folder
+        empty_folder = self.source_folder / "became_empty"
+        empty_folder.mkdir()
+        
+        # Create equivalent folder with files in error directory
+        error_equivalent = self.error_folder / "became_empty"
+        error_equivalent.mkdir()
+        (error_equivalent / "failed_file.txt").write_text("content")
+        
+        result = self.file_manager.should_process_as_empty_folder(str(empty_folder))
+        assert result is False
+    
+    def test_should_process_as_empty_folder_ignores_empty_folder_log(self):
+        """Test should_process_as_empty_folder ignores empty_folder.log files."""
+        # Create empty source folder
+        empty_folder = self.source_folder / "edge_case"
+        empty_folder.mkdir()
+        
+        # Create equivalent folder with only empty_folder.log in error directory
+        error_equivalent = self.error_folder / "edge_case"
+        error_equivalent.mkdir()
+        (error_equivalent / "empty_folder.log").write_text("log content")
+        
+        # Should still be processed as empty since only empty_folder.log exists
+        result = self.file_manager.should_process_as_empty_folder(str(empty_folder))
+        assert result is True
+        
+        # But if there's also a real file, should not be processed
+        (error_equivalent / "real_file.txt").write_text("real content")
+        result = self.file_manager.should_process_as_empty_folder(str(empty_folder))
+        assert result is False
     
     def test_move_empty_folder_to_error_permission_error(self):
         """Test handling of permission errors during empty folder move."""

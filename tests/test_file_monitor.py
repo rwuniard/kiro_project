@@ -789,7 +789,7 @@ class TestFileMonitorEmptyFolderHandling:
                 return False
             return False
         
-        self.mock_file_manager.is_completely_empty_folder.side_effect = mock_is_completely_empty
+        self.mock_file_manager.should_process_as_empty_folder.side_effect = mock_is_completely_empty
         
         # Create monitor and scan
         monitor = FileMonitor(self.source_folder, self.mock_processor, self.mock_logger)

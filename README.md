@@ -350,6 +350,45 @@ source/
 └── # project2/ removed (became empty after processing)
 ```
 
+#### Race Condition Prevention
+
+**Problem Resolved**: Previously, folders could be incorrectly flagged as "empty" when they became temporarily empty due to file processing, leading to spurious `empty_folder.log` files appearing alongside actual processed files.
+
+**Solution Implemented**: The application now uses intelligent empty folder detection that prevents race conditions:
+
+**Enhanced Empty Folder Logic:**
+1. **Physical Emptiness Check**: First verifies the folder is actually empty
+2. **Processing History Check**: Examines both saved and error folders for files that were previously processed from this location
+3. **Smart Decision Making**: Only processes folders as "originally empty" if no processed files exist at equivalent paths
+
+**Race Condition Scenarios Handled:**
+- **Successful Processing**: If files were moved to the saved folder, the now-empty source folder is NOT treated as originally empty
+- **Failed Processing**: If files were moved to the error folder, the now-empty source folder is NOT treated as originally empty  
+- **Mixed Processing**: Handles combinations of successful and failed files from the same folder
+- **Edge Cases**: Correctly ignores existing `empty_folder.log` files when making decisions
+
+**Before Fix (Race Condition):**
+```
+1. Citation.doc fails processing → moved to error/Federal Law/TCPA/1992 FCC Order/
+2. Source folder Federal Law/TCPA/1992 FCC Order/ becomes empty
+3. Empty folder scanner detects "empty" folder → moves it to error folder
+4. Result: Both Citation.doc AND empty_folder.log in same error location ❌
+```
+
+**After Fix (Race Condition Prevented):**
+```
+1. Citation.doc fails processing → moved to error/Federal Law/TCPA/1992 FCC Order/
+2. Source folder Federal Law/TCPA/1992 FCC Order/ becomes empty  
+3. Empty folder scanner detects empty folder BUT finds Citation.doc in error location
+4. Result: Folder not processed as empty, no spurious empty_folder.log created ✅
+```
+
+**Technical Implementation:**
+- `should_process_as_empty_folder()` method replaces simple emptiness checks
+- Checks both `SAVED_FOLDER` and `ERROR_FOLDER` for processed files
+- Preserves all existing functionality for truly empty folders
+- Zero performance impact on normal file processing
+
 ### Stopping the Application
 
 Press `Ctrl+C` to gracefully stop the application. The system will:

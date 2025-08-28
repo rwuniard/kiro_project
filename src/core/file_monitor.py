@@ -420,7 +420,7 @@ class FileMonitor:
                 # Check each directory
                 for dir_name in dirs:
                     dir_path = os.path.join(root, dir_name)
-                    if file_manager.is_completely_empty_folder(dir_path):
+                    if file_manager.should_process_as_empty_folder(dir_path):
                         empty_folders.append(dir_path)
                         self.logger.log_info(f"Found completely empty folder: {dir_path}")
             
