@@ -11,7 +11,7 @@ from pathlib import Path
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import Docx2txtLoader
+from langchain_unstructured import UnstructuredLoader
 
 try:
     from .document_processor import DocumentProcessor
@@ -38,7 +38,7 @@ class WordProcessor(DocumentProcessor):
 
     def __init__(self):
         super().__init__()
-        self.supported_extensions = {".docx"}  # Only support .docx files
+        self.supported_extensions = {".doc", ".docx"}  # Support both legacy .doc and modern .docx files
         # Word documents often contain structured content, so we use parameters
         # between PDF (1800/270) and text (300/50) for balanced chunking
         self.default_chunk_size = 1000  # Medium chunks for Word content
@@ -47,7 +47,7 @@ class WordProcessor(DocumentProcessor):
     @property
     def file_type_description(self) -> str:
         """Return a human-readable description of supported file types."""
-        return "Microsoft Word documents (.docx)"
+        return "Microsoft Word documents (.doc, .docx)"
 
     def is_supported_file(self, file_path: Path) -> bool:
         """Check if the file is a supported Word document."""
@@ -102,11 +102,25 @@ class WordProcessor(DocumentProcessor):
         )
 
         try:
-            # Use Docx2txtLoader for reliable .docx file processing
-            loader = Docx2txtLoader(str(file_path))
+            # Use UnstructuredLoader for both .doc and .docx file processing
+            loader = UnstructuredLoader(str(file_path))
 
             # Load the Word document first
             raw_documents = loader.load()
+            
+            # Clean metadata to remove complex types that ChromaDB can't handle
+            for doc in raw_documents:
+                # Filter out any non-simple metadata values (lists, dicts, etc.)
+                clean_metadata = {}
+                for key, value in doc.metadata.items():
+                    # Keep only simple types that ChromaDB supports
+                    if isinstance(value, (str, int, float, bool)) or value is None:
+                        clean_metadata[key] = value
+                    # Convert simple lists to strings if needed
+                    elif isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+                        clean_metadata[key] = value[0]  # Extract single string from list
+                    # Skip complex types
+                doc.metadata = clean_metadata
 
             if not raw_documents:
                 log_document_processing_complete(
@@ -158,9 +172,9 @@ class WordProcessor(DocumentProcessor):
                         "total_chunks": len(documents),
                         "document_format": file_path.suffix.upper().replace(
                             ".", ""
-                        ),  # DOCX
-                        "loader_type": "Docx2txtLoader",
-                        "supports_legacy_doc": False,
+                        ),  # DOC or DOCX
+                        "loader_type": "UnstructuredLoader",
+                        "supports_legacy_doc": True,
                     }
                 )
 
@@ -183,15 +197,10 @@ class WordProcessor(DocumentProcessor):
 
             # Provide helpful error information
             error_msg = f"Error processing Word document {file_path}: {e!s}"
-            if "file is not a zip file" in str(e).lower():
-                error_msg += (
-                    "\nNote: Docx2txtLoader only supports .docx files (Word 2007+)."
-                )
-                error_msg += (
-                    "\nFor legacy .doc files, please convert to .docx format first."
-                )
-            elif "file is not a Word file" in str(e).lower():
+            if "file is not a Word file" in str(e).lower():
                 error_msg += "\nNote: The file may be corrupted or in an unsupported Word format."
+            elif "unstructured" in str(e).lower():
+                error_msg += "\nNote: UnstructuredLoader requires proper system dependencies for legacy .doc file support."
 
             raise Exception(error_msg)
 

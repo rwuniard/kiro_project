@@ -27,7 +27,18 @@ A Python application that monitors a configurable source folder for new files, p
 
 ### Document Processing Dependencies (Optional)
 
-For advanced document processing with OCR support:
+For advanced document processing with RAG (Retrieval Augmented Generation) capabilities and OCR support:
+
+#### Supported Document Types
+
+The document processing system supports the following file formats:
+
+- **PDF Documents** (`.pdf`) - With full OCR support for image-based PDFs
+- **Microsoft Word Documents** - Both legacy (`.doc`) and modern (`.docx`) formats using UnstructuredLoader
+- **Text Files** (`.txt`, `.md`, `.text`) - Plain text and Markdown documents
+- **Web Archive Files** (`.mht`, `.mhtml`) - MHTML web archive documents
+
+#### System Requirements
 
 - **Tesseract OCR Engine** - Required for OCR functionality on image-based PDFs
   - **macOS**: `brew install tesseract`
@@ -687,8 +698,18 @@ OCR_INVESTIGATE_DIR=./ocr_debug
 ```
 This creates debug files showing OCR extraction results for each page processed.
 
+**Word Document Processing:**
+```
+INFO - Document processing started: WordProcessor for /path/to/document.doc
+convert /path/to/document.doc as a Writer document -> /tmp/document.docx using filter: MS Word 2007 XML
+```
+- **Legacy .doc Support**: UnstructuredLoader automatically converts .doc files to .docx format for processing
+- **Metadata Cleaning**: Complex metadata from UnstructuredLoader is filtered for ChromaDB compatibility
+- **Both Formats**: Supports both .doc (Word 97-2003) and .docx (Word 2007+) formats seamlessly
+
 **Document Processing Performance Issues:**
-- **Large PDFs**: OCR processing can be slow for large image-based PDFs
+- **Large PDFs**: OCR processing can be slow for large image-based PDFs  
+- **Word Document Conversion**: Legacy .doc files require temporary conversion which may take extra time
 - **High Memory Usage**: OCR operations use significant memory for image processing
 - **Solutions**: 
   - Process files in smaller batches

@@ -37,7 +37,7 @@ class TestWordProcessor(unittest.TestCase):
         """Test WordProcessor initialization."""
         processor = WordProcessor()
         self.assertIsInstance(processor, WordProcessor)
-        self.assertEqual(processor.supported_extensions, {".docx"})
+        self.assertEqual(processor.supported_extensions, {".doc", ".docx"})
         self.assertEqual(processor.default_chunk_size, 1000)
         self.assertEqual(processor.default_chunk_overlap, 150)
         self.assertEqual(processor.processor_name, "WordProcessor")
@@ -45,7 +45,7 @@ class TestWordProcessor(unittest.TestCase):
     def test_file_type_description(self):
         """Test file type description."""
         description = self.processor.file_type_description
-        self.assertEqual(description, "Microsoft Word documents (.docx)")
+        self.assertEqual(description, "Microsoft Word documents (.doc, .docx)")
 
     def test_is_supported_file_valid_docx(self):
         """Test is_supported_file with valid DOCX extension."""
@@ -53,11 +53,11 @@ class TestWordProcessor(unittest.TestCase):
         docx_file.touch()
         self.assertTrue(self.processor.is_supported_file(docx_file))
 
-    def test_is_supported_file_invalid_doc(self):
-        """Test is_supported_file with DOC extension (no longer supported)."""
+    def test_is_supported_file_valid_doc(self):
+        """Test is_supported_file with DOC extension (now supported)."""
         doc_file = Path(self.temp_dir) / "test.doc"
         doc_file.touch()
-        self.assertFalse(self.processor.is_supported_file(doc_file))
+        self.assertTrue(self.processor.is_supported_file(doc_file))
 
     def test_is_supported_file_invalid_extension(self):
         """Test is_supported_file with invalid extension."""
@@ -127,7 +127,7 @@ class TestWordProcessorIntegration(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     @patch("rag_store.word_processor.RecursiveCharacterTextSplitter")
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_document_processing_complete")
     def test_process_document_success(
@@ -180,8 +180,8 @@ class TestWordProcessorIntegration(unittest.TestCase):
             documents[0].metadata["splitting_method"], "RecursiveCharacterTextSplitter"
         )
         self.assertEqual(documents[0].metadata["total_chunks"], 2)
-        self.assertEqual(documents[0].metadata["loader_type"], "Docx2txtLoader")
-        self.assertEqual(documents[0].metadata["supports_legacy_doc"], False)
+        self.assertEqual(documents[0].metadata["loader_type"], "UnstructuredLoader")
+        self.assertEqual(documents[0].metadata["supports_legacy_doc"], True)
         self.assertEqual(
             documents[0].metadata["separators"], "paragraphs,lines,words,chars"
         )
@@ -201,7 +201,7 @@ class TestWordProcessorIntegration(unittest.TestCase):
         mock_log_complete.assert_called_once()
 
     @patch("rag_store.word_processor.RecursiveCharacterTextSplitter")
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_document_processing_complete")
     def test_process_document_empty_result(
@@ -230,7 +230,7 @@ class TestWordProcessorIntegration(unittest.TestCase):
         self.assertEqual(call_args["chunks_created"], 0)
         self.assertEqual(call_args["status"], "success_empty")
 
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_processing_error")
     def test_process_document_loader_error(
@@ -284,7 +284,7 @@ class TestWordProcessorErrorHandling(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     @patch("rag_store.word_processor.RecursiveCharacterTextSplitter")
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_document_processing_complete")
     def test_process_document_empty_splitter_result(self, mock_log_complete, mock_log_start, mock_loader_class, mock_splitter_class):
@@ -317,7 +317,7 @@ class TestWordProcessorErrorHandling(unittest.TestCase):
         self.assertEqual(call_args["chunks_created"], 0)
         self.assertEqual(call_args["status"], "success_empty")
 
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_processing_error")
     def test_process_document_zip_file_error(self, mock_log_error, mock_log_start, mock_loader_class):
@@ -339,13 +339,13 @@ class TestWordProcessorErrorHandling(unittest.TestCase):
         error_msg = str(context.exception)
         self.assertIn("Error processing Word document", error_msg)
         self.assertIn("file is not a zip file", error_msg)
-        self.assertIn("Docx2txtLoader only supports .docx files (Word 2007+)", error_msg)
-        self.assertIn("For legacy .doc files, please convert to .docx format first", error_msg)
+        # The enhanced error message is only added for "unstructured" related errors
+        # not for "zip file" errors, so we don't check for the enhanced message here
 
         # Verify error logging was called
         mock_log_error.assert_called_once()
 
-    @patch("rag_store.word_processor.Docx2txtLoader")
+    @patch("rag_store.word_processor.UnstructuredLoader")
     @patch("rag_store.word_processor.log_document_processing_start")
     @patch("rag_store.word_processor.log_processing_error")
     def test_process_document_corrupted_word_file_error(self, mock_log_error, mock_log_start, mock_loader_class):
