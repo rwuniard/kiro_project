@@ -57,13 +57,23 @@ class RAGStoreProcessor(DocumentProcessingInterface):
     to process documents and store embeddings in ChromaDB for semantic search.
     """
     
-    def __init__(self):
-        """Initialize the RAG Store Processor."""
+    def __init__(self, file_manager=None):
+        """Initialize the RAG Store Processor.
+        
+        Args:
+            file_manager: Optional FileManager instance for calculating destination paths
+        """
         self.registry: Optional[ProcessorRegistry] = None
         self.model_vendor: ModelVendor = ModelVendor.GOOGLE
         self.embedding_model = None
         self.chroma_db_path: Optional[Path] = None
+        # ChromaDB client-server configuration
+        self.chroma_client_mode: str = "embedded"
+        self.chroma_server_host: str = "localhost"
+        self.chroma_server_port: int = 8000
+        self.chroma_collection_name: Optional[str] = None
         self.initialized: bool = False
+        self.file_manager = file_manager
         self.logger = get_logger("rag_store_processor")
         
     def initialize(self, config: Dict[str, Any]) -> bool:
@@ -75,7 +85,11 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                 - model_vendor: "google" or "openai" (default: "google")
                 - google_api_key: Google API key (if using Google)
                 - openai_api_key: OpenAI API key (if using OpenAI)
-                - chroma_db_path: Path for ChromaDB storage (optional)
+                - chroma_client_mode: "embedded" or "client_server" (default: "embedded")
+                - chroma_db_path: Path for ChromaDB storage (for embedded mode)
+                - chroma_server_host: Host for ChromaDB server (for client_server mode, default: "localhost")
+                - chroma_server_port: Port for ChromaDB server (for client_server mode, default: 8000)
+                - chroma_collection_name: Custom collection name (optional)
                 
         Returns:
             bool: True if initialization successful, False otherwise
@@ -104,8 +118,8 @@ class RAGStoreProcessor(DocumentProcessingInterface):
             # Initialize embedding model
             self._initialize_embedding_model()
             
-            # Setup ChromaDB path
-            self._setup_chroma_db_path(config)
+            # Setup ChromaDB configuration
+            self._setup_chroma_configuration(config)
             
             self.initialized = True
             self.logger.info(
@@ -175,22 +189,48 @@ class RAGStoreProcessor(DocumentProcessingInterface):
             model_vendor=self.model_vendor.value
         )
     
-    def _setup_chroma_db_path(self, config: Dict[str, Any]) -> None:
-        """Setup ChromaDB storage path."""
-        custom_path = config.get("chroma_db_path")
-        if custom_path:
-            self.chroma_db_path = Path(custom_path)
+    def _setup_chroma_configuration(self, config: Dict[str, Any]) -> None:
+        """Setup ChromaDB configuration for embedded or client-server mode."""
+        # Setup client mode
+        self.chroma_client_mode = config.get("chroma_client_mode", "embedded").lower()
+        
+        # Setup collection name
+        self.chroma_collection_name = config.get("chroma_collection_name")
+        
+        if self.chroma_client_mode == "embedded":
+            # Setup embedded mode configuration
+            custom_path = config.get("chroma_db_path")
+            if custom_path:
+                self.chroma_db_path = Path(custom_path)
+            else:
+                # Use default path from store_embeddings
+                self.chroma_db_path = ensure_data_directory(self.model_vendor)
+            
+            # Ensure directory exists for embedded mode
+            self.chroma_db_path.mkdir(parents=True, exist_ok=True)
+            
+            self.logger.info(
+                "ChromaDB configured (embedded mode)",
+                chroma_db_path=str(self.chroma_db_path),
+                collection_name=self.chroma_collection_name,
+                client_mode=self.chroma_client_mode
+            )
+            
+        elif self.chroma_client_mode == "client_server":
+            # Setup client-server mode configuration
+            self.chroma_server_host = config.get("chroma_server_host", "localhost")
+            self.chroma_server_port = config.get("chroma_server_port", 8000)
+            
+            self.logger.info(
+                "ChromaDB configured (client-server mode)",
+                server_host=self.chroma_server_host,
+                server_port=self.chroma_server_port,
+                collection_name=self.chroma_collection_name,
+                client_mode=self.chroma_client_mode
+            )
+            
         else:
-            # Use default path from store_embeddings
-            self.chroma_db_path = ensure_data_directory(self.model_vendor)
-        
-        # Ensure directory exists
-        self.chroma_db_path.mkdir(parents=True, exist_ok=True)
-        
-        self.logger.info(
-            "ChromaDB path configured",
-            chroma_db_path=str(self.chroma_db_path)
-        )
+            raise ValueError(f"Invalid chroma_client_mode: {self.chroma_client_mode}. Must be 'embedded' or 'client_server'")
     
     def is_supported_file(self, file_path: Path) -> bool:
         """
@@ -276,6 +316,28 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                     metadata={"file_size": file_size}
                 )
             
+            # Update metadata with destination path if file manager is available
+            if self.file_manager:
+                try:
+                    destination_path = self.file_manager.get_saved_path(str(file_path))
+                    self.logger.info(
+                        "Updating document metadata with destination path",
+                        source_path=str(file_path),
+                        destination_path=destination_path
+                    )
+                    
+                    # Update file_path in metadata for all documents
+                    for doc in documents:
+                        if hasattr(doc, 'metadata') and doc.metadata:
+                            doc.metadata['file_path'] = destination_path
+                            doc.metadata['source_path'] = str(file_path)  # Keep original as reference
+                except Exception as e:
+                    self.logger.warning(
+                        "Failed to update metadata with destination path",
+                        error=str(e),
+                        file_path=str(file_path)
+                    )
+            
             # Store embeddings in ChromaDB
             self.logger.info(
                 "Storing embeddings to ChromaDB",
@@ -283,7 +345,15 @@ class RAGStoreProcessor(DocumentProcessingInterface):
                 chunks_count=len(documents)
             )
             
-            vectorstore = store_to_chroma(documents, self.model_vendor)
+            vectorstore = store_to_chroma(
+                documents, 
+                self.model_vendor,
+                client_mode=self.chroma_client_mode,
+                server_host=self.chroma_server_host,
+                server_port=self.chroma_server_port,
+                collection_name=self.chroma_collection_name,
+                persist_directory=self.chroma_db_path
+            )
             
             processing_time = time.time() - start_time
             

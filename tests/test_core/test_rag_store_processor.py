@@ -399,6 +399,368 @@ class TestRAGStoreProcessor:
         """Test get_processor_name method."""
         assert self.processor.get_processor_name() == "RAGStoreProcessor"
 
+    @patch('src.core.rag_store_processor.RTFProcessor')
+    @patch('src.core.rag_store_processor.MHTProcessor')
+    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.TextProcessor')
+    @patch('src.core.rag_store_processor.PDFProcessor')
+    @patch('src.core.rag_store_processor.store_to_chroma')
+    @patch('src.core.rag_store_processor.ensure_data_directory')
+    @patch('src.core.rag_store_processor.load_embedding_model')
+    @patch('src.core.rag_store_processor.ProcessorRegistry')
+    def test_metadata_path_update_with_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+        """Test that metadata is updated with destination path when file manager is provided."""
+        # Setup mocks for successful initialization
+        mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
+        
+        # Create mock file manager
+        mock_file_manager = Mock()
+        source_path = "/test/source/Federal Law/IRS/test.pdf"
+        dest_path = "/test/saved/Federal Law/IRS/test.pdf"
+        mock_file_manager.get_saved_path.return_value = dest_path
+        
+        # Create processor with file manager
+        processor_with_fm = RAGStoreProcessor(file_manager=mock_file_manager)
+        processor_with_fm.initialize(self.test_config)
+        
+        # Create mock documents with metadata
+        mock_doc1 = Mock()
+        mock_doc1.metadata = {
+            'file_path': source_path,
+            'source': 'test.pdf',
+            'processor': 'PDFProcessor'
+        }
+        mock_doc2 = Mock()
+        mock_doc2.metadata = {
+            'file_path': source_path,
+            'source': 'test.pdf', 
+            'processor': 'PDFProcessor'
+        }
+        
+        mock_documents = [mock_doc1, mock_doc2]
+        mock_registry_instance.process_document.return_value = mock_documents
+        mock_registry_instance.get_processor_for_file.return_value = Mock(processor_name="PDFProcessor")
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            test_file = Path(temp_file.name)
+            
+            # Process the document
+            result = processor_with_fm.process_document(test_file)
+            
+            # Verify successful processing
+            assert result.success is True
+            
+            # Verify file manager was called with correct path
+            mock_file_manager.get_saved_path.assert_called_once_with(str(test_file))
+            
+            # Verify metadata was updated for all documents
+            for doc in mock_documents:
+                assert doc.metadata['file_path'] == dest_path, f"Expected destination path, got {doc.metadata['file_path']}"
+                assert doc.metadata['source_path'] == str(test_file), f"Expected source path preserved"
+            
+            # Cleanup
+            test_file.unlink()
+
+    @patch('src.core.rag_store_processor.RTFProcessor')
+    @patch('src.core.rag_store_processor.MHTProcessor')
+    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.TextProcessor')
+    @patch('src.core.rag_store_processor.PDFProcessor')
+    @patch('src.core.rag_store_processor.store_to_chroma')
+    @patch('src.core.rag_store_processor.ensure_data_directory')
+    @patch('src.core.rag_store_processor.load_embedding_model')
+    @patch('src.core.rag_store_processor.ProcessorRegistry')
+    def test_metadata_path_update_without_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+        """Test that metadata retains original path when no file manager is provided."""
+        # Setup mocks for successful initialization  
+        mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
+        
+        # Create processor WITHOUT file manager (default constructor)
+        processor_no_fm = RAGStoreProcessor()
+        processor_no_fm.initialize(self.test_config)
+        
+        # Create mock documents with metadata
+        mock_doc = Mock()
+        original_path = "/test/source/Federal Law/IRS/test.pdf"
+        mock_doc.metadata = {
+            'file_path': original_path,
+            'source': 'test.pdf',
+            'processor': 'PDFProcessor'
+        }
+        
+        mock_documents = [mock_doc]
+        mock_registry_instance.process_document.return_value = mock_documents
+        mock_registry_instance.get_processor_for_file.return_value = Mock(processor_name="PDFProcessor")
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            test_file = Path(temp_file.name)
+            
+            # Process the document
+            result = processor_no_fm.process_document(test_file)
+            
+            # Verify successful processing
+            assert result.success is True
+            
+            # Verify metadata was NOT modified (no file manager)
+            assert mock_doc.metadata['file_path'] == original_path, "Path should not be modified without file manager"
+            assert 'source_path' not in mock_doc.metadata, "source_path should not be added without file manager"
+            
+            # Cleanup
+            test_file.unlink()
+
+    @patch('src.core.rag_store_processor.RTFProcessor')
+    @patch('src.core.rag_store_processor.MHTProcessor')
+    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.TextProcessor')
+    @patch('src.core.rag_store_processor.PDFProcessor')
+    @patch('src.core.rag_store_processor.store_to_chroma')
+    @patch('src.core.rag_store_processor.ensure_data_directory')
+    @patch('src.core.rag_store_processor.load_embedding_model')
+    @patch('src.core.rag_store_processor.ProcessorRegistry')
+    def test_metadata_path_update_file_manager_error(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+        """Test that processing continues when file manager throws an error during path calculation."""
+        # Setup mocks for successful initialization
+        mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
+        
+        # Create mock file manager that throws an error
+        mock_file_manager = Mock()
+        mock_file_manager.get_saved_path.side_effect = Exception("File manager error")
+        
+        # Create processor with faulty file manager
+        processor_with_fm = RAGStoreProcessor(file_manager=mock_file_manager)
+        processor_with_fm.initialize(self.test_config)
+        
+        # Create mock documents
+        mock_doc = Mock()
+        original_path = "/test/source/Federal Law/IRS/test.pdf"
+        mock_doc.metadata = {
+            'file_path': original_path,
+            'source': 'test.pdf',
+            'processor': 'PDFProcessor'
+        }
+        
+        mock_documents = [mock_doc]
+        mock_registry_instance.process_document.return_value = mock_documents
+        mock_registry_instance.get_processor_for_file.return_value = Mock(processor_name="PDFProcessor")
+        
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            test_file = Path(temp_file.name)
+            
+            # Process the document - should succeed despite file manager error
+            result = processor_with_fm.process_document(test_file)
+            
+            # Verify processing still succeeds
+            assert result.success is True
+            
+            # Verify file manager was called but failed gracefully
+            mock_file_manager.get_saved_path.assert_called_once_with(str(test_file))
+            
+            # Verify metadata was NOT modified due to error (graceful degradation)
+            assert mock_doc.metadata['file_path'] == original_path, "Path should remain unchanged after error"
+            
+            # Cleanup
+            test_file.unlink()
+
+    def test_processor_initialization_with_file_manager(self):
+        """Test that RAGStoreProcessor can be initialized with a file manager."""
+        mock_file_manager = Mock()
+        processor = RAGStoreProcessor(file_manager=mock_file_manager)
+        
+        assert processor.file_manager is mock_file_manager
+        assert processor.initialized is False  # Should still require initialize() call
+
+    def test_processor_initialization_without_file_manager(self):
+        """Test that RAGStoreProcessor can be initialized without a file manager (backward compatibility)."""
+        processor = RAGStoreProcessor()
+        
+        assert processor.file_manager is None
+        assert processor.initialized is False
+
+    def test_rag_store_processor_stores_collection_name_from_config(self):
+        """Test RAGStoreProcessor stores ChromaDB collection name during initialization."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "model_vendor": "google",
+                "google_api_key": "test_key",
+                "chroma_client_mode": "embedded",
+                "chroma_db_path": os.path.join(temp_dir, "chroma"),
+                "chroma_server_host": "localhost",
+                "chroma_server_port": 8000,
+                "chroma_collection_name": "my_test_collection"
+            }
+            
+            processor = RAGStoreProcessor()
+            
+            # Call _setup_chroma_configuration directly
+            processor._setup_chroma_configuration(config)
+            
+            # Verify the collection name is stored in the processor
+            assert processor.chroma_collection_name == "my_test_collection"
+            assert processor.chroma_client_mode == "embedded"
+
+    def test_rag_store_processor_handles_missing_collection_name(self):
+        """Test RAGStoreProcessor handles missing ChromaDB collection name gracefully."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "model_vendor": "google",
+                "google_api_key": "test_key",
+                "chroma_client_mode": "embedded",
+                "chroma_db_path": os.path.join(temp_dir, "chroma"),
+                "chroma_server_host": "localhost",
+                "chroma_server_port": 8000
+                # chroma_collection_name not provided
+            }
+            
+            processor = RAGStoreProcessor()
+            
+            # Call _setup_chroma_configuration directly
+            processor._setup_chroma_configuration(config)
+            
+            # Verify the collection name remains None when not provided
+            assert processor.chroma_collection_name is None
+
+    def test_rag_store_processor_client_server_collection_name(self):
+        """Test RAGStoreProcessor stores collection name for client-server mode."""
+        config = {
+            "model_vendor": "google", 
+            "google_api_key": "test_key",
+            "chroma_client_mode": "client_server",
+            "chroma_server_host": "remote-server.com",
+            "chroma_server_port": 9000,
+            "chroma_collection_name": "client_server_collection"
+        }
+        
+        processor = RAGStoreProcessor()
+        
+        # Call _setup_chroma_configuration directly
+        processor._setup_chroma_configuration(config)
+        
+        # Verify client-server settings and collection name
+        assert processor.chroma_collection_name == "client_server_collection"
+        assert processor.chroma_client_mode == "client_server"
+        assert processor.chroma_server_host == "remote-server.com"
+        assert processor.chroma_server_port == 9000
+
+    @patch('src.core.rag_store_processor.store_to_chroma')
+    @patch('src.core.rag_store_processor.RTFProcessor')
+    @patch('src.core.rag_store_processor.MHTProcessor')
+    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.TextProcessor')
+    @patch('src.core.rag_store_processor.PDFProcessor')
+    @patch('src.core.rag_store_processor.ensure_data_directory')
+    @patch('src.core.rag_store_processor.load_embedding_model')
+    @patch('src.core.rag_store_processor.ProcessorRegistry')
+    def test_rag_store_processor_process_passes_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf, mock_store_chroma):
+        """Test that RAGStoreProcessor passes collection name to store_to_chroma."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "model_vendor": "google",
+                "google_api_key": "test_key",
+                "chroma_client_mode": "embedded",
+                "chroma_db_path": os.path.join(temp_dir, "chroma"),
+                "chroma_server_host": "localhost",
+                "chroma_server_port": 8000,
+                "chroma_collection_name": "my_test_collection"
+            }
+            
+            # Setup mocks for successful initialization
+            mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
+            
+            # Create processor with file_manager
+            mock_file_manager = Mock()
+            mock_file_manager.get_saved_path.return_value = "/saved/test.txt"
+            processor = RAGStoreProcessor(file_manager=mock_file_manager)
+            processor.initialize(config)
+            
+            # Setup processor mock  
+            mock_processor = Mock()
+            mock_processor.processor_name = "TestProcessor"
+            mock_registry_instance.get_processor_for_file.return_value = mock_processor
+            mock_registry_instance.process_document.return_value = [Mock(), Mock()]  # 2 documents
+            mock_store_chroma.return_value = Mock()
+            
+            # Create temporary test file
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+                tmp_file.write(b"test content")
+                test_file = Path(tmp_file.name)
+            
+            try:
+                # Process the document
+                result = processor.process_document(test_file)
+                
+                # Verify store_to_chroma was called with collection name
+                mock_store_chroma.assert_called_once()
+                call_args, call_kwargs = mock_store_chroma.call_args
+                
+                # Check that collection_name is in the kwargs
+                assert "collection_name" in call_kwargs
+                assert call_kwargs["collection_name"] == "my_test_collection"
+                
+                # Verify successful result
+                assert result.success is True
+            finally:
+                test_file.unlink()
+
+    @patch('src.core.rag_store_processor.store_to_chroma')
+    @patch('src.core.rag_store_processor.RTFProcessor')
+    @patch('src.core.rag_store_processor.MHTProcessor')
+    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.TextProcessor')
+    @patch('src.core.rag_store_processor.PDFProcessor')
+    @patch('src.core.rag_store_processor.ensure_data_directory')
+    @patch('src.core.rag_store_processor.load_embedding_model')
+    @patch('src.core.rag_store_processor.ProcessorRegistry')
+    def test_rag_store_processor_process_without_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf, mock_store_chroma):
+        """Test that RAGStoreProcessor handles missing collection name gracefully."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "model_vendor": "google",
+                "google_api_key": "test_key",
+                "chroma_client_mode": "embedded",
+                "chroma_db_path": os.path.join(temp_dir, "chroma"),
+                "chroma_server_host": "localhost",
+                "chroma_server_port": 8000
+                # chroma_collection_name not provided
+            }
+            
+            # Setup mocks for successful initialization
+            mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
+            
+            # Create processor with file_manager
+            mock_file_manager = Mock()
+            mock_file_manager.get_saved_path.return_value = "/saved/test.txt"
+            processor = RAGStoreProcessor(file_manager=mock_file_manager)
+            processor.initialize(config)
+            
+            # Setup processor mock
+            mock_processor = Mock()
+            mock_processor.processor_name = "TestProcessor"
+            mock_registry_instance.get_processor_for_file.return_value = mock_processor
+            mock_registry_instance.process_document.return_value = [Mock(), Mock(), Mock()]  # 3 documents
+            mock_store_chroma.return_value = Mock()
+            
+            # Create temporary test file
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+                tmp_file.write(b"test content")
+                test_file = Path(tmp_file.name)
+            
+            try:
+                # Process the document
+                result = processor.process_document(test_file)
+                
+                # Verify store_to_chroma was called without collection name
+                mock_store_chroma.assert_called_once()
+                call_args, call_kwargs = mock_store_chroma.call_args
+                
+                # Check that collection_name is either not present or None
+                if "collection_name" in call_kwargs:
+                    assert call_kwargs["collection_name"] is None
+                
+                # Verify successful result
+                assert result.success is True
+            finally:
+                test_file.unlink()
+
 
 class TestRAGStoreProcessorIntegration:
     """Integration tests for RAGStoreProcessor with real components."""

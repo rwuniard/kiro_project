@@ -207,18 +207,19 @@ class TestDocumentProcessingConfig:
         assert any("Invalid model_vendor" in error for error in errors)
     
     def test_validate_missing_chroma_db_path(self):
-        """Test validation fails when ChromaDB path is missing and processing is enabled."""
+        """Test validation fails when ChromaDB path is missing for embedded mode."""
         config = DocumentProcessingConfig(
             processor_type="rag_store",
             enable_processing=True,
             google_api_key="AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
-            model_vendor="google"
+            model_vendor="google",
+            chroma_client_mode="embedded"
             # chroma_db_path is None
         )
         
         errors = config.validate()
         assert len(errors) == 1
-        assert "CHROMA_DB_PATH is required when document processing is enabled" in errors[0]
+        assert "CHROMA_DB_PATH is required when using embedded mode" in errors[0]
     
     def test_validate_google_api_key_format_valid(self):
         """Test validation passes for valid Google API key format."""
@@ -320,6 +321,58 @@ class TestDocumentProcessingConfig:
             assert config.openai_api_key == "test_openai_key"
             assert config.chroma_db_path == "/custom/chroma/path"
             assert config.model_vendor == "openai"
+
+    def test_from_environment_with_chromadb_client_server_settings(self):
+        """Test from_environment with ChromaDB client-server configuration."""
+        env_vars = {
+            "CHROMA_CLIENT_MODE": "client_server",
+            "CHROMA_SERVER_HOST": "remote-chroma.example.com",
+            "CHROMA_SERVER_PORT": "9000",
+            "CHROMA_COLLECTION_NAME": "my_test_collection",
+            "MODEL_VENDOR": "google",
+            "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
+        }
+        
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = DocumentProcessingConfig.from_environment()
+        
+        assert config.chroma_client_mode == "client_server"
+        assert config.chroma_server_host == "remote-chroma.example.com"
+        assert config.chroma_server_port == 9000
+        assert config.chroma_collection_name == "my_test_collection"
+
+    def test_from_environment_with_embedded_mode_settings(self):
+        """Test from_environment with ChromaDB embedded mode configuration."""
+        env_vars = {
+            "CHROMA_CLIENT_MODE": "embedded",
+            "CHROMA_DB_PATH": "/custom/chroma/path",
+            "CHROMA_COLLECTION_NAME": "embedded_collection",
+            "MODEL_VENDOR": "google",
+            "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
+        }
+        
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = DocumentProcessingConfig.from_environment()
+        
+        assert config.chroma_client_mode == "embedded"
+        assert config.chroma_db_path == "/custom/chroma/path"
+        assert config.chroma_collection_name == "embedded_collection"
+        assert config.chroma_server_host == "localhost"  # Default
+        assert config.chroma_server_port == 8000  # Default
+
+    def test_from_environment_with_invalid_port(self):
+        """Test from_environment with invalid port falls back to default."""
+        env_vars = {
+            "CHROMA_SERVER_PORT": "invalid_port",
+            "MODEL_VENDOR": "google",
+            "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
+        }
+        
+        with patch.dict(os.environ, env_vars, clear=True):
+            config = DocumentProcessingConfig.from_environment()
+        
+        # Should fall back to default port
+        assert config.chroma_server_port == 8000
     
     def test_from_environment_enable_processing_variations(self):
         """Test various ways to enable/disable processing via environment."""
@@ -382,7 +435,10 @@ class TestDocumentProcessingConfig:
             "model_vendor": "google",
             "processor_type": "rag_store",
             "google_api_key": "google_key",
-            "chroma_db_path": "/custom/path"
+            "chroma_db_path": "/custom/path",
+            "chroma_client_mode": "embedded",
+            "chroma_server_host": "localhost",
+            "chroma_server_port": 8000
         }
         
         assert processor_config == expected
@@ -400,7 +456,10 @@ class TestDocumentProcessingConfig:
         expected = {
             "model_vendor": "openai",
             "processor_type": "rag_store",
-            "openai_api_key": "openai_key"
+            "openai_api_key": "openai_key",
+            "chroma_client_mode": "embedded",
+            "chroma_server_host": "localhost",
+            "chroma_server_port": 8000
         }
         
         assert processor_config == expected
@@ -416,10 +475,80 @@ class TestDocumentProcessingConfig:
         
         expected = {
             "model_vendor": "google",
-            "processor_type": "rag_store"
+            "processor_type": "rag_store",
+            "chroma_client_mode": "embedded",
+            "chroma_server_host": "localhost",
+            "chroma_server_port": 8000
         }
         
         assert processor_config == expected
+
+    def test_to_processor_config_with_collection_name(self):
+        """Test to_processor_config includes ChromaDB collection name when provided."""
+        config = DocumentProcessingConfig(
+            processor_type="rag_store",
+            model_vendor="google",
+            google_api_key="test_key",
+            chroma_db_path="/custom/path",
+            chroma_collection_name="my_custom_collection"
+        )
+        
+        processor_config = config.to_processor_config()
+        
+        expected = {
+            "model_vendor": "google",
+            "processor_type": "rag_store",
+            "google_api_key": "test_key",
+            "chroma_db_path": "/custom/path",
+            "chroma_client_mode": "embedded",
+            "chroma_server_host": "localhost",
+            "chroma_server_port": 8000,
+            "chroma_collection_name": "my_custom_collection"
+        }
+        
+        assert processor_config == expected
+
+    def test_to_processor_config_client_server_mode(self):
+        """Test to_processor_config with client-server mode configuration."""
+        config = DocumentProcessingConfig(
+            processor_type="rag_store",
+            model_vendor="openai",
+            openai_api_key="test_openai_key",
+            chroma_client_mode="client_server",
+            chroma_server_host="remote-server.com",
+            chroma_server_port=9000,
+            chroma_collection_name="client_server_collection"
+        )
+        
+        processor_config = config.to_processor_config()
+        
+        expected = {
+            "model_vendor": "openai",
+            "processor_type": "rag_store",
+            "openai_api_key": "test_openai_key",
+            "chroma_client_mode": "client_server",
+            "chroma_server_host": "remote-server.com",
+            "chroma_server_port": 9000,
+            "chroma_collection_name": "client_server_collection"
+        }
+        
+        assert processor_config == expected
+
+    def test_to_processor_config_without_collection_name(self):
+        """Test to_processor_config excludes collection name when not provided."""
+        config = DocumentProcessingConfig(
+            processor_type="rag_store",
+            model_vendor="google",
+            google_api_key="test_key",
+            chroma_db_path="/custom/path"
+            # chroma_collection_name is None (default)
+        )
+        
+        processor_config = config.to_processor_config()
+        
+        # Collection name should not be in the config when None
+        assert "chroma_collection_name" not in processor_config
+        assert processor_config["chroma_db_path"] == "/custom/path"
 
 
 class TestAppConfigWithDocumentProcessing:

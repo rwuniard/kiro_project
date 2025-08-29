@@ -62,6 +62,23 @@ class FileManager:
         """
         return self._move_file_with_resilience(file_path, self.error_folder, "error")
     
+    def get_saved_path(self, source_file_path: str) -> str:
+        """
+        Calculate the destination path in the saved folder without moving the file.
+        
+        This is useful for storing the final destination path in metadata
+        before the file is actually moved.
+        
+        Args:
+            source_file_path: Absolute path to the source file
+            
+        Returns:
+            str: The path where the file will be moved to in the saved folder
+        """
+        source_path = Path(source_file_path)
+        dest_path = self._preserve_folder_structure(source_path, self.saved_folder)
+        return str(dest_path)
+    
     def _preserve_folder_structure(self, source_path: Path, dest_base: Path) -> Path:
         """
         Calculate destination path while preserving folder structure.

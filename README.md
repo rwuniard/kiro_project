@@ -145,11 +145,20 @@ ERROR_FOLDER=/path/to/your/error/folder
 ENABLE_DOCUMENT_PROCESSING=true
 DOCUMENT_PROCESSOR_TYPE=rag_store
 MODEL_VENDOR=openai  # or google
-CHROMA_DB_PATH=./data/chroma_db_openai
 
 # Required if using document processing
 OPENAI_API_KEY=your_openai_api_key_here  # if MODEL_VENDOR=openai
 GOOGLE_API_KEY=your_google_api_key_here  # if MODEL_VENDOR=google
+
+# ChromaDB Configuration (choose embedded or client_server mode)
+CHROMA_CLIENT_MODE=embedded  # or client_server
+# For embedded mode:
+CHROMA_DB_PATH=./data/chroma_db_openai
+# For client_server mode:
+CHROMA_SERVER_HOST=localhost
+CHROMA_SERVER_PORT=8000
+# Optional - Custom collection name for organizing documents
+CHROMA_COLLECTION_NAME=my_documents
 
 # Optional - OCR Investigation (for debugging OCR issues)
 # OCR_INVESTIGATE=false
@@ -162,6 +171,53 @@ GOOGLE_API_KEY=your_google_api_key_here  # if MODEL_VENDOR=google
 - The application user must have read/write permissions for all folders
 - **Document Processing**: Requires API keys (OpenAI or Google) and optionally Tesseract OCR for image-based PDFs
 - **OCR Investigation**: When enabled, saves OCR debug files to specified directory for troubleshooting
+- **ChromaDB Modes**: Choose between embedded (file-based) or client_server (Docker-based) modes
+
+### ChromaDB Server Setup (Optional)
+
+For better performance and data persistence across application restarts, you can run ChromaDB as a server using Docker. The project includes convenient scripts for this.
+
+#### Starting ChromaDB Server
+
+```bash
+# Navigate to project root and start the ChromaDB server
+./setup_chromadb/chromadb-server.sh start
+
+# Check server health
+./setup_chromadb/chromadb-server.sh health
+
+# View server logs
+./setup_chromadb/chromadb-server.sh logs
+```
+
+#### Configuration for Client-Server Mode
+
+Update your `.env` file to use client-server mode:
+
+```env
+CHROMA_CLIENT_MODE=client_server
+CHROMA_SERVER_HOST=localhost
+CHROMA_SERVER_PORT=8000
+```
+
+#### Server Management Commands
+
+```bash
+./setup_chromadb/chromadb-server.sh start      # Start server
+./setup_chromadb/chromadb-server.sh stop       # Stop server
+./setup_chromadb/chromadb-server.sh restart    # Restart server
+./setup_chromadb/chromadb-server.sh status     # Show status
+./setup_chromadb/chromadb-server.sh health     # Check health
+./setup_chromadb/chromadb-server.sh logs       # View logs
+./setup_chromadb/chromadb-server.sh clean      # Clean all data (DANGEROUS)
+```
+
+**Benefits of Client-Server Mode:**
+- **Persistent Data**: Data survives application restarts
+- **Better Performance**: Dedicated ChromaDB server process  
+- **Concurrent Access**: Multiple applications can use the same ChromaDB instance
+- **Real-time Updates**: Changes are immediately visible across all clients
+- **Server Management**: Easy start/stop/restart of the database server
 
 ## Usage
 
@@ -431,46 +487,94 @@ Press `Ctrl+C` to gracefully stop the application. The system will:
 
 ## Testing
 
+The project includes a comprehensive test suite organized by component structure with over 450 unit and integration tests.
+
+### Test Organization
+
+Tests are organized to mirror the source code structure:
+
+```
+tests/
+├── test_config/              # Tests for src/config/
+│   ├── test_config_manager.py
+│   ├── test_document_processing_config.py
+│   └── test_configuration_validation_error_scenarios.py
+├── test_core/                # Tests for src/core/
+│   ├── test_document_processing.py
+│   ├── test_file_manager.py
+│   ├── test_file_monitor.py
+│   ├── test_file_processor.py
+│   ├── test_rag_store_processor.py
+│   └── test_document_processing_workflow.py
+├── test_services/            # Tests for src/services/
+│   ├── test_error_handler.py
+│   └── test_logger_service.py
+├── test_rag_store/           # Tests for src/rag_store/
+│   ├── test_document_processor.py
+│   ├── test_pdf_processor.py
+│   ├── test_word_processor.py
+│   ├── test_rtf_processor.py
+│   └── [... other RAG store component tests]
+└── test_rag_integration_comprehensive/  # Integration tests
+    ├── test_comprehensive_integration.py
+    ├── test_end_to_end_workflow.py
+    └── test_performance_stress.py
+```
+
 ### Running Tests
 
 Run the complete test suite:
 
 ```bash
-# Using uv (recommended):
-uv run pytest
+# Using uv with convenient scripts (recommended):
+uv run test                    # Run all tests
+uv run test-cov               # Run all tests with HTML coverage report
 
-# Run with verbose output
-uv run pytest -v
+# Using uv with full pytest commands:
+uv run pytest                # Run all tests
+uv run pytest -v             # Run with verbose output
 
-# Run specific test file
-uv run pytest tests/test_file_processor.py
+# Run tests by category:
+uv run pytest tests/test_config/           # Configuration tests only
+uv run pytest tests/test_core/             # Core functionality tests
+uv run pytest tests/test_services/         # Service layer tests
+uv run pytest tests/test_rag_store/        # RAG store component tests
 
-# Run with coverage report
-uv run pytest --cov=src --cov-report=html
+# Run specific test files:
+uv run pytest tests/test_core/test_file_processor.py  # Specific test file
+uv run pytest tests/test_config/test_document_processing_config.py  # Config tests
+
+# Run with coverage report:
+uv run pytest --cov=src --cov-report=html   # Generate HTML coverage report
 
 # Alternative (if virtual environment is activated):
 pytest
 pytest -v
-pytest tests/test_file_processor.py
+pytest tests/test_core/test_file_processor.py
 pytest --cov=src --cov-report=html
 ```
+
+The `uv run test-cov` command will generate an HTML coverage report in the `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view detailed coverage information.
 
 ### Expected Test Output
 
 ```
 ================================ test session starts ================================
-platform darwin -- Python 3.12.0, pytest-8.0.0, pluggy-1.3.0
-rootdir: /path/to/folder-file-processor
+platform darwin -- Python 3.12.8, pytest-8.4.1, pluggy-1.6.0
+rootdir: /path/to/kiro-project
 plugins: cov-6.2.1
-collected 45 items
+collected 451 items
 
-tests/test_app_integration.py .................... [ 44%]
-tests/test_config_manager.py .......... [ 66%]
-tests/test_error_handler.py ........ [ 84%]
-tests/test_file_manager.py .......... [ 95%]
-tests/test_file_monitor.py .... [100%]
+tests/test_config/test_config_manager.py ................. [  3%]
+tests/test_config/test_document_processing_config.py ................... [ 10%]
+tests/test_core/test_file_manager.py ............................. [ 24%]
+tests/test_core/test_file_processor.py ............................ [ 40%]
+tests/test_core/test_rag_store_processor.py ................... [ 55%]
+tests/test_services/test_logger_service.py ................. [ 65%]
+tests/test_rag_store/test_document_processor.py ............... [ 80%]
+[... additional test files ...]
 
-================================ 45 passed in 2.34s ================================
+================================ 451 passed in 50.89s ===============================
 ```
 
 ### Coverage Report
@@ -478,14 +582,21 @@ tests/test_file_monitor.py .... [100%]
 Generate HTML coverage report:
 
 ```bash
-# Using uv:
+# Using convenient script (recommended):
+uv run test-cov
+
+# Or using full pytest command:
 uv run pytest --cov=src --cov-report=html
 
-# Or with activated virtual environment:
+# Alternative (if virtual environment is activated):
 pytest --cov=src --cov-report=html
 ```
 
-Open `htmlcov/index.html` in your browser to view detailed coverage information.
+The coverage report will be generated in the `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view detailed coverage information including:
+- Line-by-line coverage visualization
+- Coverage percentages by module
+- Missing coverage highlights
+- Branch coverage analysis
 
 ### Test Categories
 
@@ -497,9 +608,10 @@ Open `htmlcov/index.html` in your browser to view detailed coverage information.
 ## Project Structure
 
 ```
-folder-file-processor/
+kiro-project/
 ├── .env.example              # Example environment configuration
 ├── .gitignore               # Git ignore patterns
+├── CLAUDE.md                # Claude Code development instructions
 ├── LICENSE                  # Project license
 ├── README.md               # This documentation
 ├── main.py                 # Application entry point
@@ -507,47 +619,114 @@ folder-file-processor/
 ├── uv.lock                 # Dependency lock file
 ├── logs/                   # Application log files
 │   └── application.log     # Main application log
+├── setup_chromadb/         # ChromaDB server setup
+│   ├── docker-compose.yml  # Docker configuration for ChromaDB server
+│   └── chromadb-server.sh  # Server management script
 ├── src/                    # Source code
 │   ├── __init__.py
 │   ├── app.py              # Main application orchestrator
 │   ├── config/             # Configuration management
 │   │   ├── __init__.py
-│   │   └── config_manager.py
+│   │   └── config_manager.py  # Environment config with ChromaDB support
 │   ├── core/               # Core business logic
 │   │   ├── __init__.py
-│   │   ├── file_manager.py    # File operations
-│   │   ├── file_monitor.py    # File system monitoring
-│   │   └── file_processor.py  # File processing logic
+│   │   ├── document_processing.py     # Document processing interface
+│   │   ├── file_manager.py           # File operations with path mapping
+│   │   ├── file_monitor.py           # File system monitoring
+│   │   ├── file_processor.py         # File processing orchestration
+│   │   └── rag_store_processor.py    # RAG document processing implementation
+│   ├── rag_store/          # RAG document processing components
+│   │   ├── __init__.py
+│   │   ├── cli.py          # Command-line interface
+│   │   ├── document_processor.py     # Document processor registry
+│   │   ├── file_detection.py        # Smart file type detection
+│   │   ├── logging_config.py        # RAG-specific logging
+│   │   ├── pdf_processor.py         # PDF processing with OCR
+│   │   ├── rtf_processor.py         # RTF document processing
+│   │   ├── store_embeddings.py      # ChromaDB integration with client-server support
+│   │   ├── text_processor.py        # Text and Markdown processing
+│   │   ├── word_processor.py        # Word document processing (.doc/.docx)
+│   │   └── mht_processor.py         # MHTML web archive processing
 │   └── services/           # Supporting services
 │       ├── __init__.py
-│       ├── error_handler.py   # Error handling and logging
-│       └── logger_service.py  # Centralized logging
-└── tests/                  # Test suite
+│       ├── error_handler.py          # Enhanced error handling and logging
+│       └── logger_service.py         # Centralized logging service
+└── tests/                  # Comprehensive test suite (450+ tests)
     ├── __init__.py
-    ├── test_app_integration.py
-    ├── test_config_manager.py
-    ├── test_error_handler.py
-    ├── test_file_manager.py
-    ├── test_file_monitor.py
-    ├── test_file_processor.py
-    └── test_logger_service.py
+    ├── test_app_integration.py       # Application-level integration tests
+    ├── test_rag_integration.py       # RAG integration tests
+    ├── test_config/                  # Configuration tests
+    │   ├── __init__.py
+    │   ├── test_config_manager.py
+    │   ├── test_document_processing_config.py
+    │   └── test_configuration_validation_error_scenarios.py
+    ├── test_core/                    # Core functionality tests
+    │   ├── __init__.py
+    │   ├── test_document_processing.py
+    │   ├── test_document_processing_error_handling.py
+    │   ├── test_document_processing_workflow.py
+    │   ├── test_file_manager.py
+    │   ├── test_file_monitor.py
+    │   ├── test_file_processor.py
+    │   └── test_rag_store_processor.py
+    ├── test_services/                # Service layer tests
+    │   ├── __init__.py
+    │   ├── test_error_handler.py
+    │   └── test_logger_service.py
+    ├── test_rag_store/               # RAG component tests
+    │   ├── __init__.py
+    │   ├── test_cli.py
+    │   ├── test_document_processor.py
+    │   ├── test_file_detection.py
+    │   ├── test_pdf_processor.py
+    │   ├── test_rtf_processor.py
+    │   ├── test_store_embeddings.py
+    │   ├── test_text_processor.py
+    │   ├── test_word_processor.py
+    │   └── test_mht_processor.py
+    └── test_rag_integration_comprehensive/  # Comprehensive integration tests
+        ├── __init__.py
+        ├── base_test_classes.py
+        ├── test_comprehensive_integration.py
+        ├── test_end_to_end_workflow.py
+        ├── test_performance_stress.py
+        └── test_regression.py
 ```
 
 ## Component Descriptions
 
-### Core Components
+### Configuration Layer
 
-- **ConfigManager** (`src/config/config_manager.py`): Handles environment variable loading and validation
-- **FileMonitor** (`src/core/file_monitor.py`): Monitors file system events using the watchdog library
-- **FileProcessor** (`src/core/file_processor.py`): Contains core business logic for file processing
-- **FileManager** (`src/core/file_manager.py`): Handles file operations with folder structure preservation
-- **ErrorHandler** (`src/services/error_handler.py`): Creates error log files and manages error reporting
-- **LoggerService** (`src/services/logger_service.py`): Provides centralized logging functionality
+- **ConfigManager** (`src/config/config_manager.py`): Comprehensive environment variable loading and validation with ChromaDB client-server support
+- **DocumentProcessingConfig**: Advanced document processing configuration with API key validation, ChromaDB mode selection, and collection name management
 
-### Main Application
+### Core Business Logic
 
-- **FolderFileProcessorApp** (`src/app.py`): Main orchestrator that coordinates all components
-- **main.py**: Application entry point with command-line interface
+- **FileMonitor** (`src/core/file_monitor.py`): Cross-platform file system event monitoring using the watchdog library
+- **FileProcessor** (`src/core/file_processor.py`): Orchestrates file processing with intelligent retry logic and error classification
+- **FileManager** (`src/core/file_manager.py`): Advanced file operations with folder structure preservation and destination path mapping
+- **DocumentProcessingInterface** (`src/core/document_processing.py`): Abstract interface for pluggable document processing systems
+- **RAGStoreProcessor** (`src/core/rag_store_processor.py`): Concrete RAG implementation with ChromaDB integration and metadata path correction
+
+### RAG Document Processing
+
+- **ProcessorRegistry** (`src/rag_store/document_processor.py`): Multi-format document processor factory with smart file detection
+- **PDF Processor** (`src/rag_store/pdf_processor.py`): PDF processing with OCR support for image-based documents
+- **Word Processor** (`src/rag_store/word_processor.py`): Microsoft Word document processing (.doc/.docx) with legacy format support
+- **RTF Processor** (`src/rag_store/rtf_processor.py`): Rich Text Format processing with smart content detection
+- **Text Processor** (`src/rag_store/text_processor.py`): Plain text and Markdown document processing
+- **MHT Processor** (`src/rag_store/mht_processor.py`): MHTML web archive processing
+- **ChromaDB Integration** (`src/rag_store/store_embeddings.py`): Vector storage with embedded and client-server mode support
+
+### Service Layer
+
+- **ErrorHandler** (`src/services/error_handler.py`): Enhanced error log creation with filename preservation and detailed context
+- **LoggerService** (`src/services/logger_service.py`): Centralized structured logging with file and console output
+
+### Application Orchestration
+
+- **FolderFileProcessorApp** (`src/app.py`): Main orchestrator with 8-step initialization, health monitoring, and graceful shutdown
+- **main.py**: Application entry point with command-line interface and signal handling
 
 ## Troubleshooting
 
@@ -775,6 +954,23 @@ ERROR: Could not initialize ChromaDB at path: ./data/chroma_db_openai
 - Ensure `CHROMA_DB_PATH` directory exists and is writable
 - Check disk space availability
 - Verify no other processes are using the database
+
+**ChromaDB Client-Server Mode Issues:**
+```
+ERROR: Failed to connect to ChromaDB server at localhost:8000
+```
+**Solutions**:
+- Ensure ChromaDB server is running: `./setup_chromadb/chromadb-server.sh status`
+- Start the server if stopped: `./setup_chromadb/chromadb-server.sh start`
+- Check server health: `./setup_chromadb/chromadb-server.sh health`
+- Verify `CHROMA_CLIENT_MODE=client_server` in `.env`
+- Confirm correct host and port in `.env` file
+
+**ChromaDB Collection Configuration:**
+- **Collection Name**: Use `CHROMA_COLLECTION_NAME` to organize documents by project or category
+- **Multiple Collections**: Different applications can use different collection names on the same server
+- **Collection Persistence**: Collections in client-server mode survive application restarts
+- **Collection Access**: Verify collection name matches between configuration and expectations
 
 ### Getting Help
 

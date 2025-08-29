@@ -2,6 +2,7 @@ import os
 
 from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from langchain.schema import Document
@@ -9,6 +10,8 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
+import chromadb
+from chromadb.config import Settings
 
 try:
     from .document_processor import ProcessorRegistry
@@ -43,6 +46,75 @@ DATA_DIR = PROJECT_ROOT / "data"
 class ModelVendor(Enum):
     OPENAI = "openai"
     GOOGLE = "google"
+
+
+class ChromaClientMode(Enum):
+    EMBEDDED = "embedded"
+    CLIENT_SERVER = "client_server"
+
+
+def create_chroma_client(
+    client_mode: str = "embedded",
+    server_host: str = "localhost", 
+    server_port: int = 8000,
+    persist_directory: Optional[Path] = None
+) -> chromadb.Client:
+    """
+    Create a ChromaDB client based on the specified mode.
+    
+    Args:
+        client_mode: "embedded" or "client_server"
+        server_host: Host for client-server mode
+        server_port: Port for client-server mode  
+        persist_directory: Directory for embedded mode
+        
+    Returns:
+        ChromaDB client instance
+    """
+    if client_mode == ChromaClientMode.EMBEDDED.value:
+        if persist_directory:
+            # Embedded mode with persistence
+            settings = Settings(
+                persist_directory=str(persist_directory),
+                is_persistent=True
+            )
+            return chromadb.Client(settings)
+        else:
+            # In-memory embedded mode
+            return chromadb.Client()
+    
+    elif client_mode == ChromaClientMode.CLIENT_SERVER.value:
+        # Client-server mode
+        return chromadb.HttpClient(
+            host=server_host,
+            port=server_port
+        )
+    
+    else:
+        raise ValueError(f"Invalid client mode: {client_mode}. Must be 'embedded' or 'client_server'")
+
+
+def get_chroma_collection_name(model_vendor: ModelVendor, custom_name: Optional[str] = None) -> str:
+    """
+    Generate ChromaDB collection name based on model vendor.
+    
+    Args:
+        model_vendor: The embedding model vendor
+        custom_name: Optional custom collection name
+        
+    Returns:
+        Collection name string
+    """
+    if custom_name:
+        return custom_name
+    
+    # Default collection names based on vendor
+    if model_vendor == ModelVendor.OPENAI:
+        return "documents_openai"
+    elif model_vendor == ModelVendor.GOOGLE:
+        return "documents_google"
+    else:
+        return "documents_default"
 
 
 def get_document_processor_registry() -> ProcessorRegistry:
@@ -225,25 +297,85 @@ def get_text_splitter():
     )
 
 
-def store_to_chroma(documents: list[Document], model_vendor: ModelVendor) -> Chroma:
-    """Store documents to ChromaDB using the centralized data directory."""
-    # Get the database path
-    db_path = ensure_data_directory(model_vendor)
-
+def store_to_chroma(
+    documents: list[Document], 
+    model_vendor: ModelVendor,
+    client_mode: str = "embedded",
+    server_host: str = "localhost",
+    server_port: int = 8000,
+    collection_name: Optional[str] = None,
+    persist_directory: Optional[Path] = None
+) -> Chroma:
+    """
+    Store documents to ChromaDB using embedded or client-server mode.
+    
+    Args:
+        documents: List of documents to store
+        model_vendor: Embedding model vendor
+        client_mode: "embedded" or "client_server"
+        server_host: Host for client-server mode
+        server_port: Port for client-server mode
+        collection_name: Custom collection name (optional)
+        persist_directory: Directory for embedded mode (optional)
+        
+    Returns:
+        Chroma vectorstore instance
+    """
     # Get the embedding model
     embedding_model = load_embedding_model(model_vendor)
-
-    # Create vectorstore
-    vectorstore = Chroma.from_documents(
-        documents=documents, embedding=embedding_model, persist_directory=str(db_path)
-    )
-
-    logger.info(
-        "Documents stored to ChromaDB",
-        documents_count=len(documents),
-        database_path=str(db_path),
-        model_vendor=model_vendor.value,
-    )
+    
+    # Generate collection name
+    collection_name = get_chroma_collection_name(model_vendor, collection_name)
+    
+    if client_mode == ChromaClientMode.EMBEDDED.value:
+        # Embedded mode - use persist_directory or default
+        if not persist_directory:
+            persist_directory = ensure_data_directory(model_vendor)
+        
+        vectorstore = Chroma.from_documents(
+            documents=documents, 
+            embedding=embedding_model, 
+            persist_directory=str(persist_directory),
+            collection_name=collection_name
+        )
+        
+        logger.info(
+            "Documents stored to ChromaDB (embedded mode)",
+            documents_count=len(documents),
+            database_path=str(persist_directory),
+            model_vendor=model_vendor.value,
+            collection_name=collection_name,
+            client_mode=client_mode
+        )
+        
+    elif client_mode == ChromaClientMode.CLIENT_SERVER.value:
+        # Client-server mode - connect to remote ChromaDB server
+        chroma_client = create_chroma_client(
+            client_mode=client_mode,
+            server_host=server_host,
+            server_port=server_port
+        )
+        
+        vectorstore = Chroma.from_documents(
+            documents=documents,
+            embedding=embedding_model,
+            client=chroma_client,
+            collection_name=collection_name
+        )
+        
+        logger.info(
+            "Documents stored to ChromaDB (client-server mode)",
+            documents_count=len(documents),
+            server_host=server_host,
+            server_port=server_port,
+            model_vendor=model_vendor.value,
+            collection_name=collection_name,
+            client_mode=client_mode
+        )
+        
+    else:
+        raise ValueError(f"Invalid client mode: {client_mode}")
+    
     return vectorstore
 
 

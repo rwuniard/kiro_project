@@ -103,7 +103,12 @@ class TestDocumentProcessingWorkflow:
                 # get_processor_for_file is called twice: once in is_supported_file, once in process_document
                 assert mock_registry.get_processor_for_file.call_count == 2
                 mock_registry.process_document.assert_called_once_with(test_file)
-                mock_store.assert_called_once_with([mock_doc1, mock_doc2], self.processor.model_vendor)
+                # Verify store_to_chroma was called with correct parameters
+                mock_store.assert_called_once()
+                call_args = mock_store.call_args
+                # Check documents and model vendor are passed correctly
+                assert call_args[0][0] == [mock_doc1, mock_doc2]  # documents
+                assert call_args[0][1] == self.processor.model_vendor  # model_vendor
         
         finally:
             test_file.unlink()
@@ -349,7 +354,12 @@ class TestDocumentProcessingWorkflow:
                 assert result.processing_time > 0
                 
                 # Verify ChromaDB was called with all chunks
-                mock_store.assert_called_once_with(mock_docs, self.processor.model_vendor)
+                # Verify store_to_chroma was called with correct parameters
+                mock_store.assert_called_once()
+                call_args = mock_store.call_args
+                # Check documents and model vendor are passed correctly
+                assert call_args[0][0] == mock_docs  # documents
+                assert call_args[0][1] == self.processor.model_vendor  # model_vendor
         
         finally:
             test_file.unlink()
