@@ -158,7 +158,7 @@ class FolderFileProcessorApp:
                 
                 print("Initializing document processor...")
                 try:
-                    self.document_processor = RAGStoreProcessor()
+                    self.document_processor = RAGStoreProcessor(file_manager=self.file_manager)
                     processor_config = self.config.document_processing.to_processor_config()
                     self.document_processor.initialize(processor_config)
                     print(f"Document processing enabled with {self.config.document_processing.model_vendor} embeddings")
@@ -367,21 +367,30 @@ class FolderFileProcessorApp:
             bool: True if document processor is healthy, False otherwise
         """
         try:
-            # Check if ChromaDB path is still accessible
-            chroma_path = Path(self.config.document_processing.chroma_db_path)
-            if not chroma_path.parent.exists():
-                error_msg = f"ChromaDB parent directory no longer exists: {chroma_path.parent}"
-                self.logger_service.log_error(error_msg)
-                print(f"ERROR: {error_msg}")
-                return False
-            
-            # Check if ChromaDB path is writable
-            import os
-            if not os.access(chroma_path.parent, os.W_OK):
-                error_msg = f"ChromaDB parent directory is not writable: {chroma_path.parent}"
-                self.logger_service.log_error(error_msg)
-                print(f"ERROR: {error_msg}")
-                return False
+            # Only check ChromaDB path for embedded mode
+            if self.config.document_processing.chroma_client_mode == "embedded":
+                # Check if ChromaDB path is still accessible
+                if self.config.document_processing.chroma_db_path:
+                    chroma_path = Path(self.config.document_processing.chroma_db_path)
+                    if not chroma_path.parent.exists():
+                        error_msg = f"ChromaDB parent directory no longer exists: {chroma_path.parent}"
+                        self.logger_service.log_error(error_msg)
+                        print(f"ERROR: {error_msg}")
+                        return False
+                    
+                    # Check if ChromaDB path is writable
+                    import os
+                    if not os.access(chroma_path.parent, os.W_OK):
+                        error_msg = f"ChromaDB parent directory is not writable: {chroma_path.parent}"
+                        self.logger_service.log_error(error_msg)
+                        print(f"ERROR: {error_msg}")
+                        return False
+                else:
+                    error_msg = "ChromaDB path is not configured for embedded mode"
+                    self.logger_service.log_error(error_msg)
+                    print(f"ERROR: {error_msg}")
+                    return False
+            # For client_server mode, we don't need to check local paths
             
             # Test document processor functionality with a simple health check
             # This will verify that the processor is still properly initialized

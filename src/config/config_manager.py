@@ -27,6 +27,11 @@ class DocumentProcessingConfig:
     openai_api_key: Optional[str] = None
     chroma_db_path: Optional[str] = None
     model_vendor: str = "google"
+    # ChromaDB client-server configuration
+    chroma_client_mode: str = "embedded"  # "embedded" or "client_server"
+    chroma_server_host: str = "localhost"
+    chroma_server_port: int = 8000
+    chroma_collection_name: Optional[str] = None
     
     def validate(self) -> List[str]:
         """Validate document processing configuration and return list of validation errors."""
@@ -62,28 +67,9 @@ class DocumentProcessingConfig:
                 if not self._is_valid_openai_api_key(self.openai_api_key):
                     errors.append("OPENAI_API_KEY format appears invalid (should start with 'sk-' and be at least 20 characters)")
         
-        # Validate ChromaDB path if provided
-        if self.chroma_db_path:
-            chroma_path = Path(self.chroma_db_path)
-            try:
-                # Check if parent directory exists and is writable
-                parent_dir = chroma_path.parent
-                if not parent_dir.exists():
-                    errors.append(f"ChromaDB parent directory does not exist: {parent_dir}")
-                elif not os.access(parent_dir, os.W_OK):
-                    errors.append(f"ChromaDB parent directory is not writable: {parent_dir}")
-                
-                # Check if ChromaDB path itself exists and validate it
-                if chroma_path.exists():
-                    if not chroma_path.is_dir():
-                        errors.append(f"ChromaDB path exists but is not a directory: {chroma_path}")
-                    elif not os.access(chroma_path, os.R_OK | os.W_OK):
-                        errors.append(f"ChromaDB directory is not readable/writable: {chroma_path}")
-            except (OSError, ValueError) as e:
-                errors.append(f"Invalid ChromaDB path '{self.chroma_db_path}': {str(e)}")
-        else:
-            # ChromaDB path is required when processing is enabled
-            errors.append("CHROMA_DB_PATH is required when document processing is enabled")
+        # Validate ChromaDB configuration based on client mode
+        chroma_mode_errors = self._validate_chroma_configuration()
+        errors.extend(chroma_mode_errors)
         
         # Validate embedding model configuration
         embedding_errors = self._validate_embedding_model_config()
@@ -122,16 +108,70 @@ class DocumentProcessingConfig:
         
         return errors
     
+    def _validate_chroma_configuration(self) -> List[str]:
+        """Validate ChromaDB configuration based on client mode."""
+        errors = []
+        
+        # Validate client mode
+        valid_modes = ["embedded", "client_server"]
+        if self.chroma_client_mode not in valid_modes:
+            errors.append(f"Invalid chroma_client_mode '{self.chroma_client_mode}'. Must be one of: {valid_modes}")
+            return errors  # Skip further validation if mode is invalid
+        
+        if self.chroma_client_mode == "embedded":
+            # Validate ChromaDB path for embedded mode
+            if self.chroma_db_path:
+                chroma_path = Path(self.chroma_db_path)
+                try:
+                    # Check if parent directory exists and is writable
+                    parent_dir = chroma_path.parent
+                    if not parent_dir.exists():
+                        errors.append(f"ChromaDB parent directory does not exist: {parent_dir}")
+                    elif not os.access(parent_dir, os.W_OK):
+                        errors.append(f"ChromaDB parent directory is not writable: {parent_dir}")
+                    
+                    # Check if ChromaDB path itself exists and validate it
+                    if chroma_path.exists():
+                        if not chroma_path.is_dir():
+                            errors.append(f"ChromaDB path exists but is not a directory: {chroma_path}")
+                        elif not os.access(chroma_path, os.R_OK | os.W_OK):
+                            errors.append(f"ChromaDB directory is not readable/writable: {chroma_path}")
+                except (OSError, ValueError) as e:
+                    errors.append(f"Invalid ChromaDB path '{self.chroma_db_path}': {str(e)}")
+            else:
+                # ChromaDB path is required for embedded mode
+                errors.append("CHROMA_DB_PATH is required when using embedded mode")
+        
+        elif self.chroma_client_mode == "client_server":
+            # Validate server connection details for client-server mode
+            if not self.chroma_server_host:
+                errors.append("CHROMA_SERVER_HOST is required when using client_server mode")
+            
+            if not isinstance(self.chroma_server_port, int) or not (1 <= self.chroma_server_port <= 65535):
+                errors.append(f"CHROMA_SERVER_PORT must be a valid port number (1-65535), got: {self.chroma_server_port}")
+        
+        return errors
+    
     @classmethod
     def from_environment(cls) -> 'DocumentProcessingConfig':
         """Create DocumentProcessingConfig from environment variables."""
+        # Parse port with error handling
+        try:
+            chroma_port = int(os.getenv("CHROMA_SERVER_PORT", "8000"))
+        except ValueError:
+            chroma_port = 8000
+        
         return cls(
             processor_type=os.getenv("DOCUMENT_PROCESSOR_TYPE", "rag_store"),
             enable_processing=os.getenv("ENABLE_DOCUMENT_PROCESSING", "true").lower() in ("true", "1", "yes", "on"),
             google_api_key=os.getenv("GOOGLE_API_KEY"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             chroma_db_path=os.getenv("CHROMA_DB_PATH"),
-            model_vendor=os.getenv("MODEL_VENDOR", "google").lower()
+            model_vendor=os.getenv("MODEL_VENDOR", "google").lower(),
+            chroma_client_mode=os.getenv("CHROMA_CLIENT_MODE", "embedded").lower(),
+            chroma_server_host=os.getenv("CHROMA_SERVER_HOST", "localhost"),
+            chroma_server_port=chroma_port,
+            chroma_collection_name=os.getenv("CHROMA_COLLECTION_NAME")
         )
     
     def get_api_key_for_vendor(self) -> Optional[str]:
@@ -155,9 +195,15 @@ class DocumentProcessingConfig:
         if self.openai_api_key:
             config["openai_api_key"] = self.openai_api_key
         
-        # Add ChromaDB path if specified
+        # Add ChromaDB configuration
+        config["chroma_client_mode"] = self.chroma_client_mode
+        config["chroma_server_host"] = self.chroma_server_host
+        config["chroma_server_port"] = self.chroma_server_port
+        
         if self.chroma_db_path:
             config["chroma_db_path"] = self.chroma_db_path
+        if self.chroma_collection_name:
+            config["chroma_collection_name"] = self.chroma_collection_name
         
         return config
 
@@ -243,14 +289,7 @@ class ConfigManager:
         """Validate configuration dictionary and return True if valid."""
         try:
             # Create document processing config from environment
-            doc_processing_config = DocumentProcessingConfig(
-                processor_type=config.get('DOCUMENT_PROCESSOR_TYPE', 'rag_store'),
-                enable_processing=config.get('ENABLE_DOCUMENT_PROCESSING', 'true').lower() in ('true', '1', 'yes', 'on'),
-                google_api_key=config.get('GOOGLE_API_KEY') or None,
-                openai_api_key=config.get('OPENAI_API_KEY') or None,
-                chroma_db_path=config.get('CHROMA_DB_PATH') or None,
-                model_vendor=config.get('MODEL_VENDOR', 'google').lower()
-            )
+            doc_processing_config = DocumentProcessingConfig.from_environment()
             
             app_config = AppConfig(
                 source_folder=config.get('SOURCE_FOLDER', ''),
