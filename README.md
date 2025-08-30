@@ -31,13 +31,15 @@ For advanced document processing with RAG (Retrieval Augmented Generation) capab
 
 #### Supported Document Types
 
-The document processing system supports the following file formats:
+The document processing system supports the following file formats through a unified office processor:
 
 - **PDF Documents** (`.pdf`) - With full OCR support for image-based PDFs
-- **Microsoft Word Documents** - Both legacy (`.doc`) and modern (`.docx`) formats using UnstructuredLoader
+- **Microsoft Office Documents** - Word (`.doc`, `.docx`), PowerPoint (`.ppt`, `.pptx`), Excel (`.xls`, `.xlsx`)
+- **OpenDocument Formats** - Text (`.odt`), Presentation (`.odp`), Spreadsheet (`.ods`)
 - **Rich Text Format** (`.rtf`) - RTF documents with smart detection for RTF content in `.doc` files
-- **Text Files** (`.txt`, `.md`, `.text`) - Plain text and Markdown documents
 - **Web Archive Files** (`.mht`, `.mhtml`) - MHTML web archive documents
+- **eBooks** (`.epub`) - Electronic publication format
+- **Text Files** (`.txt`, `.md`, `.text`) - Plain text and Markdown documents
 
 #### System Requirements
 
@@ -46,12 +48,7 @@ The document processing system supports the following file formats:
   - **Ubuntu/Debian**: `sudo apt-get install tesseract-ocr`
   - **Windows**: Download from [GitHub releases](https://github.com/UB-Mannheim/tesseract/wiki) or use `choco install tesseract`
 
-- **Pandoc** - Required for RTF document processing
-  - **macOS**: `brew install pandoc`
-  - **Ubuntu/Debian**: `sudo apt-get install pandoc`
-  - **Windows**: Download from [pandoc.org](https://pandoc.org/installing.html) or use `choco install pandoc`
-
-- **LibreOffice** - Required for legacy Microsoft Word (`.doc`) file processing
+- **LibreOffice** - Required for comprehensive office document processing (Word, PowerPoint, Excel, OpenDocument formats)
   - **macOS**: `brew install --cask libreoffice`
   - **Ubuntu/Debian**: `sudo apt-get install libreoffice`
   - **Windows**: Download from [LibreOffice.org](https://www.libreoffice.org/download/download-libreoffice/) or use `choco install libreoffice`
@@ -64,14 +61,14 @@ The document processing system supports the following file formats:
 **Python Dependencies** (installed automatically):
 - `pytesseract>=0.3.13` - Python wrapper for Tesseract OCR
 - `PyMuPDF>=1.23.0` - PDF processing with OCR support
-- `unstructured>=0.18.14` - Document parsing with LibreOffice backend
+- `unstructured[all-docs]>=0.18.14` - Comprehensive document parsing for all office formats
 - `python-magic>=0.4.27` - File type detection using libmagic
 
 **Notes**: 
 - Without Tesseract: PDFs process but no OCR on image-based content
-- Without Pandoc: RTF files will fail to process
-- Without LibreOffice: Legacy .doc files will fail (modern .docx still works)
+- Without LibreOffice: Office document processing will fail (Word, PowerPoint, Excel, OpenDocument formats)
 - Without libmagic: File type detection relies on extensions, may show warnings
+- All office formats are now processed through a unified processor with format-specific optimization
 
 ### Development Dependencies
 

@@ -103,7 +103,9 @@ This is a sophisticated Python file monitoring and processing application with p
 
 **RAG Store Components (`src/rag_store/`)**:
 - `ProcessorRegistry`: Multi-format document processor factory
-- Specialized processors: PDF (PyMuPDF with OCR), RTF (UnstructuredRTF), Word (UnstructuredLoader), MHT/MHTML (Unstructured), Text/Markdown
+- Unified OfficeProcessor: Comprehensive support for Microsoft Office (Word, PowerPoint, Excel), OpenDocument formats (ODT, ODP, ODS), RTF, Web archives, and eBooks using `unstructured[all-docs]`
+- PDF Processor: PyMuPDF with OCR support for image-based PDFs
+- Text Processor: Plain text and Markdown document processing
 - Smart file detection: Automatically detects RTF content in .doc files and routes to appropriate processor
 - ChromaDB integration with collection management
 - Support for OpenAI and Google embedding providers
@@ -171,22 +173,8 @@ GOOGLE_API_KEY=your_key_here  # if using Google
 
 The application requires the following system dependencies for full document processing capabilities:
 
-#### RTF Processing
-**macOS (using Homebrew):**
-```bash
-brew install pandoc
-```
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install pandoc
-```
-
-**Windows:**
-- Install pandoc from https://pandoc.org/installing.html
-- Or use chocolatey: `choco install pandoc`
-
-#### Legacy Microsoft Word (.doc) Processing
+#### Office Document Processing
+Comprehensive support for Microsoft Office, OpenDocument, and related formats.
 **macOS (using Homebrew):**
 ```bash
 brew install --cask libreoffice
@@ -224,7 +212,9 @@ tesseract --version
 ```
 
 ### Smart File Processing Features
-- **RTF Detection**: Automatically detects RTF content in files with `.doc` extensions and routes to appropriate processor
+- **RTF Detection**: Automatically detects RTF content in files with `.doc` extensions and routes to unified office processor
+- **Format-Specific Optimization**: Unified office processor applies format-specific chunking strategies (Word: 1000/150, PowerPoint: 800/120, Excel: 1200/180, etc.)
+- **Comprehensive Office Support**: Single processor handles Word, PowerPoint, Excel, OpenDocument, RTF, Web archives, and eBooks
 - **OCR Processing**: Automatically applies OCR to PDF pages with no text content when tesseract is available
 
 ## Development Notes

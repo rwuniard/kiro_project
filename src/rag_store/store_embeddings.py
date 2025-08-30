@@ -17,17 +17,15 @@ try:
     from .document_processor import ProcessorRegistry
     from .logging_config import get_logger
     from .pdf_processor import PDFProcessor
-    from .rtf_processor import RTFProcessor
+    from .office_processor import OfficeProcessor
     from .text_processor import TextProcessor
-    from .word_processor import WordProcessor
 except ImportError:
     # Fallback for direct execution
     from document_processor import ProcessorRegistry
     from logging_config import get_logger
     from pdf_processor import PDFProcessor
-    from rtf_processor import RTFProcessor
+    from office_processor import OfficeProcessor
     from text_processor import TextProcessor
-    from word_processor import WordProcessor
 
 # Load .env from the same directory as this script
 load_dotenv(Path(__file__).parent / ".env")
@@ -122,15 +120,14 @@ def get_document_processor_registry() -> ProcessorRegistry:
     Initialize and return a document processor registry with all supported processors.
 
     Returns:
-        ProcessorRegistry configured with PDF, RTF, Text, and Word processors
+        ProcessorRegistry configured with PDF, Text, and Office processors
     """
     registry = ProcessorRegistry()
 
     # Register all available processors
     registry.register_processor(PDFProcessor())
-    registry.register_processor(RTFProcessor())
     registry.register_processor(TextProcessor())
-    registry.register_processor(WordProcessor())
+    registry.register_processor(OfficeProcessor())
 
     return registry
 
