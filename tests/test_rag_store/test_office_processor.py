@@ -38,7 +38,7 @@ class TestOfficeProcessor(unittest.TestCase):
         # Test supported extensions
         expected_extensions = {
             ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
-            ".odt", ".odp", ".ods", ".rtf", ".mht", ".mhtml", ".epub"
+            ".odt", ".odp", ".ods", ".rtf", ".epub"
         }
         self.assertEqual(processor.supported_extensions, expected_extensions)
         
@@ -59,7 +59,7 @@ class TestOfficeProcessor(unittest.TestCase):
         test_files = [
             "test.docx", "test.doc", "test.pptx", "test.ppt",
             "test.xlsx", "test.xls", "test.odt", "test.odp",
-            "test.ods", "test.rtf", "test.mht", "test.mhtml", "test.epub"
+            "test.ods", "test.rtf", "test.epub"
         ]
         
         for filename in test_files:

@@ -32,7 +32,8 @@ class TestDocumentProcessingWorkflow:
              patch('src.core.rag_store_processor.ensure_data_directory') as mock_ensure_dir, \
              patch('src.core.rag_store_processor.PDFProcessor'), \
              patch('src.core.rag_store_processor.TextProcessor'), \
-             patch('src.core.rag_store_processor.WordProcessor'):
+             patch('src.core.rag_store_processor.OfficeProcessor'), \
+             patch('src.core.rag_store_processor.MHTProcessor'):
             
             # Setup mocks
             mock_registry = Mock()
@@ -283,7 +284,7 @@ class TestDocumentProcessingWorkflow:
         file_types = [
             ('.pdf', 'PDFProcessor', b'PDF content'),
             ('.txt', 'TextProcessor', b'Text content'),
-            ('.docx', 'WordProcessor', b'Word content')
+            ('.docx', 'OfficeProcessor', b'Word content')
         ]
         
         for extension, processor_name, content in file_types:

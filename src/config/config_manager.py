@@ -174,6 +174,28 @@ class DocumentProcessingConfig:
             chroma_collection_name=os.getenv("CHROMA_COLLECTION_NAME")
         )
     
+    @classmethod
+    def from_config_dict(cls, config: Dict[str, str]) -> 'DocumentProcessingConfig':
+        """Create DocumentProcessingConfig from configuration dictionary."""
+        # Parse port with error handling
+        try:
+            chroma_port = int(config.get("CHROMA_SERVER_PORT", "8000"))
+        except ValueError:
+            chroma_port = 8000
+        
+        return cls(
+            processor_type=config.get("DOCUMENT_PROCESSOR_TYPE", "rag_store"),
+            enable_processing=config.get("ENABLE_DOCUMENT_PROCESSING", "true").lower() in ("true", "1", "yes", "on"),
+            google_api_key=config.get("GOOGLE_API_KEY"),
+            openai_api_key=config.get("OPENAI_API_KEY"),
+            chroma_db_path=config.get("CHROMA_DB_PATH"),
+            model_vendor=config.get("MODEL_VENDOR", "google").lower(),
+            chroma_client_mode=config.get("CHROMA_CLIENT_MODE", "embedded").lower(),
+            chroma_server_host=config.get("CHROMA_SERVER_HOST", "localhost"),
+            chroma_server_port=chroma_port,
+            chroma_collection_name=config.get("CHROMA_COLLECTION_NAME")
+        )
+    
     def get_api_key_for_vendor(self) -> Optional[str]:
         """Get the appropriate API key for the configured model vendor."""
         if self.model_vendor == "google":
@@ -288,8 +310,8 @@ class ConfigManager:
     def validate_config(self, config: Dict[str, str]) -> bool:
         """Validate configuration dictionary and return True if valid."""
         try:
-            # Create document processing config from environment
-            doc_processing_config = DocumentProcessingConfig.from_environment()
+            # Create document processing config from provided config dictionary
+            doc_processing_config = DocumentProcessingConfig.from_config_dict(config)
             
             app_config = AppConfig(
                 source_folder=config.get('SOURCE_FOLDER', ''),

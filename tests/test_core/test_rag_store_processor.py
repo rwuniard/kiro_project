@@ -66,13 +66,13 @@ class TestRAGStoreProcessor:
         mock_ensure_dir.return_value = Path(temp_dir) / "chroma"
         return mock_registry_instance
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_initialize_success_google(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_initialize_success_google(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test successful initialization with Google model vendor."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -89,13 +89,13 @@ class TestRAGStoreProcessor:
         mock_load_model.assert_called_once()
         mock_ensure_dir.assert_called_once()
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_initialize_success_openai(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_initialize_success_openai(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test successful initialization with OpenAI model vendor."""
         config = {
             "model_vendor": "openai",
@@ -177,13 +177,13 @@ class TestRAGStoreProcessor:
         result = self.processor.is_supported_file(test_file)
         assert result is False
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_is_supported_file_initialized(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_is_supported_file_initialized(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test is_supported_file when initialized."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -212,13 +212,13 @@ class TestRAGStoreProcessor:
         assert "not initialized" in result.error_message
         assert result.error_type == "initialization_error"
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_process_document_unsupported_file(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_process_document_unsupported_file(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test process_document with unsupported file type."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         mock_registry_instance.get_processor_for_file.return_value = None
@@ -243,13 +243,13 @@ class TestRAGStoreProcessor:
             test_file.unlink()
     
     @patch('src.core.rag_store_processor.store_to_chroma')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_process_document_success(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word, mock_store_chroma):
+    def test_process_document_success(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office, mock_store_chroma):
         """Test successful document processing."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -285,13 +285,13 @@ class TestRAGStoreProcessor:
         finally:
             test_file.unlink()
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_process_document_empty_document(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_process_document_empty_document(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test process_document with empty document (no content extracted)."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -318,13 +318,13 @@ class TestRAGStoreProcessor:
         finally:
             test_file.unlink()
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_process_document_processing_failure(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_process_document_processing_failure(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test process_document with processing failure."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -357,13 +357,13 @@ class TestRAGStoreProcessor:
         result = self.processor.get_supported_extensions()
         assert result == set()
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_get_supported_extensions_initialized(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_get_supported_extensions_initialized(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test get_supported_extensions when initialized."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         mock_registry_instance.get_supported_extensions.return_value = {'.pdf', '.txt', '.docx'}
@@ -374,13 +374,13 @@ class TestRAGStoreProcessor:
         result = self.processor.get_supported_extensions()
         assert result == {'.pdf', '.txt', '.docx'}
     
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_cleanup(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word):
+    def test_cleanup(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office):
         """Test cleanup method."""
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
         
@@ -399,16 +399,15 @@ class TestRAGStoreProcessor:
         """Test get_processor_name method."""
         assert self.processor.get_processor_name() == "RAGStoreProcessor"
 
-    @patch('src.core.rag_store_processor.RTFProcessor')
     @patch('src.core.rag_store_processor.MHTProcessor')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.store_to_chroma')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_metadata_path_update_with_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+    def test_metadata_path_update_with_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_office, mock_mht):
         """Test that metadata is updated with destination path when file manager is provided."""
         # Setup mocks for successful initialization
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
@@ -461,16 +460,15 @@ class TestRAGStoreProcessor:
             # Cleanup
             test_file.unlink()
 
-    @patch('src.core.rag_store_processor.RTFProcessor')
     @patch('src.core.rag_store_processor.MHTProcessor')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.store_to_chroma')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_metadata_path_update_without_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+    def test_metadata_path_update_without_file_manager(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_office, mock_mht):
         """Test that metadata retains original path when no file manager is provided."""
         # Setup mocks for successful initialization  
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
@@ -508,16 +506,15 @@ class TestRAGStoreProcessor:
             # Cleanup
             test_file.unlink()
 
-    @patch('src.core.rag_store_processor.RTFProcessor')
     @patch('src.core.rag_store_processor.MHTProcessor')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.store_to_chroma')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_metadata_path_update_file_manager_error(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf):
+    def test_metadata_path_update_file_manager_error(self, mock_registry, mock_load_model, mock_ensure_dir, mock_store_chroma, mock_pdf, mock_text, mock_office, mock_mht):
         """Test that processing continues when file manager throws an error during path calculation."""
         # Setup mocks for successful initialization
         mock_registry_instance = self._setup_successful_mocks(mock_registry, mock_load_model, mock_ensure_dir)
@@ -642,15 +639,14 @@ class TestRAGStoreProcessor:
         assert processor.chroma_server_port == 9000
 
     @patch('src.core.rag_store_processor.store_to_chroma')
-    @patch('src.core.rag_store_processor.RTFProcessor')
     @patch('src.core.rag_store_processor.MHTProcessor')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_rag_store_processor_process_passes_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf, mock_store_chroma):
+    def test_rag_store_processor_process_passes_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office, mock_mht, mock_store_chroma):
         """Test that RAGStoreProcessor passes collection name to store_to_chroma."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = {
@@ -702,15 +698,14 @@ class TestRAGStoreProcessor:
                 test_file.unlink()
 
     @patch('src.core.rag_store_processor.store_to_chroma')
-    @patch('src.core.rag_store_processor.RTFProcessor')
     @patch('src.core.rag_store_processor.MHTProcessor')
-    @patch('src.core.rag_store_processor.WordProcessor')
+    @patch('src.core.rag_store_processor.OfficeProcessor')
     @patch('src.core.rag_store_processor.TextProcessor')
     @patch('src.core.rag_store_processor.PDFProcessor')
     @patch('src.core.rag_store_processor.ensure_data_directory')
     @patch('src.core.rag_store_processor.load_embedding_model')
     @patch('src.core.rag_store_processor.ProcessorRegistry')
-    def test_rag_store_processor_process_without_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_word, mock_mht, mock_rtf, mock_store_chroma):
+    def test_rag_store_processor_process_without_collection_name(self, mock_registry, mock_load_model, mock_ensure_dir, mock_pdf, mock_text, mock_office, mock_mht, mock_store_chroma):
         """Test that RAGStoreProcessor handles missing collection name gracefully."""
         with tempfile.TemporaryDirectory() as temp_dir:
             config = {

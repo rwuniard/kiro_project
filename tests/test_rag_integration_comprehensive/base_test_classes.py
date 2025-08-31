@@ -10,6 +10,7 @@ import sys
 import time
 import tempfile
 import threading
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 from unittest.mock import Mock, MagicMock, patch
@@ -185,11 +186,24 @@ class BaseRAGIntegrationTest:
         self.original_env_vars = {}
         env_vars_to_backup = [
             'SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER',
-            'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ENABLE_DOCUMENT_PROCESSING'
+            'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ENABLE_DOCUMENT_PROCESSING',
+            'DOCUMENT_PROCESSOR_TYPE', 'MODEL_VENDOR', 'CHROMA_CLIENT_MODE',
+            'CHROMA_DB_PATH', 'CHROMA_SERVER_HOST', 'CHROMA_SERVER_PORT'
         ]
         for var in env_vars_to_backup:
             if var in os.environ:
                 self.original_env_vars[var] = os.environ[var]
+        
+        # Clear any existing environment variables that might interfere with tests
+        env_vars_to_clear = [
+            'SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER',
+            'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ENABLE_DOCUMENT_PROCESSING',
+            'DOCUMENT_PROCESSOR_TYPE', 'MODEL_VENDOR', 'CHROMA_CLIENT_MODE',
+            'CHROMA_DB_PATH', 'CHROMA_SERVER_HOST', 'CHROMA_SERVER_PORT'
+        ]
+        for var in env_vars_to_clear:
+            if var in os.environ:
+                del os.environ[var]
     
     def teardown_method(self):
         """Clean up after each test."""
@@ -219,7 +233,9 @@ class BaseRAGIntegrationTest:
         # Remove any environment variables that weren't originally set
         env_vars_to_clean = [
             'SOURCE_FOLDER', 'SAVED_FOLDER', 'ERROR_FOLDER',
-            'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ENABLE_DOCUMENT_PROCESSING'
+            'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'ENABLE_DOCUMENT_PROCESSING',
+            'DOCUMENT_PROCESSOR_TYPE', 'MODEL_VENDOR', 'CHROMA_CLIENT_MODE',
+            'CHROMA_DB_PATH', 'CHROMA_SERVER_HOST', 'CHROMA_SERVER_PORT'
         ]
         for var in env_vars_to_clean:
             if var not in self.original_env_vars and var in os.environ:
@@ -242,6 +258,17 @@ class BaseRAGIntegrationTest:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write(f"ENABLE_DOCUMENT_PROCESSING={str(enable_document_processing).lower()}\n")
+            
+            # Required document processing configuration
+            if enable_document_processing:
+                f.write("DOCUMENT_PROCESSOR_TYPE=rag_store\n")
+                f.write("MODEL_VENDOR=google\n")
+                f.write("CHROMA_CLIENT_MODE=embedded\n")
+                f.write(f"CHROMA_DB_PATH={self.temp_dir}/chroma_db\n")
+                
+                # Default API key if not provided in extra_vars
+                if "GOOGLE_API_KEY" not in extra_vars:
+                    f.write("GOOGLE_API_KEY=AIzaSyCtest1234567890123456789012345678\n")
             
             # Add extra variables
             for key, value in extra_vars.items():
@@ -380,7 +407,7 @@ class MockRAGStoreComponents:
         mock_registry.get_all_processors.return_value = {
             'TextProcessor': Mock(),
             'PDFProcessor': Mock(),
-            'WordProcessor': Mock()
+            'OfficeProcessor': Mock()
         }
         
         def mock_get_processor_for_file(file_path):
@@ -394,13 +421,13 @@ class MockRAGStoreComponents:
                 return processor
             elif file_path.suffix.lower() in {'.docx', '.doc'}:
                 processor = Mock()
-                processor.processor_name = 'WordProcessor'
+                processor.processor_name = 'OfficeProcessor'
                 return processor
             return None
         
         mock_registry.get_processor_for_file = mock_get_processor_for_file
         
-        def mock_process_document(file_path):
+        def mock_process_document_impl(file_path):
             # Simulate document processing
             content = file_path.read_text() if file_path.exists() else ""
             if not content.strip():
@@ -420,14 +447,20 @@ class MockRAGStoreComponents:
             
             return chunks
         
-        mock_registry.process_document = mock_process_document
+        # Create a Mock object that can track calls
+        mock_registry.process_document = Mock(side_effect=mock_process_document_impl)
         return mock_registry
     
     @staticmethod
     def mock_embedding_model():
         """Create mock embedding model."""
         mock_model = Mock()
-        mock_model.embed_documents.return_value = [[0.1, 0.2, 0.3]] * 10  # Mock embeddings
+        
+        def mock_embed_documents(documents):
+            """Return embeddings matching the number of input documents."""
+            return [[0.1, 0.2, 0.3]] * len(documents)
+        
+        mock_model.embed_documents = mock_embed_documents
         return mock_model
     
     @staticmethod

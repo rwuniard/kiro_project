@@ -27,13 +27,13 @@ class TestRAGStoreIntegration:
         from src.rag_store.document_processor import ProcessorRegistry
         from src.rag_store.pdf_processor import PDFProcessor
         from src.rag_store.text_processor import TextProcessor
-        from src.rag_store.word_processor import WordProcessor
+        from src.rag_store.office_processor import OfficeProcessor
         
         # Create registry and register processors
         registry = ProcessorRegistry()
         registry.register_processor(PDFProcessor())
         registry.register_processor(TextProcessor())
-        registry.register_processor(WordProcessor())
+        registry.register_processor(OfficeProcessor())
         
         # Verify registry functionality
         extensions = registry.get_supported_extensions()
@@ -46,7 +46,7 @@ class TestRAGStoreIntegration:
         assert len(processors) >= 3
         assert 'PDFProcessor' in processors
         assert 'TextProcessor' in processors
-        assert 'WordProcessor' in processors
+        assert 'OfficeProcessor' in processors
     
     def test_embedding_model_integration(self):
         """Test embedding model integration."""

@@ -125,10 +125,16 @@ class TestConfigurationValidationErrorScenarios:
     def test_dependency_validation_multiple_missing_packages(self):
         """Test dependency validation with multiple missing packages."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            # Create saved and error directories for the test
+            saved_dir = Path(temp_dir) / "saved"
+            error_dir = Path(temp_dir) / "error"
+            saved_dir.mkdir(exist_ok=True)
+            error_dir.mkdir(exist_ok=True)
+            
             config_dict = {
                 "SOURCE_FOLDER": temp_dir,
-                "SAVED_FOLDER": "/saved",
-                "ERROR_FOLDER": "/error",
+                "SAVED_FOLDER": str(saved_dir),
+                "ERROR_FOLDER": str(error_dir),
                 "ENABLE_DOCUMENT_PROCESSING": "true",
                 "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
                 "MODEL_VENDOR": "google",
@@ -137,10 +143,9 @@ class TestConfigurationValidationErrorScenarios:
             
             config_manager = ConfigManager(env_file=None)
             
-            try:
-                config_manager.validate_config(config_dict)
-            except ConfigurationValidationError:
-                pass  # Expected due to folder validation
+            # Validate config successfully first
+            result = config_manager.validate_config(config_dict)
+            assert result is True
             
             # Mock multiple missing imports
             original_import = __builtins__['__import__']
@@ -160,10 +165,16 @@ class TestConfigurationValidationErrorScenarios:
     def test_openai_vendor_missing_dependencies(self):
         """Test dependency validation for OpenAI vendor with missing packages."""
         with tempfile.TemporaryDirectory() as temp_dir:
+            # Create saved and error directories for the test
+            saved_dir = Path(temp_dir) / "saved"
+            error_dir = Path(temp_dir) / "error"
+            saved_dir.mkdir(exist_ok=True)
+            error_dir.mkdir(exist_ok=True)
+            
             config_dict = {
                 "SOURCE_FOLDER": temp_dir,
-                "SAVED_FOLDER": "/saved",
-                "ERROR_FOLDER": "/error",
+                "SAVED_FOLDER": str(saved_dir),
+                "ERROR_FOLDER": str(error_dir),
                 "ENABLE_DOCUMENT_PROCESSING": "true",
                 "OPENAI_API_KEY": "sk-1234567890abcdef1234567890abcdef",
                 "MODEL_VENDOR": "openai",
@@ -172,10 +183,9 @@ class TestConfigurationValidationErrorScenarios:
             
             config_manager = ConfigManager(env_file=None)
             
-            try:
-                config_manager.validate_config(config_dict)
-            except ConfigurationValidationError:
-                pass  # Expected due to folder validation
+            # Validate config successfully first
+            result = config_manager.validate_config(config_dict)
+            assert result is True
             
             # Mock missing OpenAI import
             original_import = __builtins__['__import__']

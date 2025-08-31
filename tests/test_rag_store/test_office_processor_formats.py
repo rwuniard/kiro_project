@@ -120,27 +120,12 @@ class TestOfficeProcessorFormats(unittest.TestCase):
         description = self.processor._get_document_format_description(epub_file)
         self.assertEqual(description, "Electronic Publication")
 
-    def test_web_archive_formats(self):
-        """Test web archive format configurations."""
-        # Test MHT format
-        mht_file = Path(self.temp_dir) / "webpage.mht"
-        chunk_size, chunk_overlap = self.processor.get_processing_params(file_path=mht_file)
-        self.assertEqual(chunk_size, 1200)
-        self.assertEqual(chunk_overlap, 180)
-        
-        description = self.processor._get_document_format_description(mht_file)
-        self.assertEqual(description, "Web Archive (MHT)")
-        
-        # Test MHTML format
-        mhtml_file = Path(self.temp_dir) / "webpage.mhtml"
-        description = self.processor._get_document_format_description(mhtml_file)
-        self.assertEqual(description, "Web Archive (MHTML)")
 
     def test_all_supported_extensions_covered(self):
         """Test that all supported extensions have proper configuration."""
         expected_extensions = {
             ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
-            ".odt", ".odp", ".ods", ".rtf", ".mht", ".mhtml", ".epub"
+            ".odt", ".odp", ".ods", ".rtf", ".epub"
         }
         
         # Verify all extensions are in supported_extensions
@@ -316,7 +301,6 @@ class TestOfficeProcessorPerformance(unittest.TestCase):
             ("test.odp", 800, 120),
             ("test.ods", 1200, 180),
             ("test.rtf", 800, 120),
-            ("test.mht", 1200, 180),
             ("test.epub", 1000, 150)
         ]
         
