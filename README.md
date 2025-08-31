@@ -581,6 +581,7 @@ The test suite has been recently updated and improved to ensure reliability and 
 - **Improved Test Isolation**: Enhanced environment variable management and cleanup for better test isolation
 - **Fixed File Monitoring Tests**: Corrected assertions for file monitoring integration tests
 - **Resolved Processor Initialization Tests**: Fixed logic for testing initialization failure scenarios
+- **Eliminated SWIG Deprecation Warnings**: Fixed PDFProcessor to use pypdf as primary processor, eliminating Python 3.12 compatibility warnings
 
 ### Coverage Report
 
