@@ -145,7 +145,7 @@ class TestConfigurationValidationErrorScenarios:
             # Mock multiple missing imports
             original_import = __builtins__['__import__']
             def mock_import(name, *args, **kwargs):
-                if name in ['chromadb', 'google.generativeai', 'pypdf2', 'PyPDF2', 'python_docx', 'docx']:
+                if name in ['chromadb', 'google.generativeai', 'pypdf', 'python_docx', 'docx']:
                     raise ImportError(f"No module named '{name}'")
                 return original_import(name, *args, **kwargs)
             

@@ -393,12 +393,9 @@ class ConfigManager:
         
         # Check if document processing libraries are available
         try:
-            import pypdf2
+            import pypdf
         except ImportError:
-            try:
-                import PyPDF2
-            except ImportError:
-                errors.append("PDF processing library is not installed. Install with: pip install PyPDF2")
+            errors.append("PDF processing library is not installed. Install with: pip install pypdf")
         
         try:
             import python_docx

@@ -102,14 +102,15 @@ This is a sophisticated Python file monitoring and processing application with p
 - `ErrorHandler`: Enhanced error log creation with filename preservation and detailed context
 
 **RAG Store Components (`src/rag_store/`)**:
-- `ProcessorRegistry`: Multi-format document processor factory
-- Unified OfficeProcessor: Comprehensive support for Microsoft Office (Word, PowerPoint, Excel), OpenDocument formats (ODT, ODP, ODS), RTF, Web archives, and eBooks using `unstructured[all-docs]`
-- PDF Processor: PyMuPDF with OCR support for image-based PDFs
-- Text Processor: Plain text and Markdown document processing
-- Smart file detection: Automatically detects RTF content in .doc files and routes to appropriate processor
-- ChromaDB integration with collection management
-- Support for OpenAI and Google embedding providers
-- Standalone CLI interface for direct document processing
+- `ProcessorRegistry`: Multi-format document processor factory with automatic file type routing
+- **Office Processor**: Unified processor for Microsoft Office (Word, PowerPoint, Excel), OpenDocument formats (ODT, ODP, ODS), RTF, and eBooks using `unstructured[all-docs]`
+- **MHT Processor**: Dedicated processor for MHT/MHTML web archives with MIME multipart parsing and BeautifulSoup HTML extraction
+- **PDF Processor**: PyMuPDF with OCR support for image-based PDFs using Tesseract
+- **Text Processor**: Plain text and Markdown document processing
+- **Smart Content Detection**: RTF content detection in .doc files with automatic processor routing
+- **ChromaDB Integration**: Vector storage with collection management and embedding provider support
+- **Embedding Providers**: OpenAI and Google embedding model support
+- **Standalone CLI**: Direct document processing interface
 
 ### Data Flow Architecture
 
@@ -214,7 +215,8 @@ tesseract --version
 ### Smart File Processing Features
 - **RTF Detection**: Automatically detects RTF content in files with `.doc` extensions and routes to unified office processor
 - **Format-Specific Optimization**: Unified office processor applies format-specific chunking strategies (Word: 1000/150, PowerPoint: 800/120, Excel: 1200/180, etc.)
-- **Comprehensive Office Support**: Single processor handles Word, PowerPoint, Excel, OpenDocument, RTF, Web archives, and eBooks
+- **Comprehensive Office Support**: Unified processor handles Word, PowerPoint, Excel, OpenDocument, RTF, and eBooks
+- **Dedicated MHT Processing**: Specialized processor for MHT/MHTML web archives with MIME parsing
 - **OCR Processing**: Automatically applies OCR to PDF pages with no text content when tesseract is available
 
 ## Development Notes

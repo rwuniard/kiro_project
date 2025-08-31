@@ -523,12 +523,9 @@ tests/
 Run the complete test suite:
 
 ```bash
-# Using uv with convenient scripts (recommended):
-uv run test                    # Run all tests
-uv run test-cov               # Run all tests with HTML coverage report
-
-# Using uv with full pytest commands:
+# Using uv with pytest commands:
 uv run pytest                # Run all tests
+uv run pytest --cov=src --cov-report=html  # Run all tests with HTML coverage report
 uv run pytest -v             # Run with verbose output
 
 # Run tests by category:
@@ -551,7 +548,7 @@ pytest tests/test_core/test_file_processor.py
 pytest --cov=src --cov-report=html
 ```
 
-The `uv run test-cov` command will generate an HTML coverage report in the `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view detailed coverage information.
+The coverage command will generate an HTML coverage report in the `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view detailed coverage information.
 
 ### Expected Test Output
 
@@ -579,10 +576,7 @@ tests/test_rag_store/test_document_processor.py ............... [ 80%]
 Generate HTML coverage report:
 
 ```bash
-# Using convenient script (recommended):
-uv run test-cov
-
-# Or using full pytest command:
+# Run tests with coverage:
 uv run pytest --cov=src --cov-report=html
 
 # Alternative (if virtual environment is activated):
@@ -639,11 +633,10 @@ kiro-project/
 │   │   ├── file_detection.py        # Smart file type detection
 │   │   ├── logging_config.py        # RAG-specific logging
 │   │   ├── pdf_processor.py         # PDF processing with OCR
-│   │   ├── rtf_processor.py         # RTF document processing
+│   │   ├── office_processor.py      # Unified Office document processing (Word, PowerPoint, Excel, RTF, eBooks)
+│   │   ├── mht_processor.py         # MHT/MHTML web archive processing with MIME parsing
 │   │   ├── store_embeddings.py      # ChromaDB integration with client-server support
-│   │   ├── text_processor.py        # Text and Markdown processing
-│   │   ├── word_processor.py        # Word document processing (.doc/.docx)
-│   │   └── mht_processor.py         # MHTML web archive processing
+│   │   └── text_processor.py        # Text and Markdown processing
 │   └── services/           # Supporting services
 │       ├── __init__.py
 │       ├── error_handler.py          # Enhanced error handling and logging
@@ -676,11 +669,11 @@ kiro-project/
     │   ├── test_document_processor.py
     │   ├── test_file_detection.py
     │   ├── test_pdf_processor.py
-    │   ├── test_rtf_processor.py
+    │   ├── test_office_processor.py
+    │   ├── test_office_processor_formats.py
+    │   ├── test_mht_processor.py
     │   ├── test_store_embeddings.py
-    │   ├── test_text_processor.py
-    │   ├── test_word_processor.py
-    │   └── test_mht_processor.py
+    │   └── test_text_processor.py
     └── test_rag_integration_comprehensive/  # Comprehensive integration tests
         ├── __init__.py
         ├── base_test_classes.py
@@ -709,10 +702,9 @@ kiro-project/
 
 - **ProcessorRegistry** (`src/rag_store/document_processor.py`): Multi-format document processor factory with smart file detection
 - **PDF Processor** (`src/rag_store/pdf_processor.py`): PDF processing with OCR support for image-based documents
-- **Word Processor** (`src/rag_store/word_processor.py`): Microsoft Word document processing (.doc/.docx) with legacy format support
-- **RTF Processor** (`src/rag_store/rtf_processor.py`): Rich Text Format processing with smart content detection
+- **Office Processor** (`src/rag_store/office_processor.py`): Unified processing for Microsoft Office (Word, PowerPoint, Excel), OpenDocument (ODT, ODP, ODS), RTF, and eBook formats with format-specific optimization
+- **MHT Processor** (`src/rag_store/mht_processor.py`): Dedicated MHT/MHTML web archive processing with MIME multipart parsing and BeautifulSoup HTML extraction
 - **Text Processor** (`src/rag_store/text_processor.py`): Plain text and Markdown document processing
-- **MHT Processor** (`src/rag_store/mht_processor.py`): MHTML web archive processing
 - **ChromaDB Integration** (`src/rag_store/store_embeddings.py`): Vector storage with embedded and client-server mode support
 
 ### Service Layer

@@ -23,6 +23,7 @@ try:
     from ..rag_store.pdf_processor import PDFProcessor
     from ..rag_store.text_processor import TextProcessor
     from ..rag_store.office_processor import OfficeProcessor
+    from ..rag_store.mht_processor import MHTProcessor
     from ..rag_store.store_embeddings import (
         ModelVendor,
         load_embedding_model,
@@ -36,6 +37,7 @@ except ImportError:
     from src.rag_store.pdf_processor import PDFProcessor
     from src.rag_store.text_processor import TextProcessor
     from src.rag_store.office_processor import OfficeProcessor
+    from src.rag_store.mht_processor import MHTProcessor
     from src.rag_store.store_embeddings import (
         ModelVendor,
         load_embedding_model,
@@ -158,6 +160,7 @@ class RAGStoreProcessor(DocumentProcessingInterface):
         self.registry.register_processor(PDFProcessor())
         self.registry.register_processor(TextProcessor())
         self.registry.register_processor(OfficeProcessor())
+        self.registry.register_processor(MHTProcessor())
         
         # Get registry info for logging
         try:

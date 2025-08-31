@@ -19,6 +19,7 @@ try:
     from .pdf_processor import PDFProcessor
     from .office_processor import OfficeProcessor
     from .text_processor import TextProcessor
+    from .mht_processor import MHTProcessor
 except ImportError:
     # Fallback for direct execution
     from document_processor import ProcessorRegistry
@@ -26,6 +27,7 @@ except ImportError:
     from pdf_processor import PDFProcessor
     from office_processor import OfficeProcessor
     from text_processor import TextProcessor
+    from mht_processor import MHTProcessor
 
 # Load .env from the same directory as this script
 load_dotenv(Path(__file__).parent / ".env")
@@ -128,6 +130,7 @@ def get_document_processor_registry() -> ProcessorRegistry:
     registry.register_processor(PDFProcessor())
     registry.register_processor(TextProcessor())
     registry.register_processor(OfficeProcessor())
+    registry.register_processor(MHTProcessor())
 
     return registry
 

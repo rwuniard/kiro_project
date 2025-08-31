@@ -51,8 +51,6 @@ class OfficeProcessor(DocumentProcessor):
             ".odt", ".odp", ".ods",
             # Rich Text Format
             ".rtf",
-            # Web archives
-            ".mht", ".mhtml",
             # eBooks
             ".epub"
         }
@@ -74,9 +72,6 @@ class OfficeProcessor(DocumentProcessor):
             ".ods": {"chunk_size": 1200, "chunk_overlap": 180},  # Like Excel
             # RTF: medium chunks for formatted text
             ".rtf": {"chunk_size": 800, "chunk_overlap": 120},
-            # Web archives: larger chunks for HTML content
-            ".mht": {"chunk_size": 1200, "chunk_overlap": 180},
-            ".mhtml": {"chunk_size": 1200, "chunk_overlap": 180},
             # eBooks: medium chunks for continuous text
             ".epub": {"chunk_size": 1000, "chunk_overlap": 150}
         }
@@ -89,9 +84,9 @@ class OfficeProcessor(DocumentProcessor):
     def file_type_description(self) -> str:
         """Return a human-readable description of supported file types."""
         return ("Office documents (Word, PowerPoint, Excel), "
-                "OpenDocument formats, RTF, Web archives, and eBooks "
+                "OpenDocument formats, RTF, and eBooks "
                 "(.doc, .docx, .ppt, .pptx, .xls, .xlsx, .odt, .odp, .ods, "
-                ".rtf, .mht, .mhtml, .epub)")
+                ".rtf, .epub)")
 
     def is_supported_file(self, file_path: Path) -> bool:
         """Check if the file is a supported office document format."""
@@ -314,9 +309,6 @@ class OfficeProcessor(DocumentProcessor):
         elif extension in [".xls", ".xlsx", ".ods"]:
             # Excel: table structure is important
             return ["\n\n", "\n", "\t", ". ", " ", ""]
-        elif extension in [".mht", ".mhtml"]:
-            # Web archives: HTML structure
-            return ["\n\n", "\n", ". ", " ", ""]
         elif extension == ".epub":
             # eBooks: chapter and paragraph breaks
             return ["\n\n\n", "\n\n", "\n", ". ", " ", ""]
@@ -339,8 +331,6 @@ class OfficeProcessor(DocumentProcessor):
             ".odp": "OpenDocument Presentation", 
             ".ods": "OpenDocument Spreadsheet",
             ".rtf": "Rich Text Format",
-            ".mht": "Web Archive (MHT)",
-            ".mhtml": "Web Archive (MHTML)",
             ".epub": "Electronic Publication"
         }
         

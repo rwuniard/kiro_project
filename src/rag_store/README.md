@@ -1,11 +1,11 @@
 # RAG Store - Document Ingestion Service
 
-A professional document processing and storage service for RAG (Retrieval-Augmented Generation) systems with **universal document processor interface**. Converts PDF, Word, MHT/MHTML, text, and markdown documents into searchable vector embeddings using ChromaDB.
+A professional document processing and storage service for RAG (Retrieval-Augmented Generation) systems with **universal document processor interface**. Converts PDF, Office documents, MHT/MHTML web archives, text, and markdown documents into searchable vector embeddings using ChromaDB.
 
 ## 🎯 Purpose
 
 RAG Store is the **ingestion microservice** that:
-- Processes PDF, Word, MHT/MHTML, text, and markdown documents using universal interface
+- Processes PDF, Office documents (Word, PowerPoint, Excel, OpenDocument, RTF, eBooks), MHT/MHTML web archives, text, and markdown documents using universal interface
 - Converts them into vector embeddings
 - Stores them in ChromaDB for semantic search
 - Optimizes chunking for better search quality
@@ -133,9 +133,12 @@ src/rag_store/data_source/
 
 Supported formats:
 - **PDF files** (`.pdf`) - Processed with PyMuPDF + OCR support + RecursiveCharacterTextSplitter
-- **Microsoft Word documents** (`.docx`, `.doc`) - Processed with UnstructuredLoader + RecursiveCharacterTextSplitter
-- **Rich Text Format** (`.rtf`) - Processed with UnstructuredRTFLoader + RecursiveCharacterTextSplitter  
-- **MHT/MHTML web archives** (`.mht`, `.mhtml`) - Processed with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter
+- **Office documents** - Processed with UnstructuredLoader + RecursiveCharacterTextSplitter
+  - Microsoft Office: `.docx`, `.doc`, `.pptx`, `.ppt`, `.xlsx`, `.xls`
+  - OpenDocument: `.odt`, `.odp`, `.ods`
+  - Rich Text Format: `.rtf`
+  - eBooks: `.epub`
+- **MHT/MHTML web archives** (`.mht`, `.mhtml`) - Processed with dedicated MIME parser + BeautifulSoup + RecursiveCharacterTextSplitter
 - **Text documents** (`.txt`, `.md`, `.text`) - Processed with TextLoader + CharacterTextSplitter
 
 ### 4. Run Document Ingestion
@@ -165,7 +168,7 @@ src/rag_store/
 │   └── *.md               # Markdown documents
 ├── document_processor.py   # Universal document processor interface
 ├── pdf_processor.py        # PDF processing and chunking
-├── word_processor.py       # Word document processing and chunking
+├── office_processor.py     # Unified Office document processing (Word, PowerPoint, Excel, RTF, eBooks)
 ├── mht_processor.py        # MHT/MHTML web archive processing
 ├── text_processor.py       # Text and markdown processing
 ├── logging_config.py       # Structured logging configuration
@@ -275,29 +278,39 @@ The structured logging is designed for:
   - **Page Tracking**: Maintains page numbers and document structure
   - **Enhanced Metadata**: Extraction method tracking (pymupdf_text, pymupdf_blocks, tesseract_ocr)
 
-### **Word Processor** (`word_processor.py`)
-- **Purpose**: Extract and chunk text from Microsoft Word documents
-- **Technology**: UnstructuredLoader + RecursiveCharacterTextSplitter
-- **Parameters**: 1000 chars with 150 overlap (balanced for Word content)
-- **Features**: Legacy .doc and modern .docx support, LibreOffice conversion for .doc files, metadata enhancement, error handling
+### **Office Processor** (`office_processor.py`)
+- **Purpose**: Unified processor for all office document formats with format-specific optimization
+- **Technology**: UnstructuredLoader with all-docs support + RecursiveCharacterTextSplitter
+- **Supported Formats**:
+  - Microsoft Office: Word (`.doc`, `.docx`), PowerPoint (`.ppt`, `.pptx`), Excel (`.xls`, `.xlsx`)
+  - OpenDocument: Text (`.odt`), Presentation (`.odp`), Spreadsheet (`.ods`)
+  - Rich Text Format (`.rtf`)
+  - eBooks (`.epub`)
+- **Format-Specific Parameters**:
+  - Word/ODT: 1000 chars with 150 overlap (balanced for structured text)
+  - PowerPoint/ODP: 800 chars with 120 overlap (optimized for slide content)
+  - Excel/ODS: 1200 chars with 180 overlap (larger chunks for tabular data)
+  - RTF: 800 chars with 120 overlap (medium chunks for formatted text)
+  - eBooks: 1000 chars with 150 overlap (continuous text)
+- **Features**: 
+  - RTF content detection in `.doc` files
+  - Format-specific text separators
+  - Comprehensive metadata with document format descriptions
+  - LibreOffice dependency for legacy formats
 
 ### **MHT Processor** (`mht_processor.py`)
-- **Purpose**: Extract and chunk text from MHT/MHTML web archive files with robust error handling
-- **Technology**: Dual-parser architecture with UnstructuredLoader + manual MIME parser fallback + RecursiveCharacterTextSplitter  
+- **Purpose**: Dedicated processor for MHT/MHTML web archive files with MIME multipart parsing
+- **Technology**: MIME email parser + BeautifulSoup HTML extraction + RecursiveCharacterTextSplitter
 - **Parameters**: 1200 chars with 180 overlap (optimized for HTML content)
 - **Features**: 
-  - **Primary Parser**: UnstructuredLoader with element mode and fast strategy
-  - **Fallback Parser**: Manual MIME email parser for problematic MHT files with email-style headers
-  - **HTML Text Extraction**: BeautifulSoup and regex-based conversion with proper entity decoding
-  - **Enhanced Metadata**: Extraction method tracking, title preservation, content type detection
-  - **Error Recovery**: Graceful fallback when UnstructuredLoader fails with FileType.UNK errors
-- **Troubleshooting**: Resolves issues with MHT files that have email-style headers causing UnstructuredLoader failures
+  - **MIME Multipart Parsing**: Python email library for proper MIME structure handling
+  - **HTML Text Extraction**: BeautifulSoup for clean HTML-to-text conversion
+  - **Encoding Support**: Multiple encoding detection (UTF-8, CP1252, ISO-8859-1, ASCII)
+  - **Fallback Processing**: Robust fallback for malformed MHT files
+  - **Enhanced Metadata**: Document format, original encoding, processor version tracking
+- **Architecture**: Standalone processor (no longer uses UnstructuredLoader due to FileType.UNK issues)
+- **Troubleshooting**: Resolves post-refactoring issues where UnstructuredLoader couldn't handle MHT MIME format
 
-### **RTF Processor** (`rtf_processor.py`)
-- **Purpose**: Extract and chunk text from Rich Text Format documents
-- **Technology**: UnstructuredRTFLoader + RecursiveCharacterTextSplitter
-- **Parameters**: 800 chars with 120 overlap (balanced for RTF content)
-- **Features**: RTF format support, smart .doc file detection (RTF content with .doc extension), metadata enhancement, requires Pandoc
 
 ### **Text Processor** (`text_processor.py`)
 - **Purpose**: Extract and chunk text from text and markdown files
@@ -336,35 +349,30 @@ The structured logging is designed for:
   - **High-Quality Processing**: 300 DPI rendering for optimal OCR accuracy
 - **Metadata**: Page numbers, extraction method (pymupdf_text/blocks/tesseract_ocr), processing details
 
-### **Word Processing**
-- **Loader**: UnstructuredLoader (with LibreOffice backend for .doc conversion)
+### **Office Document Processing**
+- **Loader**: UnstructuredLoader (with all-docs support)
 - **Splitter**: RecursiveCharacterTextSplitter
-- **Chunk Size**: 1000 characters
-- **Overlap**: 150 characters
-- **Separators**: Paragraphs, lines, words, characters
-- **Supported**: `.docx`, `.doc` files (requires LibreOffice for legacy .doc)
+- **Format-Specific Parameters**:
+  - **Word/ODT**: 1000 chars, 150 overlap, paragraph separators
+  - **PowerPoint/ODP**: 800 chars, 120 overlap, slide-break separators
+  - **Excel/ODS**: 1200 chars, 180 overlap, table-structure separators
+  - **RTF**: 800 chars, 120 overlap, formatted-text separators
+  - **eBooks**: 1000 chars, 150 overlap, chapter-break separators
+- **Supported**: `.docx`, `.doc`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.odt`, `.odp`, `.ods`, `.rtf`, `.epub`
+- **Features**: RTF content detection, format-specific chunking strategies, comprehensive metadata
 
 ### **MHT/MHTML Processing**
-- **Primary Loader**: UnstructuredLoader (element mode, fast strategy)
-- **Fallback Parser**: Python email library for MIME structure parsing
-- **Text Extractor**: BeautifulSoup with regex fallback for HTML-to-text conversion
+- **Parser**: Python email library for MIME multipart parsing
+- **Text Extractor**: BeautifulSoup for HTML-to-text conversion
+- **Encoding Detection**: Multi-encoding support (UTF-8, CP1252, ISO-8859-1, ASCII)
 - **Splitter**: RecursiveCharacterTextSplitter
 - **Chunk Size**: 1200 characters
 - **Overlap**: 180 characters (15% overlap ratio)
-- **Separators**: HTML-friendly separators (`\n\n`, `\n`, ` `, `""`)
+- **Separators**: Web content separators (`\n\n`, `\n`, `. `, ` `, `""`)
 - **Supported**: `.mht`, `.mhtml` files
-- **Error Handling**: Automatic fallback for files with email-style headers that cause UnstructuredLoader FileType.UNK errors
-- **Metadata**: Extraction method, title preservation, content type, source format
+- **Fallback Methods**: Multiple fallback strategies for malformed files
+- **Metadata**: Document format, original encoding, processor version, chunk tracking
 
-### **RTF Processing**
-- **Loader**: UnstructuredRTFLoader (LangChain Community)
-- **Splitter**: RecursiveCharacterTextSplitter
-- **Chunk Size**: 800 characters
-- **Overlap**: 120 characters (15% overlap ratio)
-- **Separators**: Paragraphs, lines, words, characters
-- **Supported**: `.rtf` files
-- **Smart Detection**: Automatically detects RTF content in files with `.doc` extensions
-- **Requirements**: Pandoc system dependency for RTF parsing
 
 ### **Text Processing** 
 - **Loader**: TextLoader (LangChain)
@@ -520,9 +528,11 @@ Documents → RAG Store → ChromaDB → RAG Fetch → Search Results
 # Run all store-specific tests
 python -m unittest tests.test_rag_store.test_document_processor -v
 python -m unittest tests.test_rag_store.test_pdf_processor -v
+python -m unittest tests.test_rag_store.test_office_processor -v
+python -m unittest tests.test_rag_store.test_mht_processor -v
 python -m unittest tests.test_rag_store.test_store_embeddings -v
 
-# Run comprehensive tests (42 total)
+# Run comprehensive tests
 python -m unittest tests.test_rag_store -v
 ```
 
@@ -548,7 +558,7 @@ beautifulsoup4 = ">=4.13.5"
 # Additional dependencies for compatibility
 docx2txt = ">=0.8"           # Legacy compatibility (not actively used)
 google-generativeai = ">=0.3.0"
-PyPDF2 = ">=3.0.0"          # Backup PDF processor
+pypdf = ">=5.1.0"           # Modern PDF processor
 python-docx = ">=0.8.11"    # Backup Word processor
 cryptography = ">=3.1"      # Security for embeddings
 
