@@ -45,6 +45,7 @@ class TestApplicationDocumentProcessingIntegration:
             f.write("MODEL_VENDOR=google\n")
             f.write("GOOGLE_API_KEY=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\n")
             f.write(f"CHROMA_DB_PATH={self.chroma_dir}\n")
+            f.write("CHROMA_CLIENT_MODE=embedded\n")
         
         self.app = None
     
