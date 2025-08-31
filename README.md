@@ -60,7 +60,7 @@ The document processing system supports the following file formats through a uni
 
 **Python Dependencies** (installed automatically):
 - `pytesseract>=0.3.13` - Python wrapper for Tesseract OCR
-- `PyMuPDF>=1.23.0` - PDF processing with OCR support
+- `PyMuPDF>=1.23.0` - PDF processing with OCR support for image-based PDFs
 - `unstructured[all-docs]>=0.18.14` - Comprehensive document parsing for all office formats
 - `python-magic>=0.4.27` - File type detection using libmagic
 
@@ -581,7 +581,7 @@ The test suite has been recently updated and improved to ensure reliability and 
 - **Improved Test Isolation**: Enhanced environment variable management and cleanup for better test isolation
 - **Fixed File Monitoring Tests**: Corrected assertions for file monitoring integration tests
 - **Resolved Processor Initialization Tests**: Fixed logic for testing initialization failure scenarios
-- **Eliminated SWIG Deprecation Warnings**: Fixed PDFProcessor to use pypdf as primary processor, eliminating Python 3.12 compatibility warnings
+- **PDF Processing Optimization**: Maintains PyMuPDF as primary processor with full OCR capabilities for image-based PDFs
 
 ### Coverage Report
 

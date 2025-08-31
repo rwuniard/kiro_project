@@ -3,33 +3,25 @@ PDF Processing Module for RAG System
 
 This module provides functionality to extract text from PDF files and convert
 them into LangChain Document objects for embedding storage.
-Uses pypdf for basic text extraction and PyMuPDF only when OCR capabilities are needed.
+Uses PyMuPDF for OCR capabilities to handle image-based PDFs.
 """
 
 import time
+import fitz  # PyMuPDF
 from io import BytesIO
+
 from pathlib import Path
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# Primary PDF processing - pure Python, no SWIG warnings
-try:
-    from pypdf import PdfReader
-    PYPDF_AVAILABLE = True
-except ImportError:
-    PYPDF_AVAILABLE = False
-
-# OCR dependencies (optional) - only imported when needed
-OCR_AVAILABLE = False
-fitz = None  # Will be imported only when OCR is needed
-
+# OCR dependencies (optional)
 try:
     import pytesseract
     from PIL import Image
     OCR_AVAILABLE = True
 except ImportError:
-    pass
+    OCR_AVAILABLE = False
 
 try:
     from .document_processor import DocumentProcessor
@@ -43,8 +35,8 @@ except ImportError:
     from document_processor import DocumentProcessor
     from logging_config import (
         get_logger,
-        log_document_processing_start,
         log_document_processing_complete,
+        log_document_processing_start,
         log_processing_error,
     )
 
@@ -52,7 +44,7 @@ logger = get_logger("pdf_processor")
 
 
 class PDFProcessor(DocumentProcessor):
-    """Process PDF files and extract text content for RAG storage using pypdf with PyMuPDF OCR fallback."""
+    """Process PDF files and extract text content for RAG storage using PyMuPDF with OCR capabilities."""
 
     def __init__(self):
         super().__init__()
@@ -103,7 +95,7 @@ class PDFProcessor(DocumentProcessor):
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
     ) -> list[Document]:
-        """Internal PDF processing method using pypdf with PyMuPDF OCR fallback."""
+        """Internal PDF processing method using PyMuPDF with OCR capabilities."""
         start_time = time.time()
         chunk_size, chunk_overlap = self.get_processing_params(
             chunk_size, chunk_overlap
@@ -119,114 +111,17 @@ class PDFProcessor(DocumentProcessor):
         )
 
         try:
-            # Try pypdf first (no SWIG warnings)
-            if PYPDF_AVAILABLE:
-                pages = self._extract_text_with_pypdf(pdf_path)
-                if pages:
-                    extraction_method = "pypdf_text"
-                else:
-                    # Fall back to PyMuPDF if pypdf found no text
-                    pages = self._extract_text_with_pymupdf(pdf_path)
-                    extraction_method = "pymupdf_text"
-            else:
-                # Fall back to PyMuPDF if pypdf not available
-                pages = self._extract_text_with_pymupdf(pdf_path)
-                extraction_method = "pymupdf_text"
-
-            if not pages:
+            # Use PyMuPDF for OCR-capable PDF processing
+            doc = fitz.open(str(pdf_path))
+            
+            if doc.page_count == 0:
+                doc.close()
                 log_document_processing_complete(
                     context=context,
                     chunks_created=0,
                     processing_time_seconds=time.time() - start_time,
                     status="success_empty",
                 )
-                return []
-
-            # Initialize the text splitter with optimized parameters
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                length_function=len,
-                separators=["\n\n", "\n", " ", ""],
-            )
-
-            # Split documents and enhance metadata
-            documents = text_splitter.split_documents(pages)
-
-            # Enhance metadata with processing information
-            base_metadata = self.get_metadata_template(pdf_path)
-            for i, doc in enumerate(documents):
-                # Preserve original page metadata and add our enhancements
-                doc.metadata.update(base_metadata)
-                doc.metadata.update(
-                    {
-                        "chunk_id": f"chunk_{i}",
-                        "extraction_method": extraction_method,
-                    }
-                )
-
-            # Log successful processing
-            log_document_processing_complete(
-                context=context,
-                chunks_created=len(documents),
-                processing_time_seconds=time.time() - start_time,
-                status="success",
-            )
-
-            return documents
-
-        except Exception as e:
-            # Log error and return empty list
-            log_processing_error(
-                context=context,
-                error=str(e),
-                processing_time_seconds=time.time() - start_time,
-            )
-            logger.error(f"Error processing PDF {pdf_path}: {e}")
-            return []
-
-    def _extract_text_with_pypdf(self, pdf_path: Path) -> list[Document]:
-        """Extract text using pypdf (pure Python, no SWIG warnings)."""
-        try:
-            with open(pdf_path, 'rb') as file:
-                reader = PdfReader(file)
-                
-                pages = []
-                for page_num, page in enumerate(reader.pages):
-                    text = page.extract_text()
-                    if text and text.strip():
-                        page_doc = Document(
-                            page_content=text,
-                            metadata={
-                                "page": page_num + 1,
-                                "source": str(pdf_path),
-                                "extraction_method": "pypdf_text"
-                            }
-                        )
-                        pages.append(page_doc)
-                
-                return pages
-        except Exception as e:
-            logger.warning(f"pypdf extraction failed for {pdf_path}: {e}")
-            return []
-
-    def _extract_text_with_pymupdf(self, pdf_path: Path) -> list[Document]:
-        """Extract text using PyMuPDF (only when needed, may have SWIG warnings)."""
-        global fitz
-        
-        # Import PyMuPDF only when needed to minimize SWIG warnings
-        if fitz is None:
-            try:
-                import fitz
-            except ImportError:
-                logger.error("PyMuPDF not available for fallback text extraction")
-                return []
-        
-        try:
-            doc = fitz.open(str(pdf_path))
-            
-            if doc.page_count == 0:
-                doc.close()
                 return []
 
             # Extract text from each page with OCR fallback
@@ -274,32 +169,104 @@ class PDFProcessor(DocumentProcessor):
                     pages.append(page_doc)
             
             doc.close()
-            return pages
-            
+
+            if not pages:
+                log_document_processing_complete(
+                    context=context,
+                    chunks_created=0,
+                    processing_time_seconds=time.time() - start_time,
+                    status="success_empty",
+                )
+                return []
+
+            # Initialize the text splitter with optimized parameters
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                length_function=len,
+                separators=["\n\n", "\n", " ", ""],
+            )
+
+            # Split documents and enhance metadata
+            documents = text_splitter.split_documents(pages)
+
+            # Enhance metadata with processing information
+            base_metadata = self.get_metadata_template(pdf_path)
+            for i, doc in enumerate(documents):
+                # Preserve original page metadata and add our enhancements
+                doc.metadata.update(base_metadata)
+                doc.metadata.update(
+                    {
+                        "chunk_id": f"chunk_{i}",
+                        "document_id": f"{pdf_path.stem}_pdf",
+                        "chunk_size": chunk_size,
+                        "chunk_overlap": chunk_overlap,
+                        "splitting_method": "RecursiveCharacterTextSplitter",
+                        "total_chunks": len(documents),
+                        "loader_type": "PyMuPDF_OCR"
+                    }
+                )
+
+            # Log successful completion
+            processing_time = time.time() - start_time
+            log_document_processing_complete(
+                context=context,
+                chunks_created=len(documents),
+                processing_time_seconds=processing_time,
+                status="success",
+            )
+
+            return documents
+
         except Exception as e:
-            logger.error(f"PyMuPDF extraction failed for {pdf_path}: {e}")
-            return []
+            # Log error
+            log_processing_error(
+                context=context, error=e, error_type="pdf_processing_error"
+            )
+            raise Exception(f"Error processing PDF {pdf_path}: {e!s}")
 
     def _perform_ocr_on_page(self, page, page_num: int, pdf_path: str) -> str:
-        """Perform OCR on a PDF page using Tesseract."""
-        try:
-            # Convert page to image
-            pix = page.get_pixmap()
-            img_data = pix.tobytes("png")
+        """
+        Perform Tesseract OCR on a PDF page.
+        
+        Args:
+            page: PyMuPDF page object
+            page_num: Page number (1-based)
+            pdf_path: Path to the PDF file being processed
             
-            # Use PIL to open the image
+        Returns:
+            str: OCR-extracted text
+        """
+        if not OCR_AVAILABLE:
+            return ""
+            
+        try:
+            # Convert page to image (300 DPI for good OCR quality)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))  # 2x scaling = ~300 DPI
+            img_data = pix.pil_tobytes(format="PNG")
+            
+            # Convert to PIL Image
             img = Image.open(BytesIO(img_data))
             
-            # Perform OCR
-            ocr_text = pytesseract.image_to_string(img)
+            # Perform OCR with Tesseract
+            # Use optimal OCR settings for document text
+            custom_config = r'--oem 3 --psm 6'
+            ocr_text = pytesseract.image_to_string(img, config=custom_config)
             
-            logger.info(f"OCR completed for page {page_num} of {pdf_path}")
-            return ocr_text
+            # Clean up
+            pix = None
+            
+            ocr_result = ocr_text.strip()
+            
+            # Write OCR investigation files if enabled
+            self._write_ocr_investigation_file(ocr_result, page_num, pdf_path)
+            
+            return ocr_result
             
         except Exception as e:
-            logger.error(f"OCR failed for page {page_num} of {pdf_path}: {e}")
+            logger.warning(f"OCR failed on page: {e}")
             return ""
-
+    
     def _write_ocr_investigation_file(self, ocr_result: str, page_num: int, pdf_path: str) -> None:
         """
         Write OCR results to temporary files for investigation when OCR_INVESTIGATE=true.
