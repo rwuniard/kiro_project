@@ -575,4 +575,4 @@ prometheus-client = ">=0.21.0"
 
 ## 📄 License
 
-Part of the MCP RAG project - MIT License
+Part of the MCP RAG project - Creative Commons BY-NC-SA 4.0 License

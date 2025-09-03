@@ -993,7 +993,7 @@ This will provide more detailed information about file operations and system eve
 
 ## License
 
-This project is licensed under the terms specified in the LICENSE file.
+This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License. See the LICENSE file for details.
 
 ## Contributing
 
