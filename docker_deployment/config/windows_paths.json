@@ -1,0 +1,6 @@
+{
+  "source_folder": "C:\\tmp\\rag_store\\source",
+  "saved_folder": "C:\\tmp\\rag_store\\saved", 
+  "error_folder": "C:\\tmp\\rag_store\\error",
+  "description": "Windows-specific folder paths for local Docker deployment. Modify these paths according to your local setup."
+}

@@ -1,18 +1,41 @@
-# Folder File Processor
+# Kiro Project - Advanced File Processing System
 
-A Python application that monitors a configurable source folder for new files, processes them, and moves them to appropriate destination folders based on processing results. The application uses file system events for real-time monitoring and maintains folder structure preservation during file operations.
+A sophisticated Python application that monitors configurable source folders for new files, processes them through pluggable RAG (Retrieval Augmented Generation) document processing pipelines, and moves them to appropriate destination folders based on processing results. The application uses file system events for real-time monitoring and maintains folder structure preservation during file operations.
 
 ## Features
 
 - **Real-time File Monitoring**: Uses file system events to detect new files immediately
+- **Advanced Document Processing**: Pluggable RAG document processing with ChromaDB vector storage
+- **Multi-format Support**: Comprehensive document support (PDF with OCR, Office formats, web archives, text files)
 - **Existing Files Processing**: Automatically processes files already present in source folder on startup
 - **Configurable Folders**: Source, saved, and error folders configurable via environment variables
 - **Folder Structure Preservation**: Maintains original directory structure when moving files
 - **Automatic Folder Cleanup**: Removes empty folders after successful file processing
-- **Comprehensive Error Handling**: Graceful error handling with detailed logging
+- **Comprehensive Error Handling**: Graceful error handling with detailed logging and enhanced error logs
 - **Intelligent Retry Logic**: Exponential backoff retry for transient errors including API timeouts, network issues, and file system errors
+- **Docker Deployment**: Complete Docker deployment with automated scripts for local and production use
+- **ChromaDB Integration**: Support for both embedded and client-server ChromaDB modes
 - **Detailed Logging**: Both console and file logging with configurable levels
 - **Graceful Shutdown**: Proper cleanup and shutdown handling
+
+## Current Status & Recent Updates
+
+### ✅ Latest Improvements (January 2025)
+- **License Update**: Changed from MIT to Creative Commons BY-NC-SA 4.0 for non-commercial use protection
+- **Test Suite Excellence**: All 450+ tests now passing with comprehensive integration coverage
+- **Docker Deployment**: Complete containerized deployment with automated setup scripts
+- **ChromaDB Enhancements**: Full support for both embedded and client-server modes
+- **Error Handling**: Enhanced error logging with improved context and recovery mechanisms
+- **PDF Processing**: Stable PyMuPDF integration with full OCR capabilities for image-based documents
+- **Multi-format Support**: Unified office processor supporting Word, PowerPoint, Excel, ODT, and more
+- **Production Ready**: Comprehensive error classification, retry logic, and graceful degradation
+
+### 🚀 Current Capabilities
+- **Document Types**: PDF (with OCR), Office formats, web archives, text files, eBooks
+- **AI Integration**: OpenAI and Google AI embedding models with vector storage
+- **Deployment Options**: Native Python, Docker local, and production deployment
+- **Quality Assurance**: 450+ passing tests with full integration coverage
+- **Error Resilience**: Intelligent retry logic with exponential backoff for transient errors
 
 ## Requirements
 
@@ -484,7 +507,7 @@ Press `Ctrl+C` to gracefully stop the application. The system will:
 
 ## Testing
 
-The project includes a comprehensive test suite organized by component structure with over 450 unit and integration tests. All tests are currently passing successfully.
+The project includes a comprehensive test suite organized by component structure with over 450 unit and integration tests. All tests have been recently updated and are currently passing successfully with significant improvements to reliability and maintainability.
 
 ### Test Organization
 
@@ -571,17 +594,20 @@ tests/test_rag_store/test_document_processor.py ............... [ 80%]
 ================================ 451 passed in 50.89s ===============================
 ```
 
-### Recent Test Improvements
+### Recent Test Improvements ✅
 
-The test suite has been recently updated and improved to ensure reliability and maintainability:
+The test suite has been extensively updated and improved with all tests now passing successfully:
 
-- **Fixed ProcessingResult Attribute Issues**: Updated tests to handle different ProcessingResult classes gracefully
-- **Resolved API Key Validation Issues**: Fixed test API keys to meet strict validation requirements
-- **Updated Mock Processor Behavior**: Corrected mock processors to respect test fixture expectations
-- **Improved Test Isolation**: Enhanced environment variable management and cleanup for better test isolation
-- **Fixed File Monitoring Tests**: Corrected assertions for file monitoring integration tests
-- **Resolved Processor Initialization Tests**: Fixed logic for testing initialization failure scenarios
-- **PDF Processing Optimization**: Maintains PyMuPDF as primary processor with full OCR capabilities for image-based PDFs
+- ✅ **Fixed all failing tests** across comprehensive integration test files
+- ✅ **Resolved ProcessingResult attribute issues** by adding proper `hasattr` checks  
+- ✅ **Fixed API key validation issues** by updating test keys to meet strict requirements
+- ✅ **Corrected mock processor behavior** to respect test fixture expectations
+- ✅ **Improved test isolation** with better environment variable management
+- ✅ **Fixed file monitoring test assertions** for proper integration testing
+- ✅ **Resolved processor initialization failure tests** with correct error scenarios
+- ✅ **PDF Processing Stability**: Maintains PyMuPDF as primary PDF processor with full OCR capabilities
+
+**Test Status**: All 450+ tests now passing with comprehensive coverage of core functionality, error scenarios, and integration workflows.
 
 ### Coverage Report
 
@@ -991,9 +1017,203 @@ logging.basicConfig(level=logging.DEBUG)
 
 This will provide more detailed information about file operations and system events.
 
+## Docker Deployment
+
+The Kiro Project supports both local development and production deployment using Docker. This provides a consistent, isolated environment with all system dependencies pre-installed.
+
+### Quick Start - Local Docker Deployment
+
+#### Prerequisites
+- **Docker** and **docker-compose** installed
+- **Python 3.8+** (for configuration scripts)
+- **Git** (to clone the repository)
+
+#### Windows Deployment
+
+1. **Configure Local Paths**: Edit `docker_deployment/config/windows_paths.json` with your desired folder locations:
+```json
+{
+  "source_folder": "C:\\temp\\kiro\\source",
+  "saved_folder": "C:\\temp\\kiro\\saved", 
+  "error_folder": "C:\\temp\\kiro\\error"
+}
+```
+
+2. **Set API Keys**: Create `.env.local` in project root:
+```env
+OPENAI_API_KEY=your_openai_key_here
+GOOGLE_API_KEY=your_google_key_here
+```
+
+3. **Deploy**: Run the Windows deployment script:
+```cmd
+# Deploy with OpenAI (default)
+docker_deployment\deploy-local.bat
+
+# Deploy with Google AI
+docker_deployment\deploy-local.bat google
+```
+
+#### Unix/Mac Deployment
+
+1. **Configure Local Paths**: Edit `docker_deployment/config/unix_paths.json` with your desired folder locations:
+```json
+{
+  "source_folder": "/tmp/kiro/source",
+  "saved_folder": "/tmp/kiro/saved",
+  "error_folder": "/tmp/kiro/error"
+}
+```
+
+2. **Set API Keys**: Create `.env.local` in project root:
+```env
+OPENAI_API_KEY=your_openai_key_here
+GOOGLE_API_KEY=your_google_key_here
+```
+
+3. **Deploy**: Run the Unix deployment script:
+```bash
+# Deploy with OpenAI (default)
+./docker_deployment/deploy-local.sh
+
+# Deploy with Google AI
+./docker_deployment/deploy-local.sh google
+```
+
+### What the Deployment Scripts Do
+
+1. **Validate Prerequisites**: Check Docker, Python, and required files
+2. **Create Local Directories**: Automatically create source/saved/error folders
+3. **Generate Configuration**: Create `.env` file from templates and settings
+4. **Build Docker Image**: Build the application with all dependencies
+5. **Start Container**: Launch with volume mapping to local folders
+
+### Docker Container Features
+
+- **Complete Environment**: All system dependencies (Tesseract OCR, LibreOffice) pre-installed
+- **Volume Mapping**: Direct access to local folders for file processing
+- **Persistent Data**: ChromaDB and logs persist between container restarts
+- **Resource Management**: Configurable memory and CPU limits
+- **Health Monitoring**: Built-in health checks and status monitoring
+
+### Managing the Docker Deployment
+
+#### Container Management
+```bash
+# View container status
+docker-compose ps
+
+# Monitor real-time logs
+docker-compose logs -f
+
+# Restart the container
+docker-compose restart
+
+# Stop the deployment
+docker-compose down
+
+# View container resource usage
+docker stats rag-file-processor
+```
+
+#### Using Your Deployment
+
+1. **Drop Files**: Copy files into your configured `source_folder`
+2. **Monitor Progress**: Check logs with `docker-compose logs -f`
+3. **Check Results**: 
+   - Successfully processed files appear in `saved_folder`
+   - Failed files appear in `error_folder` with `.log` files
+4. **View Data**: ChromaDB vector storage is persisted in `./data/chroma_db`
+
+### Configuration Customization
+
+#### Environment Settings
+The deployment system uses several configuration files you can customize:
+
+- **`docker_deployment/config/prod_chroma_settings.json`**: Production ChromaDB configuration
+- **`docker_deployment/config/dev_chroma_settings.json`**: Development ChromaDB configuration  
+- **`docker_deployment/config/windows_paths.json`**: Windows folder paths
+- **`docker_deployment/config/unix_paths.json`**: Unix/Mac folder paths
+
+#### Advanced Configuration
+For advanced users, you can directly modify:
+- **`docker_deployment/docker-compose.yml`**: Main container configuration
+- **`docker_deployment/docker-compose.override.yml`**: Development-specific overrides
+- **`docker_deployment/scripts/generate_env.py`**: Environment generation logic
+
+### Production Deployment
+
+The project includes GitHub Actions workflow for production deployment:
+
+1. **GitHub Secrets**: Configure `OPENAI_API_KEY` and `GOOGLE_API_KEY` in your repository
+2. **Trigger Build**: Push to `main` branch or use "Manual Deploy" workflow
+3. **Download Artifacts**: Get the built Docker image from GitHub Actions
+4. **Deploy**: Load and run the image in your production environment
+
+### Troubleshooting Docker Deployment
+
+#### Common Issues
+
+**Docker Build Fails**:
+```bash
+# Check Docker daemon is running
+docker info
+
+# Clean up if needed
+docker system prune
+```
+
+**Volume Mapping Issues**:
+- Verify folder paths in config files exist
+- Check folder permissions (must be readable/writable)
+- Ensure paths use proper format (Windows: `C:\path`, Unix: `/path`)
+
+**Container Won't Start**:
+```bash
+# Check container logs
+docker-compose logs rag-file-processor
+
+# Validate configuration
+python docker_deployment/scripts/generate_env.py --environment development --platform unix
+```
+
+**API Keys Not Working**:
+- Verify `.env.local` file exists and contains valid keys
+- Check that keys don't have extra spaces or quotes
+- Confirm model vendor matches your available API key
+
+**Permission Errors**:
+```bash
+# Fix folder permissions (Unix/Mac)
+chmod 755 /path/to/your/folders
+
+# Check Docker has access to your folders
+ls -la /path/to/your/source/folder
+```
+
+### Docker vs Native Installation
+
+| Aspect | Docker Deployment | Native Installation |
+|--------|------------------|-------------------|
+| **Setup** | One-command deployment | Manual dependency installation |
+| **Dependencies** | Pre-installed (Tesseract, LibreOffice) | Manual system package installation |
+| **Isolation** | Completely isolated environment | Uses host system |
+| **Portability** | Works identically across platforms | Platform-specific setup required |
+| **Updates** | Rebuild container | Update host packages |
+| **Resource Usage** | Container overhead (~100MB) | Direct host usage |
+| **Debugging** | Container logs and exec | Direct file system access |
+
+**Recommendation**: Use Docker deployment for production and simplified development setup. Use native installation for active development with frequent code changes.
+
 ## License
 
-This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License. See the LICENSE file for details.
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License**. See the LICENSE file for details.
+
+**License Summary**:
+- ✅ **Attribution**: Credit must be given to the original creator
+- ✅ **NonCommercial**: Cannot be used for commercial purposes
+- ✅ **ShareAlike**: Derivative works must use the same license
+- ✅ **Open Source**: Source code is freely available for non-commercial use
 
 ## Contributing
 

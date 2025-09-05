@@ -1,0 +1,83 @@
+# Git and version control
+.git/
+.gitignore
+
+# Python cache and build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Testing and coverage
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+cover/
+
+# Local development and deployment files
+../.env.local
+.env.production
+.env.generated
+../src/rag_store/.env
+
+# Data directories (will be mounted as volumes)
+../data/
+../logs/
+../temp/
+
+# Development and deployment scripts
+deploy-local.*
+*.bat
+*.sh
+
+# Parent directory files (copy explicitly what's needed)
+../.git/
+../.gitignore
+../tests/
+
+# Documentation (except CLAUDE.md which is needed)
+../README.md
+../docs/
+../*.md
+!../CLAUDE.md
+
+# Temporary and cache files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# RAG store specific
+ocr_investigation_*.txt
+ocr_debug/
+
+# Testing files
+tests/

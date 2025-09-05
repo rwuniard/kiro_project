@@ -48,6 +48,140 @@ uv run pytest --cov=src --cov-report=html
 uv run pytest tests/test_rag_integration_comprehensive/
 ```
 
+### Docker Development Commands
+
+This project supports Docker deployment for both local development and production use. The Docker setup provides a complete, isolated environment with all system dependencies pre-installed.
+
+#### Local Docker Deployment
+
+```bash
+# Windows deployment (from project root)
+docker_deployment\deploy-local.bat                # Deploy with OpenAI (default)
+docker_deployment\deploy-local.bat google         # Deploy with Google AI
+
+# Unix/Mac deployment (from project root) 
+./docker_deployment/deploy-local.sh               # Deploy with OpenAI (default)
+./docker_deployment/deploy-local.sh google        # Deploy with Google AI
+```
+
+#### Docker Container Management
+
+```bash
+# View container status
+docker-compose ps
+
+# Monitor real-time application logs
+docker-compose logs -f
+
+# Monitor specific service logs
+docker-compose logs -f rag-file-processor
+
+# Start containers in background
+docker-compose up -d
+
+# Stop all containers
+docker-compose down
+
+# Restart containers
+docker-compose restart
+
+# View container resource usage
+docker stats rag-file-processor
+
+# Execute commands inside container
+docker-compose exec rag-file-processor bash
+docker-compose exec rag-file-processor python --version
+
+# Build and start (force rebuild)
+docker-compose up --build
+```
+
+#### Docker Development Workflow
+
+```bash
+# Initial setup (one time)
+1. Edit docker_deployment/config/unix_paths.json (Mac/Linux) or docker_deployment/config/windows_paths.json (Windows)
+2. Create .env.local with API keys in project root
+3. Run deployment script: ./docker_deployment/deploy-local.sh
+
+# Daily development cycle
+docker-compose logs -f          # Monitor application
+# Drop test files into source folder
+docker-compose restart          # Restart if needed
+docker-compose down             # Stop when done
+
+# Rebuilding after changes
+docker-compose down
+docker-compose up --build -d
+```
+
+#### Docker Configuration Management
+
+```bash
+# Generate environment configuration manually
+python docker_deployment/scripts/generate_env.py --environment development --platform unix
+python docker_deployment/scripts/generate_env.py --environment development --platform windows --model-vendor google
+
+# Validate configuration
+python docker_deployment/scripts/generate_env.py --help
+```
+
+#### Docker Volume Structure
+
+The Docker deployment maps local folders to container directories:
+
+```bash
+# Local Folder Structure (configurable via config/*.json)
+source/          → /app/data/source     (files to process)
+saved/           → /app/data/saved      (successfully processed files)  
+error/           → /app/data/error      (failed files with .log files)
+./data/chroma_db → /app/data/chroma_db  (persistent ChromaDB storage)
+./logs           → /app/logs            (application logs)
+```
+
+#### Docker Troubleshooting
+
+```bash
+# Check Docker daemon
+docker info
+docker version
+
+# View build logs if build fails
+docker-compose build --no-cache
+
+# Container debugging
+docker-compose logs rag-file-processor
+docker-compose exec rag-file-processor ls -la /app
+docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('Import successful')"
+
+# Clean up Docker resources
+docker system prune
+docker-compose down -v          # Remove volumes (WARNING: deletes ChromaDB data)
+```
+
+#### Docker vs Native Development
+
+| Task | Docker Command | Native Command |
+|------|----------------|----------------|
+| **Run Application** | `docker-compose up` | `uv run python main.py` |
+| **View Logs** | `docker-compose logs -f` | Check `logs/application.log` |
+| **Run Tests** | `docker-compose exec rag-file-processor uv run pytest` | `uv run pytest` |
+| **Debug** | `docker-compose exec rag-file-processor bash` | Direct file system access |
+| **Configuration** | Edit docker_deployment/config/*.json + redeploy | Edit `.env` directly |
+
+**Docker Benefits for Development**:
+- ✅ Consistent environment across platforms
+- ✅ All system dependencies pre-installed (Tesseract, LibreOffice)
+- ✅ No local system pollution
+- ✅ Easy deployment and cleanup
+- ✅ Volume mapping for easy file access
+
+**Native Development Benefits**:
+- ✅ Faster iteration cycles
+- ✅ Direct debugging access
+- ✅ Lower resource overhead
+- ✅ IDE integration
+
 ## Recent Updates and Fixes
 
 The project has been recently updated with significant improvements to the test suite and overall reliability:

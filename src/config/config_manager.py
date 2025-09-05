@@ -281,7 +281,10 @@ class ConfigManager:
         """Load configuration from environment variables and .env file."""
         # Load .env file if it exists
         if self.env_file and os.path.exists(self.env_file):
+            print(f"DEBUG: Loading .env file from: {os.path.abspath(self.env_file)}")
             load_dotenv(self.env_file)
+        else:
+            print(f"DEBUG: No .env file found at: {self.env_file if self.env_file else 'None'}")
         
         config = {}
         
@@ -305,6 +308,16 @@ class ConfigManager:
                     config[var] = value
             else:
                 config[var] = ""
+        
+        # Debug logging: Show loaded configuration (mask sensitive values)
+        print("DEBUG: Loaded configuration:")
+        for key, value in config.items():
+            if 'API_KEY' in key:
+                # Mask API keys for security
+                masked_value = f"{value[:8]}***{value[-4:]}" if value and len(value) > 12 else "***masked***" if value else "***empty***"
+                print(f"  {key}: {masked_value}")
+            else:
+                print(f"  {key}: {value}")
         
         return config
     

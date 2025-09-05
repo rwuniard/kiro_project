@@ -197,3 +197,11 @@ data/chroma_db_*/
 # OCR Investigation debug files (temporary files created when OCR_INVESTIGATE=true)
 ocr_investigation_*.txt
 ocr_debug/
+
+# Docker deployment specific
+.env.local
+.env.production
+docker_deployment/.env.generated
+
+# Local development files with sensitive data
+src/rag_store/.env
