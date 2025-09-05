@@ -51,34 +51,53 @@ class FileEventHandler(FileSystemEventHandler):
     
     def on_created(self, event):
         """
-        Handle file creation events with comprehensive error handling.
+        Handle file and directory creation events with comprehensive error handling.
         
         Args:
-            event: FileSystemEvent representing the file creation
+            event: FileSystemEvent representing the file or directory creation
         """
         self.stats['events_received'] += 1
         
-        # Only process file creation events, not directory creation
-        if event.is_directory:
-            return
-        
-        file_path = event.src_path
+        event_path = event.src_path
         
         try:
+            # Debug: Log event details
+            self.logger.log_info(f"Event received: {event_path} (is_directory: {event.is_directory})")
+            
+            # Check if it's actually a directory (secondary check for Docker volume issues)
+            is_actually_directory = os.path.isdir(event_path)
+            
+            # Handle directory creation - recursively process all files within
+            if event.is_directory or is_actually_directory:
+                if is_actually_directory and not event.is_directory:
+                    self.logger.log_info(f"Directory detected via filesystem check (event.is_directory was False): {event_path}")
+                else:
+                    self.logger.log_info(f"New directory detected: {event_path}")
+                self._process_directory_recursively(event_path)
+                return
+            
+            # Handle file creation
             # Filter duplicate events
-            if self._is_duplicate_event(file_path):
+            if self._is_duplicate_event(event_path):
                 self.stats['duplicate_events_filtered'] += 1
                 return
             
+            # Check if file should be ignored (import FileProcessor for the check)
+            from src.core.file_processor import FileProcessor
+            if FileProcessor.should_ignore_file(event_path):
+                filename = os.path.basename(event_path)
+                self.logger.log_info(f"Ignoring system/temporary file: {filename}")
+                return
+            
             # Log the file creation event
-            self.logger.log_info(f"New file detected: {file_path}")
+            self.logger.log_info(f"New file detected: {event_path}")
             
             # Process the file with resilience
-            self._process_file_with_resilience(file_path)
+            self._process_file_with_resilience(event_path)
             
         except Exception as e:
             self.stats['processing_errors'] += 1
-            error_msg = f"Critical error in event handler for file {file_path}: {str(e)}"
+            error_msg = f"Critical error in event handler for {event_path}: {str(e)}"
             self.logger.log_error(error_msg, e)
             # Continue processing other files despite this error
     
@@ -198,8 +217,14 @@ class FileEventHandler(FileSystemEventHandler):
                 return False
             
             if not os.path.isfile(file_path):
-                self.logger.log_error(f"Path is not a file: {file_path}")
-                return False
+                # If it's a directory, handle it with recursive processing
+                if os.path.isdir(file_path):
+                    self.logger.log_info(f"Directory found during file validation, processing recursively: {file_path}")
+                    self._process_directory_recursively(file_path)
+                    return False  # Don't continue with file processing
+                else:
+                    self.logger.log_error(f"Path is not a file: {file_path}")
+                    return False
             
             # Test basic read access
             with open(file_path, 'rb') as f:
@@ -210,6 +235,102 @@ class FileEventHandler(FileSystemEventHandler):
         except (OSError, PermissionError) as e:
             self.logger.log_error(f"File not ready for processing: {file_path}: {e}")
             return False
+    
+    def _process_directory_recursively(self, directory_path: str) -> None:
+        """
+        Process all files in a directory recursively.
+        
+        This method is called when a new directory is detected and will
+        find and process all files within the directory and subdirectories.
+        
+        Args:
+            directory_path: Path to the directory to process
+        """
+        try:
+            from pathlib import Path
+            dir_path = Path(directory_path)
+            
+            self.logger.log_info(f"Starting recursive processing of directory: {directory_path}")
+            
+            if not dir_path.exists():
+                self.logger.log_error(f"Directory no longer exists: {directory_path}")
+                return
+                
+            if not dir_path.is_dir():
+                self.logger.log_error(f"Path is not a directory: {directory_path}")
+                return
+            
+            processed_count = 0
+            found_files = []
+            
+            # Retry mechanism for Docker volumes where files may still be copying
+            max_retries = 3
+            retry_delay = 0.5  # 500ms between retries
+            
+            for attempt in range(max_retries):
+                found_files.clear()
+                
+                # Scan directory contents
+                self.logger.log_info(f"Scanning directory contents (attempt {attempt + 1}): {directory_path}")
+                for item in dir_path.rglob('*'):
+                    if item.is_file():
+                        found_files.append(item)
+                        self.logger.log_info(f"Found file: {item.relative_to(dir_path)}")
+                    elif item.is_dir():
+                        self.logger.log_info(f"Found subdirectory: {item.relative_to(dir_path)}")
+                
+                self.logger.log_info(f"Files found on attempt {attempt + 1}: {len(found_files)}")
+                
+                # If we found files, break out of retry loop
+                if found_files:
+                    break
+                    
+                # If this isn't the last attempt, wait before retrying
+                if attempt < max_retries - 1:
+                    self.logger.log_info(f"No files found, waiting {retry_delay}s before retry...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 1.5  # Exponential backoff
+            
+            self.logger.log_info(f"Total files found in directory after {max_retries} attempts: {len(found_files)}")
+            
+            # Now process each file
+            for file_path in found_files:
+                try:
+                    file_path_str = str(file_path)
+                    
+                    # Skip duplicate processing
+                    if self._is_duplicate_event(file_path_str):
+                        self.stats['duplicate_events_filtered'] += 1
+                        self.logger.log_info(f"Skipping duplicate: {file_path.relative_to(dir_path)}")
+                        continue
+                    
+                    # Check if file should be ignored
+                    from src.core.file_processor import FileProcessor
+                    if FileProcessor.should_ignore_file(file_path_str):
+                        relative_path = file_path.relative_to(dir_path)
+                        self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
+                        continue
+                    
+                    relative_path = file_path.relative_to(dir_path)
+                    self.logger.log_info(f"Processing file from directory: {relative_path}")
+                    
+                    # Process the file
+                    self._process_file_with_resilience(file_path_str)
+                    processed_count += 1
+                    
+                except Exception as e:
+                    self.logger.log_error(f"Error processing file {file_path} from directory: {e}")
+                    self.stats['processing_errors'] += 1
+            
+            if processed_count > 0:
+                self.logger.log_info(f"Successfully processed {processed_count} files from directory: {directory_path}")
+            else:
+                self.logger.log_error(f"No files were processed from directory: {directory_path} (found {len(found_files)} files)")
+                
+        except Exception as e:
+            self.logger.log_error(f"Error processing directory {directory_path}: {e}")
+            self.stats['processing_errors'] += 1
     
     def get_stats(self) -> dict:
         """Get event handler statistics."""
@@ -519,10 +640,19 @@ class FileMonitor:
             for file_path in source_path.rglob('*'):
                 if file_path.is_file():
                     try:
+                        file_path_str = str(file_path)
+                        
+                        # Check if file should be ignored
+                        from src.core.file_processor import FileProcessor
+                        if FileProcessor.should_ignore_file(file_path_str):
+                            relative_path = file_path.relative_to(source_path)
+                            self.logger.log_info(f"Ignoring system/temporary file during scan: {relative_path}")
+                            continue
+                        
                         self.logger.log_info(f"Processing existing file: {file_path.relative_to(source_path)}")
                         
                         # Process the file using the same logic as file events
-                        self.file_processor.process_file(str(file_path))
+                        self.file_processor.process_file(file_path_str)
                         processed_count += 1
                         
                     except Exception as e:

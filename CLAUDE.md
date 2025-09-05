@@ -412,6 +412,7 @@ tesseract --version
 - **Comprehensive Office Support**: Unified processor handles Word, PowerPoint, Excel, OpenDocument, RTF, and eBooks
 - **Dedicated MHT Processing**: Specialized processor for MHT/MHTML web archives with MIME parsing
 - **OCR Processing**: Automatically applies OCR to PDF pages with no text content when tesseract is available
+- **System File Filtering**: Automatically ignores system files (.DS_Store, Thumbs.db, desktop.ini) and temporary files (.tmp, .temp, .swp) to prevent error folder clutter
 
 ## Development Notes
 
@@ -447,3 +448,43 @@ The project uses a comprehensive multi-tier testing approach:
 **File System Safety**: Atomic operations, folder structure preservation, recursive empty folder cleanup
 
 **Configuration-Driven**: All behavior controlled through validated environment variables with runtime dependency checks
+
+## File Processing Filtering
+
+The application includes intelligent file filtering to prevent system files and temporary files from being processed and cluttering the error folder.
+
+### Automatically Ignored Files
+
+**System Files**:
+- `.DS_Store` - macOS Finder metadata files
+- `Thumbs.db` - Windows thumbnail cache files  
+- `desktop.ini` - Windows folder customization files
+- `.spotlightv100` - macOS Spotlight index files
+- `.fseventsd` - macOS file system event files
+- `.documentrevisions-v100` - macOS document revision files
+- System directories (`.trash`, `$recycle.bin`)
+
+**Temporary Files**:
+- Files ending with `.tmp`, `.temp` - Generic temporary files
+- Files ending with `.swp` - Vim swap files
+- Files ending with `.lock` - Lock files
+
+**Hidden Files**:
+- Hidden files starting with `.` (except known document types like `.txt`, `.md`, `.pdf`, `.doc`, `.docx`)
+
+### Files Still Processed
+
+- **Document files**: PDF, DOC, DOCX, TXT, MD, etc.
+- **Office temporary files**: Files starting with `~$` (like `~$document.docx`) are processed as they may be legitimate user files
+- **Hidden document files**: Files like `.important.txt`, `.document.pdf` are processed due to their document extensions
+
+### Implementation
+
+The filtering is implemented at multiple levels:
+- **Early filtering** in `FileProcessor.should_ignore_file()` static method
+- **Event-based monitoring** filtering in `file_monitor.py`
+- **Polling-based monitoring** filtering in `polling_file_monitor.py`  
+- **Directory scanning** filtering for recursive processing
+- **Manual scan** filtering for existing file detection
+
+This ensures consistent filtering across all monitoring modes (auto, events, polling) and both Docker and native environments.

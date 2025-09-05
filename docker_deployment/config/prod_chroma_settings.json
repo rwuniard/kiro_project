@@ -1,7 +1,7 @@
 {
   "chroma_client_mode": "client_server",
   "_chroma_db_path": "./data/chroma_db_prod",
-  "chroma_collection_name": "rag-kb-prod",
+  "chroma_collection_name": "rag-kb",
   "chroma_server_host": "chromadb",
   "chroma_server_port": 8000,
   "description": "Production ChromaDB configuration using client-server mode with ChromaDB container",

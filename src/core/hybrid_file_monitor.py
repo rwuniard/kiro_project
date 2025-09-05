@@ -148,11 +148,9 @@ class EnvironmentDetector:
         
         # Auto-detection logic
         if cls.is_docker_environment():
-            # In Docker, test if events work, fallback to polling
-            if cls.test_file_events_work(source_folder, timeout=3.0):
-                return "events"
-            else:
-                return "polling"
+            # In Docker environments, always use polling for reliability
+            # Docker volumes often have issues with directory events and file system event propagation
+            return "polling"
         else:
             # Native environment, prefer events with fallback
             if cls.test_file_events_work(source_folder, timeout=2.0):

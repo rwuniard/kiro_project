@@ -7,6 +7,7 @@ A sophisticated Python application that monitors configurable source folders for
 - **Real-time File Monitoring**: Uses file system events to detect new files immediately
 - **Advanced Document Processing**: Pluggable RAG document processing with ChromaDB vector storage
 - **Multi-format Support**: Comprehensive document support (PDF with OCR, Office formats, web archives, text files)
+- **Smart File Filtering**: Automatically ignores system files (.DS_Store, Thumbs.db) and temporary files to prevent error folder clutter
 - **Existing Files Processing**: Automatically processes files already present in source folder on startup
 - **Configurable Folders**: Source, saved, and error folders configurable via environment variables
 - **Folder Structure Preservation**: Maintains original directory structure when moving files

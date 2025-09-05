@@ -437,7 +437,18 @@ class TestHybridMonitoringIntegration:
     def mock_processor(self):
         """Create mock file processor that simulates successful processing."""
         processor = Mock(spec=FileProcessor)
-        processor.process_file.return_value = Mock(success=True, error_message=None)
+        
+        # Mock that simulates file removal after processing (like real system)
+        def mock_process_file(file_path):
+            result = Mock(success=True, error_message=None)
+            # Simulate file removal by actually removing the file
+            try:
+                Path(file_path).unlink()
+            except FileNotFoundError:
+                pass  # File already removed
+            return result
+        
+        processor.process_file.side_effect = mock_process_file
         return processor
     
     @pytest.fixture
@@ -475,6 +486,142 @@ class TestHybridMonitoringIntegration:
             mock_processor.process_file.assert_called()
             call_args = mock_processor.process_file.call_args[0]
             assert str(test_file) in call_args[0]
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_directory_processing_polling_mode(self, temp_source_dir, mock_processor, mock_logger):
+        """Test polling monitor processes files in directories recursively."""
+        config = {
+            'file_monitoring_mode': 'polling',
+            'polling_interval': 0.3,
+            'docker_volume_mode': False
+        }
+        
+        monitor = create_file_monitor(
+            source_folder=str(temp_source_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            config=config
+        )
+        
+        # Create all directory structure and files BEFORE starting monitoring
+        subdir = temp_source_dir / "SCRA"
+        subdir.mkdir()
+        
+        # Create files in subdirectory
+        file1 = subdir / "document1.pdf"
+        file1.write_text("PDF content 1")
+        
+        file2 = subdir / "document2.docx"
+        file2.write_text("DOCX content 2")
+        
+        # Create nested directory
+        nested_dir = subdir / "nested"
+        nested_dir.mkdir()
+        file3 = nested_dir / "nested_file.txt"
+        file3.write_text("Nested content")
+
+        try:
+            monitor.start_monitoring()
+            time.sleep(0.2)  # Let monitoring start
+            
+            # Verify files actually exist
+            print(f"DEBUG: Files created:")
+            print(f"  file1 exists: {file1.exists()} - {file1}")
+            print(f"  file2 exists: {file2.exists()} - {file2}")
+            print(f"  file3 exists: {file3.exists()} - {file3}")
+            
+            # Wait for polling to detect and process all files  
+            time.sleep(1.5)  # Allow multiple polling cycles
+            
+            # Get all processed file paths for debugging
+            processed_files = []
+            for call in mock_processor.process_file.call_args_list:
+                processed_files.append(call[0][0])
+            
+            print(f"DEBUG: Processed {mock_processor.process_file.call_count} files:")
+            for f in processed_files:
+                print(f"  - {f}")
+            
+            # Verify all files were processed (should be exactly 3)
+            assert mock_processor.process_file.call_count == 3, f"Expected exactly 3 files, got {mock_processor.process_file.call_count}: {processed_files}"
+            
+            # Check that all three files were processed using resolved paths for reliable comparison
+            file1_resolved = str(file1.resolve())
+            file2_resolved = str(file2.resolve())
+            file3_resolved = str(file3.resolve())
+            
+            processed_resolved = [str(Path(pf).resolve()) for pf in processed_files]
+            
+            file1_processed = file1_resolved in processed_resolved
+            file2_processed = file2_resolved in processed_resolved  
+            file3_processed = file3_resolved in processed_resolved
+            
+            assert file1_processed, f"file1 {file1_resolved} was not processed. Processed: {processed_resolved}"
+            assert file2_processed, f"file2 {file2_resolved} was not processed. Processed: {processed_resolved}" 
+            assert file3_processed, f"file3 {file3_resolved} was not processed. Processed: {processed_resolved}"
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_directory_processing_events_mode(self, temp_source_dir, mock_processor, mock_logger):
+        """Test events monitor processes files in directories recursively."""
+        config = {
+            'file_monitoring_mode': 'events',
+            'polling_interval': 3.0,
+            'docker_volume_mode': False
+        }
+        
+        monitor = create_file_monitor(
+            source_folder=str(temp_source_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            config=config
+        )
+        
+        try:
+            monitor.start_monitoring()
+            time.sleep(0.2)  # Let monitoring start
+            
+            # Create directory structure with files
+            subdir = temp_source_dir / "SCRA_Events"
+            subdir.mkdir()
+            
+            # Brief delay to allow directory creation event to be processed
+            time.sleep(0.5)
+            
+            # Create files in subdirectory
+            file1 = subdir / "document1.pdf"
+            file1.write_text("PDF content 1")
+            
+            file2 = subdir / "document2.docx" 
+            file2.write_text("DOCX content 2")
+            
+            # Create nested directory and file
+            nested_dir = subdir / "nested"
+            nested_dir.mkdir()
+            time.sleep(0.3)  # Allow directory creation
+            
+            file3 = nested_dir / "nested_file.txt"
+            file3.write_text("Nested content")
+            
+            # Wait for events to be processed
+            time.sleep(1.0)
+            
+            # Verify processing was called (should process directory contents + individual files)
+            assert mock_processor.process_file.call_count >= 3
+            
+            # Get all processed file paths
+            processed_files = []
+            for call in mock_processor.process_file.call_args_list:
+                processed_files.append(call[0][0])
+            
+            # Verify files were processed (either from directory scan or individual events)
+            file_basenames = [os.path.basename(f) for f in processed_files]
+            assert "document1.pdf" in file_basenames
+            assert "document2.docx" in file_basenames
+            assert "nested_file.txt" in file_basenames
             
         finally:
             monitor.stop_monitoring()
