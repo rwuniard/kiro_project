@@ -17,6 +17,7 @@ from src.services.error_handler import ErrorHandler
 from src.core.file_manager import FileManager
 from src.core.file_processor import FileProcessor, RetryConfig
 from src.core.file_monitor import FileMonitor
+from src.core.hybrid_file_monitor import HybridFileMonitor, create_file_monitor
 
 # Import document processing components with graceful fallback
 try:
@@ -55,7 +56,7 @@ class FolderFileProcessorApp:
         self.error_handler: Optional[ErrorHandler] = None
         self.file_manager: Optional[FileManager] = None
         self.file_processor: Optional[FileProcessor] = None
-        self.file_monitor: Optional[FileMonitor] = None
+        self.file_monitor: Optional[HybridFileMonitor] = None
         self.document_processor: Optional[DocumentProcessingInterface] = None
         
         # Application state
@@ -189,12 +190,18 @@ class FolderFileProcessorApp:
                 document_processor=self.document_processor
             )
             
-            # Step 7: Initialize file monitor
-            print("Initializing file monitor...")
-            self.file_monitor = FileMonitor(
+            # Step 7: Initialize hybrid file monitor
+            print("Initializing hybrid file monitor...")
+            config_dict = {
+                'file_monitoring_mode': self.config.file_monitoring_mode,
+                'polling_interval': self.config.polling_interval,
+                'docker_volume_mode': self.config.docker_volume_mode
+            }
+            self.file_monitor = create_file_monitor(
                 source_folder=self.config.source_folder,
                 file_processor=self.file_processor,
-                logger_service=self.logger_service
+                logger_service=self.logger_service,
+                config=config_dict
             )
             
             self.logger_service.log_info("All components initialized successfully")

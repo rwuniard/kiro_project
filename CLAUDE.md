@@ -159,6 +159,27 @@ docker system prune
 docker-compose down -v          # Remove volumes (WARNING: deletes ChromaDB data)
 ```
 
+#### Docker Volume File Monitoring
+
+**Important**: Docker volume mounts have known issues with file system events on Windows and macOS. This application automatically detects Docker environments and uses polling-based monitoring for reliable file detection.
+
+**Monitoring Modes**:
+- **`auto` (recommended)**: Automatically detects Docker environment and chooses optimal mode
+- **`events`**: Uses file system events (watchdog) - fastest but doesn't work in Docker volumes
+- **`polling`**: Scans directory periodically - works reliably in Docker volumes
+
+**Docker-Specific Configuration**:
+```env
+FILE_MONITORING_MODE=auto        # Let system choose best mode
+POLLING_INTERVAL=2.0            # Faster polling for Docker (default: 3.0)
+DOCKER_VOLUME_MODE=true         # Enable Docker optimizations
+```
+
+**Troubleshooting Docker File Detection**:
+- If files aren't being processed: Set `FILE_MONITORING_MODE=polling`
+- For faster response: Reduce `POLLING_INTERVAL` to 1.0-2.0 seconds
+- For batch processing: Enable `DOCKER_VOLUME_MODE=true`
+
 #### Docker vs Native Development
 
 | Task | Docker Command | Native Command |
@@ -175,12 +196,14 @@ docker-compose down -v          # Remove volumes (WARNING: deletes ChromaDB data
 - ✅ No local system pollution
 - ✅ Easy deployment and cleanup
 - ✅ Volume mapping for easy file access
+- ✅ **Reliable file monitoring with automatic polling fallback**
 
 **Native Development Benefits**:
 - ✅ Faster iteration cycles
 - ✅ Direct debugging access
 - ✅ Lower resource overhead
 - ✅ IDE integration
+- ✅ **Fast file system events (no polling needed)**
 
 ## Recent Updates and Fixes
 
@@ -324,6 +347,11 @@ The application requires a `.env` file with the following structure:
 SOURCE_FOLDER=/path/to/source
 SAVED_FOLDER=/path/to/saved
 ERROR_FOLDER=/path/to/error
+
+# Optional - File monitoring configuration for Docker volumes
+FILE_MONITORING_MODE=auto  # auto, events, polling
+POLLING_INTERVAL=3.0       # seconds (for polling mode)
+DOCKER_VOLUME_MODE=false   # Docker volume optimizations
 
 # Optional - Document processing with RAG
 ENABLE_DOCUMENT_PROCESSING=true

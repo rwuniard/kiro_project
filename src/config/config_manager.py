@@ -237,6 +237,10 @@ class AppConfig:
     saved_folder: str
     error_folder: str
     document_processing: DocumentProcessingConfig
+    # File monitoring configuration
+    file_monitoring_mode: str = "auto"  # auto, events, polling
+    polling_interval: float = 3.0  # seconds
+    docker_volume_mode: bool = False  # Docker volume optimization
     
     def validate(self) -> List[str]:
         """Validate configuration and return list of validation errors."""
@@ -255,6 +259,16 @@ class AppConfig:
         if not self.error_folder:
             errors.append("ERROR_FOLDER is required but not provided")
         
+        # Validate file monitoring configuration
+        valid_monitoring_modes = ["auto", "events", "polling"]
+        if self.file_monitoring_mode not in valid_monitoring_modes:
+            errors.append(f"Invalid file_monitoring_mode '{self.file_monitoring_mode}'. Must be one of: {valid_monitoring_modes}")
+        
+        if self.polling_interval <= 0:
+            errors.append(f"polling_interval must be positive, got: {self.polling_interval}")
+        elif self.polling_interval < 0.5:
+            errors.append("polling_interval should be at least 0.5 seconds to avoid excessive CPU usage")
+        
         # Validate document processing configuration
         doc_processing_errors = self.document_processing.validate()
         errors.extend(doc_processing_errors)
@@ -270,6 +284,9 @@ class ConfigManager:
         'DOCUMENT_PROCESSOR_TYPE', 'ENABLE_DOCUMENT_PROCESSING', 
         'GOOGLE_API_KEY', 'OPENAI_API_KEY', 'CHROMA_DB_PATH', 'MODEL_VENDOR',
         'CHROMA_CLIENT_MODE', 'CHROMA_SERVER_HOST', 'CHROMA_SERVER_PORT', 'CHROMA_COLLECTION_NAME'
+    ]
+    FILE_MONITORING_ENV_VARS = [
+        'FILE_MONITORING_MODE', 'POLLING_INTERVAL', 'DOCKER_VOLUME_MODE'
     ]
     
     def __init__(self, env_file: Optional[str] = '.env'):
@@ -309,6 +326,14 @@ class ConfigManager:
             else:
                 config[var] = ""
         
+        # Load file monitoring environment variables
+        for var in self.FILE_MONITORING_ENV_VARS:
+            value = os.getenv(var)
+            if value:
+                config[var] = value
+            else:
+                config[var] = ""
+        
         # Debug logging: Show loaded configuration (mask sensitive values)
         print("DEBUG: Loaded configuration:")
         for key, value in config.items():
@@ -327,11 +352,24 @@ class ConfigManager:
             # Create document processing config from provided config dictionary
             doc_processing_config = DocumentProcessingConfig.from_config_dict(config)
             
+            # Parse file monitoring configuration
+            polling_interval = 3.0
+            try:
+                if config.get('POLLING_INTERVAL'):
+                    polling_interval = float(config.get('POLLING_INTERVAL'))
+            except ValueError:
+                pass  # Use default value
+            
+            docker_volume_mode = config.get('DOCKER_VOLUME_MODE', '').lower() in ('true', '1', 'yes', 'on')
+            
             app_config = AppConfig(
                 source_folder=config.get('SOURCE_FOLDER', ''),
                 saved_folder=config.get('SAVED_FOLDER', ''),
                 error_folder=config.get('ERROR_FOLDER', ''),
-                document_processing=doc_processing_config
+                document_processing=doc_processing_config,
+                file_monitoring_mode=config.get('FILE_MONITORING_MODE', 'auto').lower(),
+                polling_interval=polling_interval,
+                docker_volume_mode=docker_volume_mode
             )
             
             errors = app_config.validate()
