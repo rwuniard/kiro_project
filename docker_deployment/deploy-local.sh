@@ -8,6 +8,7 @@ set -e  # Exit on any error
 echo "============================================"
 echo "  Kiro Project - Local Docker Deployment"
 echo "  Platform: Unix/Mac"
+echo "  File Monitoring: Hybrid (Docker-optimized)"
 echo "============================================"
 echo
 

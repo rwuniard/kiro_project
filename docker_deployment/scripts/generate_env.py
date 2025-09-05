@@ -97,6 +97,15 @@ class EnvironmentGenerator:
         
         return chroma_settings
     
+    def get_file_monitoring_settings(self, environment: str) -> Dict[str, str]:
+        """Get file monitoring settings optimized for Docker deployment."""
+        # Docker deployment should use polling mode with optimizations
+        return {
+            "FILE_MONITORING_MODE": "auto",  # Auto-detect Docker environment
+            "POLLING_INTERVAL": "2.0",       # Faster polling for Docker
+            "DOCKER_VOLUME_MODE": "true"     # Enable Docker optimizations
+        }
+    
     def generate_env_file(self, environment: str = "development", 
                          platform: str = "unix", 
                          model_vendor: str = "openai") -> bool:
@@ -133,6 +142,10 @@ class EnvironmentGenerator:
         # Get ChromaDB settings
         chroma_settings = self.get_chroma_settings(environment)
         replacements.update(chroma_settings)
+        
+        # Get file monitoring settings
+        file_monitoring_settings = self.get_file_monitoring_settings(environment)
+        replacements.update(file_monitoring_settings)
         
         # Set model vendor
         replacements["MODEL_VENDOR"] = model_vendor
@@ -171,6 +184,9 @@ class EnvironmentGenerator:
             print(f"  Source Folder: {replacements.get('SOURCE_FOLDER')}")
             print(f"  Saved Folder: {replacements.get('SAVED_FOLDER')}")
             print(f"  Error Folder: {replacements.get('ERROR_FOLDER')}")
+            print(f"  File Monitoring: {replacements.get('FILE_MONITORING_MODE')} mode")
+            print(f"  Polling Interval: {replacements.get('POLLING_INTERVAL')}s")
+            print(f"  Docker Optimized: {replacements.get('DOCKER_VOLUME_MODE')}")
             print(f"  OpenAI API Key: {'✓' if replacements.get('OPENAI_API_KEY') else '✗'}")
             print(f"  Google API Key: {'✓' if replacements.get('GOOGLE_API_KEY') else '✗'}")
             

@@ -7,6 +7,7 @@ setlocal EnableDelayedExpansion
 echo ============================================
 echo   Kiro Project - Local Docker Deployment
 echo   Platform: Windows
+echo   File Monitoring: Hybrid (Docker-optimized)
 echo ============================================
 echo.
 
