@@ -442,8 +442,8 @@ class FileMonitor:
                     if self.observer:
                         try:
                             self.observer.stop()
-                        except Exception:
-                            pass
+                        except Exception as stop_error:
+                            self.logger_service.log_warning(f"Failed to stop observer during retry: {stop_error}")
                     self.observer = Observer()
     
     def stop_monitoring(self) -> None:

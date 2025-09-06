@@ -202,9 +202,11 @@ class ProcessorRegistry:
                         # Temporarily allow .doc files for this processor instance
                         office_processor._handling_doc_with_rtf_content = True
                         return office_processor
-            except Exception:
-                # If file detection fails, fall back to normal extension-based routing
-                pass
+            except Exception as detection_error:
+                # If file detection fails, log the issue and fall back to normal extension-based routing
+                if hasattr(self, 'logger') and self.logger:
+                    self.logger.log_warning(f"RTF content detection failed for {file_path}: {detection_error}")
+                # Continue with fallback to normal routing
             # Use Office processor (default behavior for .doc files)
             processor_name = self._extension_map.get(extension)
             if processor_name:

@@ -92,8 +92,10 @@ source = [
 
 # Bandit security linting configuration
 [tool.bandit]
-exclude_dirs = ["tests", "test_*"]
-skips = ["B101"]  # Skip assert statements in tests
+exclude_dirs = ["tests", "test_*", "htmlcov", ".venv", "build", "dist"]
+# B101: Skip assert statements (common in tests)
+# B110: We've addressed all try_except_pass issues with proper logging
+skips = ["B101"]
 
 # Additional pytest configuration in pyproject.toml format
 [tool.pytest.ini_options]

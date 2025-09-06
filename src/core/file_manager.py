@@ -270,8 +270,9 @@ class FileManager:
                 if dest_path.exists():
                     try:
                         dest_path.unlink()
-                    except Exception:
-                        pass
+                    except Exception as cleanup_error:
+                        # Log cleanup failure but don't let it mask the original error
+                        print(f"WARNING: Failed to clean up partial file copy {dest_path}: {cleanup_error}")
                 raise copy_error from e
     
     def _is_folder_empty(self, folder_path: Path) -> bool:
