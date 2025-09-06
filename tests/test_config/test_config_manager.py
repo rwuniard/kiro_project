@@ -129,7 +129,7 @@ class TestConfigManager:
         manager = ConfigManager(env_file='.env')
         config = manager.load_config()
         
-        mock_load_dotenv.assert_called_once_with('.env')
+        mock_load_dotenv.assert_called_once_with('.env', override=True)
         assert config['SOURCE_FOLDER'] == '/source'
         assert config['SAVED_FOLDER'] == '/saved'
         assert config['ERROR_FOLDER'] == '/error'
@@ -218,13 +218,22 @@ class TestConfigManager:
         'SOURCE_FOLDER': '/source',
         'SAVED_FOLDER': '/saved',
         'ERROR_FOLDER': '/error',
-        'ENABLE_DOCUMENT_PROCESSING': 'false'
+        'ENABLE_DOCUMENT_PROCESSING': 'false',
+        'FILE_MONITORING_MODE': 'auto',
+        'POLLING_INTERVAL': '3.0',
+        'DOCKER_VOLUME_MODE': 'false'
     })
     def test_initialize_success(self):
         """Test successful initialization (load and validate in one step)."""
         with tempfile.TemporaryDirectory() as temp_dir:
             # Override the SOURCE_FOLDER to use a real directory for validation
-            with patch.dict(os.environ, {'SOURCE_FOLDER': temp_dir, 'ENABLE_DOCUMENT_PROCESSING': 'false'}):
+            with patch.dict(os.environ, {
+                'SOURCE_FOLDER': temp_dir, 
+                'ENABLE_DOCUMENT_PROCESSING': 'false',
+                'FILE_MONITORING_MODE': 'auto',
+                'POLLING_INTERVAL': '3.0',
+                'DOCKER_VOLUME_MODE': 'false'
+            }):
                 manager = ConfigManager(env_file=None)
                 config = manager.initialize()
                 

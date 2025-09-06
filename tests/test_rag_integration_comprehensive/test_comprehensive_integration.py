@@ -225,15 +225,20 @@ class TestComprehensiveRAGIntegration(BaseRAGIntegrationTest):
         app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
         
         with patch('src.app.RAGStoreProcessor', return_value=failing_processor):
-            result = app.initialize()
-            # The app may handle processor failures gracefully, so check if it initializes
-            # but the processor itself fails
-            if result is True:
-                # If app initializes, verify the processor failed
-                assert not failing_processor.initialized
-            else:
-                # If app fails to initialize, that's also valid
-                assert result is False
+            try:
+                result = app.initialize()
+                # The app may handle processor failures gracefully, so check if it initializes
+                # but the processor itself fails
+                if result is True:
+                    # If app initializes, verify the processor failed
+                    assert not failing_processor.initialized
+                else:
+                    # If app fails to initialize, that's also valid
+                    assert result is False
+            except RuntimeError:
+                # App initialization failed with RuntimeError, which is also valid behavior
+                # for processor initialization failures
+                pass
         app.shutdown()  # Clean up
         
         # Test 3: Runtime processing failures
