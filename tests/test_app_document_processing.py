@@ -87,23 +87,24 @@ class TestApplicationDocumentProcessingIntegration:
     
     def test_app_initialization_with_document_processing_enabled(self):
         """Test application initialization with document processing enabled."""
-        # Mock the RAG dependencies to be available
-        with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
-                mock_processor = MagicMock()
-                mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
-                mock_processor_class.return_value = mock_processor
-                
-                self.app = FolderFileProcessorApp(env_file=str(self.env_file))
-                result = self.app.initialize()
-                
-                assert result is True
-                assert self.app.document_processor is not None
-                assert self.app.config.document_processing.enable_processing is True
-                
-                # Verify document processor was initialized
-                mock_processor_class.assert_called_once()
-                mock_processor.initialize.assert_called_once()
+        # Import app module to access its namespace
+        import src.app as app_module
+        # Mock the RAG dependencies to be available by patching the imported name in app module
+        with patch.object(app_module, 'RAGStoreProcessor') as mock_processor_class:
+            mock_processor = MagicMock()
+            mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
+            mock_processor_class.return_value = mock_processor
+            
+            self.app = FolderFileProcessorApp(env_file=str(self.env_file))
+            result = self.app.initialize()
+            
+            assert result is True
+            assert self.app.document_processor is not None
+            assert self.app.config.document_processing.enable_processing is True
+            
+            # Verify document processor was initialized
+            mock_processor_class.assert_called_once()
+            mock_processor.initialize.assert_called_once()
     
     def test_app_initialization_with_document_processing_disabled(self):
         """Test application initialization with document processing disabled."""
@@ -138,7 +139,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_initialization_failure(self):
         """Test handling of document processor initialization failure."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor.initialize.side_effect = Exception("Processor init failed")
@@ -168,7 +169,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_validation_with_document_processor_enabled(self):
         """Test validation includes document processor when enabled."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -209,7 +210,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_health_check_success(self):
         """Test document processor health check success."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -226,7 +227,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_health_check_chroma_path_missing(self):
         """Test document processor health check when ChromaDB path is missing."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -244,7 +245,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_health_check_processor_failure(self):
         """Test document processor health check when processor fails."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 # First call (during validation) succeeds, subsequent calls fail
                 mock_processor.get_supported_extensions.side_effect = [
@@ -262,7 +263,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_health_check_no_extensions(self):
         """Test document processor health check when no extensions are supported."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = set()
                 mock_processor_class.return_value = mock_processor
@@ -276,7 +277,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processing_statistics_reporting(self):
         """Test statistics reporting includes document processing information."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -308,7 +309,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_cleanup_on_shutdown(self):
         """Test document processor cleanup during shutdown."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -327,7 +328,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_document_processor_cleanup_error_handling(self):
         """Test document processor cleanup error handling."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor.cleanup.side_effect = Exception("Cleanup error")
@@ -345,7 +346,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_cleanup_on_initialization_failure(self):
         """Test cleanup when initialization fails."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor
@@ -365,7 +366,7 @@ class TestApplicationDocumentProcessingIntegration:
     def test_file_processor_receives_document_processor(self):
         """Test that FileProcessor receives the document processor during initialization."""
         with patch('src.app.DOCUMENT_PROCESSING_AVAILABLE', True):
-            with patch('src.app.RAGStoreProcessor') as mock_processor_class:
+            with patch('src.core.rag_store_processor.RAGStoreProcessor') as mock_processor_class:
                 mock_processor = MagicMock()
                 mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
                 mock_processor_class.return_value = mock_processor

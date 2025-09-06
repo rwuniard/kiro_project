@@ -476,8 +476,8 @@ class TestErrorRecoveryAndSystemStability(BaseRAGIntegrationTest):
     
     def test_monitoring_responsiveness_during_heavy_processing(self):
         """Test that monitoring remains responsive during heavy processing load."""
-        # Create environment configuration
-        self.create_env_file(enable_document_processing=True)
+        # Create environment configuration with faster polling for this test
+        self.create_env_file(enable_document_processing=True, POLLING_INTERVAL="0.5")
         
         # Create mock processor with significant delay
         self.mock_processor = MockDocumentProcessor(processing_delay=0.1)

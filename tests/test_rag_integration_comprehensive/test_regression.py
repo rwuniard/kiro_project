@@ -52,10 +52,7 @@ class TestExistingFunctionalityRegression(BaseRAGIntegrationTest):
         self.app.file_monitor.start_monitoring()
         assert self.app.file_monitor.is_monitoring() is True
         
-        self.app.file_monitor.stop_monitoring()
-        assert self.app.file_monitor.is_monitoring() is False
-        
-        # Test monitoring statistics
+        # Test monitoring statistics while active
         stats = self.app.file_monitor.get_monitoring_stats()
         assert isinstance(stats, dict)
         assert 'hybrid_mode' in stats  # HybridFileMonitor always includes this
@@ -64,6 +61,9 @@ class TestExistingFunctionalityRegression(BaseRAGIntegrationTest):
         has_event_stats = 'events_received' in stats
         has_polling_stats = 'polling_cycles' in stats
         assert has_event_stats or has_polling_stats, f"Expected either events_received or polling_cycles in stats: {stats.keys()}"
+        
+        self.app.file_monitor.stop_monitoring()
+        assert self.app.file_monitor.is_monitoring() is False
     
     def test_error_handling_behavior_preserved(self):
         """Test that error handling and logging behavior is preserved."""
@@ -274,22 +274,22 @@ class TestExistingFunctionalityRegression(BaseRAGIntegrationTest):
         assert 'successful' in stats
         assert stats['successful'] >= len(fixtures)
         
-        # Test monitoring statistics
-        monitor_stats = self.app.file_monitor.get_monitoring_stats()
-        assert isinstance(monitor_stats, dict)
-        assert 'hybrid_mode' in monitor_stats  # HybridFileMonitor always includes this
-        # The underlying monitor should provide either events_received (FileMonitor) 
-        # or polling_cycles (PollingFileMonitor) based on the selected mode
-        has_event_stats = 'events_received' in monitor_stats
-        has_polling_stats = 'polling_cycles' in monitor_stats
-        assert has_event_stats or has_polling_stats, f"Expected either events_received or polling_cycles in monitor stats: {monitor_stats.keys()}"
-        
-        # Start monitoring for health check (then stop it)
+        # Start monitoring for health check and stats testing
         self.app.file_monitor.start_monitoring()
         try:
             # Test health check functionality
             health_result = self.app._perform_health_check()
             assert health_result is True
+            
+            # Test monitoring statistics while active
+            monitor_stats = self.app.file_monitor.get_monitoring_stats()
+            assert isinstance(monitor_stats, dict)
+            assert 'hybrid_mode' in monitor_stats  # HybridFileMonitor always includes this
+            # The underlying monitor should provide either events_received (FileMonitor) 
+            # or polling_cycles (PollingFileMonitor) based on the selected mode
+            has_event_stats = 'events_received' in monitor_stats
+            has_polling_stats = 'polling_cycles' in monitor_stats
+            assert has_event_stats or has_polling_stats, f"Expected either events_received or polling_cycles in monitor stats: {monitor_stats.keys()}"
         finally:
             self.app.file_monitor.stop_monitoring()
         

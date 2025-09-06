@@ -337,8 +337,8 @@ class TestComprehensiveRAGIntegration(BaseRAGIntegrationTest):
     
     def test_integration_monitoring_and_health_checks(self):
         """Test integration with monitoring and health check systems."""
-        # Create environment configuration
-        self.create_env_file(enable_document_processing=True)
+        # Create environment configuration with faster polling for this test
+        self.create_env_file(enable_document_processing=True, POLLING_INTERVAL="0.5")
         
         # Create mock processor
         self.mock_processor = MockDocumentProcessor()
@@ -379,12 +379,13 @@ class TestComprehensiveRAGIntegration(BaseRAGIntegrationTest):
             health_result = self.app._perform_health_check()
             assert health_result is True
             
-            # Stop monitoring
-            self.app.file_monitor.stop_monitoring()
             file_thread.join(timeout=2.0)
             
-            # Wait for processing to complete
+            # Wait for processing to complete while monitoring is still active
             self.wait_for_file_processing(timeout=3.0)
+            
+            # Stop monitoring after processing is complete
+            self.app.file_monitor.stop_monitoring()
             
             # Verify files were processed
             processed_files = list(self.saved_dir.glob("*.txt"))
