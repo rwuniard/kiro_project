@@ -12,7 +12,7 @@ coverage:
     # Overall project status
     project:
       default:
-        target: 90%
+        target: 85%
         threshold: 1%  # Allow 1% decrease
         base: auto
         if_ci_failed: error

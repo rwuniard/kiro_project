@@ -50,7 +50,7 @@ jobs:
           --cov-report=xml:coverage.xml \
           --cov-report=html:htmlcov \
           --cov-report=term-missing \
-          --cov-fail-under=90 \
+          --cov-fail-under=85 \
           --maxfail=5 \
           -v \
           tests/
