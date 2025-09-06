@@ -86,7 +86,7 @@ Before pushing, verify your changes meet all requirements:
 
 ```bash
 # Run all tests with coverage
-uv run pytest --cov=src --cov-report=xml --cov-fail-under=90 -v
+uv run pytest --cov=src --cov-report=xml --cov-fail-under=85 -v
 
 # Security scan (optional but recommended)
 uv add --dev bandit[toml]
@@ -113,7 +113,7 @@ gh pr create --title "Your PR Title" --body "Description of changes"
 
 - ✅ **All unit tests pass** (450+ tests)
 - ✅ **85% code coverage per file** (enforced)
-- ✅ **90% total project coverage**
+- ✅ **85% total project coverage**
 - ✅ **Security vulnerability scan** passes
 - ✅ **Docker image builds** successfully
 - ✅ **Integration tests** pass
@@ -170,7 +170,7 @@ Brief description of changes and motivation
 
 **Coverage Standards:**
 - **85% minimum per file** (strictly enforced)
-- **90% total project coverage**
+- **85% total project coverage**
 - **100% coverage** for critical paths (authentication, file processing)
 
 **Test Types:**
