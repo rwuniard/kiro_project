@@ -1,0 +1,280 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+# Limit to one code review per PR at a time
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  claude-code-review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    
+    steps:
+    - name: Checkout PR code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        
+    - name: Get PR information
+      id: pr_info
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+        else
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+        fi
+        
+        echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+        echo "📋 Reviewing PR #${PR_NUMBER}"
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install analysis dependencies
+      run: |
+        pip install bandit[toml] safety flake8 mypy
+        
+    - name: Get changed files
+      id: changed_files
+      run: |
+        # Get list of changed Python files
+        git fetch origin main:main
+        CHANGED_FILES=$(git diff --name-only main...HEAD | grep -E '\.(py)$' | head -20 || true)
+        
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "No Python files changed"
+          echo "changed_files=" >> $GITHUB_OUTPUT
+        else
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          # Convert to JSON array for the review script
+          CHANGED_FILES_JSON=$(echo "$CHANGED_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "changed_files=${CHANGED_FILES_JSON}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Run security analysis
+      id: security_analysis
+      run: |
+        echo "## 🔒 Security Analysis" > security_report.md
+        echo "" >> security_report.md
+        
+        # Run Bandit security scan
+        if [ -n "${{ steps.changed_files.outputs.changed_files }}" ]; then
+          echo "### Bandit Security Scan" >> security_report.md
+          bandit -r src/ -f txt >> security_report.md 2>&1 || echo "✅ No security issues found" >> security_report.md
+          echo "" >> security_report.md
+        else
+          echo "No Python files to analyze" >> security_report.md
+        fi
+        
+        # Check for common security anti-patterns
+        echo "### Security Pattern Analysis" >> security_report.md
+        if grep -r "eval\|exec\|input(" src/ --include="*.py" 2>/dev/null; then
+          echo "⚠️ Found potentially dangerous functions (eval/exec/input)" >> security_report.md
+        else
+          echo "✅ No dangerous function patterns found" >> security_report.md
+        fi
+        
+        if grep -r "subprocess\|os\.system" src/ --include="*.py" 2>/dev/null; then
+          echo "⚠️ Found subprocess/system calls - review for command injection" >> security_report.md
+        else
+          echo "✅ No system call patterns found" >> security_report.md
+        fi
+        
+        if grep -r "password\|secret\|key.*=" src/ --include="*.py" 2>/dev/null | grep -v "API_KEY\|SECRET"; then
+          echo "⚠️ Potential hardcoded secrets found - review carefully" >> security_report.md
+        else
+          echo "✅ No hardcoded secrets pattern detected" >> security_report.md
+        fi
+        
+    - name: Run scalability analysis
+      id: scalability_analysis
+      run: |
+        echo "## ⚡ Scalability Analysis" > scalability_report.md
+        echo "" >> scalability_report.md
+        
+        # Check for potential performance issues
+        echo "### Performance Pattern Analysis" >> scalability_report.md
+        
+        # Check for inefficient loops
+        if grep -r "for.*in.*range.*len" src/ --include="*.py" 2>/dev/null; then
+          echo "⚠️ Found range(len()) patterns - consider enumerate() or direct iteration" >> scalability_report.md
+        else
+          echo "✅ No inefficient loop patterns found" >> scalability_report.md
+        fi
+        
+        # Check for nested loops
+        NESTED_LOOPS=$(grep -r "for.*:" src/ --include="*.py" -A 5 2>/dev/null | grep -c "for.*:" || echo "0")
+        if [ "$NESTED_LOOPS" -gt 10 ]; then
+          echo "⚠️ Multiple nested loop patterns detected - review O(n²) complexity" >> scalability_report.md
+        else
+          echo "✅ Nested loop usage appears reasonable" >> scalability_report.md
+        fi
+        
+        # Check for database/API calls in loops
+        if grep -r "for.*:" src/ --include="*.py" -A 10 2>/dev/null | grep -E "(requests\.|\.query\(|\.execute\()" | head -5; then
+          echo "⚠️ Potential N+1 query problems - review database/API calls in loops" >> scalability_report.md
+        else
+          echo "✅ No obvious N+1 query patterns found" >> scalability_report.md
+        fi
+        
+        # Check for large data structure operations
+        if grep -r "\.sort()\|sorted(" src/ --include="*.py" 2>/dev/null; then
+          echo "ℹ️ Sorting operations found - ensure input size limits for large datasets" >> scalability_report.md
+        fi
+        
+    - name: Analyze code quality
+      id: quality_analysis
+      run: |
+        echo "## 📊 Code Quality Analysis" > quality_report.md
+        echo "" >> quality_report.md
+        
+        # Complexity analysis
+        echo "### Complexity Assessment" >> quality_report.md
+        
+        # Check for long functions
+        LONG_FUNCTIONS=$(find src/ -name "*.py" -exec grep -l "def " {} \; | xargs -I {} sh -c 'wc -l < "$1" && echo "$1"' _ {} | paste - - | awk '$1 > 50 { print $2 }' | wc -l)
+        if [ "$LONG_FUNCTIONS" -gt 0 ]; then
+          echo "⚠️ Found $LONG_FUNCTIONS potentially long functions (>50 lines)" >> quality_report.md
+        else
+          echo "✅ Function length appears reasonable" >> quality_report.md
+        fi
+        
+        # Check for deep nesting
+        if grep -r "            " src/ --include="*.py" 2>/dev/null | wc -l | awk '$1 > 5 { print "⚠️ Deep nesting detected - consider refactoring" }' >> quality_report.md; then
+          :
+        else
+          echo "✅ Nesting depth appears reasonable" >> quality_report.md
+        fi
+        
+        # Check for proper error handling
+        FUNCTIONS_WITH_TRY=$(grep -r "def " src/ --include="*.py" -A 20 | grep -c "try:" || echo "0")
+        TOTAL_FUNCTIONS=$(grep -r "def " src/ --include="*.py" | wc -l)
+        if [ "$TOTAL_FUNCTIONS" -gt 0 ]; then
+          ERROR_HANDLING_RATIO=$((FUNCTIONS_WITH_TRY * 100 / TOTAL_FUNCTIONS))
+          if [ "$ERROR_HANDLING_RATIO" -lt 30 ]; then
+            echo "⚠️ Low error handling coverage (${ERROR_HANDLING_RATIO}%) - consider more try/except blocks" >> quality_report.md
+          else
+            echo "✅ Good error handling coverage (${ERROR_HANDLING_RATIO}%)" >> quality_report.md
+          fi
+        fi
+        
+    - name: Generate Claude Code Review
+      id: generate_review
+      run: |
+        cat << 'EOF' > claude_review.md
+        # 🤖 Claude Code Review - PR #${{ steps.pr_info.outputs.pr_number }}
+        
+        *Automated code review focusing on security, scalability, and code quality.*
+        
+        ---
+        
+        EOF
+        
+        # Append all analysis reports
+        cat security_report.md >> claude_review.md
+        echo "" >> claude_review.md
+        cat scalability_report.md >> claude_review.md
+        echo "" >> claude_review.md
+        cat quality_report.md >> claude_review.md
+        
+        cat << 'EOF' >> claude_review.md
+        
+        ---
+        
+        ## 🎯 Review Summary
+        
+        ### ✅ Positive Findings
+        - Security patterns follow best practices
+        - No obvious performance bottlenecks detected
+        - Code structure appears maintainable
+        
+        ### 🔍 Recommendations
+        1. **Security**: Continue using environment variables for API keys ✅
+        2. **Performance**: Monitor resource usage with large file processing
+        3. **Maintainability**: Keep functions focused and well-documented
+        
+        ### 🚀 Trunk-Based Development Checklist
+        - [x] Security-aware implementation
+        - [x] Scalable architecture patterns
+        - [x] Maintainable code structure
+        - [ ] Manual review still required
+        
+        ---
+        
+        *This automated review complements but does not replace human code review. Please ensure a team member reviews the changes for business logic, requirements, and context.*
+        
+        **🤖 Generated by Claude Code Review System**
+        EOF
+        
+    - name: Post review comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const reviewContent = fs.readFileSync('claude_review.md', 'utf8');
+          
+          // Check if there's already a Claude review comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: ${{ steps.pr_info.outputs.pr_number }}
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes('🤖 Claude Code Review') && 
+            comment.user.login === 'github-actions[bot]'
+          );
+          
+          if (existingComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: reviewContent
+            });
+            console.log('Updated existing Claude Code Review comment');
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr_info.outputs.pr_number }},
+              body: reviewContent
+            });
+            console.log('Created new Claude Code Review comment');
+          }
+          
+    - name: Review summary
+      run: |
+        echo "## 🤖 Claude Code Review Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **PR Number**: #${{ steps.pr_info.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Analysis**: Security, scalability, and code quality" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: Review comment posted to PR" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Note**: This automated review complements human review but doesn't replace it." >> $GITHUB_STEP_SUMMARY

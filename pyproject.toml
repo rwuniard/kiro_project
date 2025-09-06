@@ -30,4 +30,90 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=6.2.1",
+    "pytest-timeout>=2.1.0",
+    "bandit[toml]>=1.7.0",
+    "safety>=2.3.0",
+]
+
+# Coverage configuration for trunk-based development (85% minimum per file)
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py",
+    "*/conftest.py",
+    "*/setup.py",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/build/*",
+    "*/dist/*",
+]
+
+[tool.coverage.report]
+# Total project coverage requirement (90%)
+fail_under = 90.0
+precision = 1
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    # Have to re-enable the standard pragma
+    "pragma: no cover",
+    # Don't complain about missing debug-only code:
+    "def __repr__",
+    "if self\\.debug",
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+    # Don't complain about abstract methods
+    "@(abc\\.)?abstractmethod",
+    # Don't complain about type checking imports
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "RAG File Processor Coverage Report"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# Per-file coverage requirements (85% minimum)
+# This is enforced by the CI pipeline custom script
+[tool.coverage.paths]
+source = [
+    "src/",
+    "*/site-packages/",
+]
+
+# Bandit security linting configuration
+[tool.bandit]
+exclude_dirs = ["tests", "test_*"]
+skips = ["B101"]  # Skip assert statements in tests
+
+# Additional pytest configuration in pyproject.toml format
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config", 
+    "--color=yes",
+    "--tb=short",
+    "--durations=10",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests as integration tests", 
+    "unit: marks tests as unit tests",
+    "rag: marks tests that require RAG functionality",
+    "docker: marks tests that require Docker environment",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning", 
+    "ignore:.*unclosed.*:ResourceWarning",
 ]

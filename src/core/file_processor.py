@@ -167,7 +167,6 @@ class FileProcessor:
         # System files to ignore
         ignored_files = {
             '.ds_store',           # macOS Finder metadata
-            'thumbs.db',           # Windows thumbnail cache
             'desktop.ini',         # Windows folder customization
             '.spotlightv100',      # macOS Spotlight index
             '.fseventsd',          # macOS file system events

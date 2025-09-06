@@ -1,0 +1,106 @@
+# Codecov configuration for RAG File Processor
+# Enforces 85% per-file coverage for trunk-based development
+
+coverage:
+  # Overall project coverage target
+  range: 85..100
+  round: down
+  precision: 1
+
+  # Individual file coverage requirements (85% minimum)
+  status:
+    # Overall project status
+    project:
+      default:
+        target: 90%
+        threshold: 1%  # Allow 1% decrease
+        base: auto
+        if_ci_failed: error
+    
+    # Per-file coverage requirements
+    patch:
+      default:
+        target: 85%
+        threshold: 1%
+        base: auto
+        if_ci_failed: error
+        
+  # Individual file coverage requirements
+  individual_files:
+    target: 85%
+    threshold: 1%
+
+# PR comments configuration
+comment:
+  require_changes: true
+  require_base: false
+  require_head: true
+  layout: "header, diff, files"
+  behavior: default
+  show_carryforward_flags: false
+
+# Ignore files and directories
+ignore:
+  - "tests/**/*"
+  - "**/__init__.py"
+  - "**/conftest.py"
+  - "setup.py"
+  - "docker_deployment/**/*"
+  - "*.md"
+  - "*.txt"
+  - "*.yml"
+  - "*.yaml"
+
+# Flag configuration for different test types
+flag_management:
+  individual_flags:
+    - name: unittests
+      paths:
+        - src/
+      carryforward: true
+    - name: integration
+      paths:
+        - src/
+      carryforward: false
+
+# GitHub integration
+github_checks:
+  annotations: true
+
+# Notification settings
+notifications:
+  # Disable email notifications
+  email: false
+  
+  # Slack notifications (if configured)
+  slack:
+    default:
+      url: "secret:slack_webhook_url"  # Set in Codecov settings if needed
+      threshold: 1%
+      message: "Coverage changed for {{owner}}/{{repo}}"
+      attachments: "sunburst, diff"
+
+# Coverage submission requirements
+parsers:
+  gcov:
+    branch_detection:
+      conditional: true
+      loop: true
+      method: false
+      macro: false
+
+# Validation settings
+validation:
+  max_report_age: "24h"  # Reports older than 24h are ignored
+  require_ci_to_pass: true
+
+# Pull request behavior
+pull_request_settings:
+  # Automatically update coverage when PR is ready
+  auto_update_coverage: true
+  
+  # Coverage comparison base
+  base_coverage: auto
+  
+  # Minimum coverage for PR approval
+  minimum_coverage: 85%
