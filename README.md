@@ -25,6 +25,8 @@ A sophisticated Python application that monitors configurable source folders for
 - **License Update**: Changed from MIT to Creative Commons BY-NC-SA 4.0 for non-commercial use protection
 - **Test Suite Excellence**: All 450+ tests now passing with comprehensive integration coverage
 - **Docker Deployment**: Complete containerized deployment with automated setup scripts
+- **Docker Permission Fixes**: Resolved Office document processing permission issues in Docker containers
+- **Automated Deployment**: Enhanced deployment scripts with automatic temporary directory setup
 - **ChromaDB Enhancements**: Full support for both embedded and client-server modes
 - **Error Handling**: Enhanced error logging with improved context and recovery mechanisms
 - **PDF Processing**: Stable PyMuPDF integration with full OCR capabilities for image-based documents
@@ -1085,14 +1087,17 @@ GOOGLE_API_KEY=your_google_key_here
 
 1. **Validate Prerequisites**: Check Docker, Python, and required files
 2. **Create Local Directories**: Automatically create source/saved/error folders
-3. **Generate Configuration**: Create `.env` file from templates and settings
-4. **Build Docker Image**: Build the application with all dependencies
-5. **Start Container**: Launch with volume mapping to local folders
+3. **Set Up Temporary Directories**: Create and configure temp directories for document processing
+4. **Generate Configuration**: Create `.env` file from templates and settings
+5. **Build Docker Image**: Build the application with all dependencies
+6. **Start Container**: Launch with volume mapping to local folders
 
 ### Docker Container Features
 
 - **Complete Environment**: All system dependencies (Tesseract OCR, LibreOffice) pre-installed
 - **Volume Mapping**: Direct access to local folders for file processing
+- **Permission Management**: Automatic setup of temporary directories with proper permissions
+- **Office Document Support**: Fixed permission issues for .docx/.doc processing in containers
 - **Persistent Data**: ChromaDB and logs persist between container restarts
 - **Resource Management**: Configurable memory and CPU limits
 - **Health Monitoring**: Built-in health checks and status monitoring
@@ -1190,6 +1195,13 @@ chmod 755 /path/to/your/folders
 
 # Check Docker has access to your folders
 ls -la /path/to/your/source/folder
+
+# Office Document Processing Permission Issues (Fixed in latest version)
+# The deployment scripts now automatically set up proper temporary directories
+# If you still encounter permission errors with .docx/.doc files:
+# 1. Ensure deployment script ran successfully (creates /tmp/file-processor-unstructured)
+# 2. Check container logs: docker-compose logs rag-file-processor
+# 3. Verify temp directory exists: docker-compose exec rag-file-processor ls -la /tmp/unstructured
 ```
 
 ### Docker vs Native Installation

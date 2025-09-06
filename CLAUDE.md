@@ -103,10 +103,11 @@ docker-compose up --build
 1. Edit docker_deployment/config/unix_paths.json (Mac/Linux) or docker_deployment/config/windows_paths.json (Windows)
 2. Create .env.local with API keys in project root
 3. Run deployment script: ./docker_deployment/deploy-local.sh
+   # Script now automatically sets up temporary directories and permissions
 
 # Daily development cycle
 docker-compose logs -f          # Monitor application
-# Drop test files into source folder
+# Drop test files into source folder (including .docx/.doc files)
 docker-compose restart          # Restart if needed
 docker-compose down             # Stop when done
 
@@ -137,6 +138,10 @@ saved/           → /app/data/saved      (successfully processed files)
 error/           → /app/data/error      (failed files with .log files)
 ./data/chroma_db → /app/data/chroma_db  (persistent ChromaDB storage)
 ./logs           → /app/logs            (application logs)
+
+# Temporary Directories (automatically created by deployment scripts)
+/tmp/file-processor-unstructured → /tmp/unstructured  (Unix/Mac)
+C:\temp\file-processor-unstructured → /tmp/unstructured  (Windows)
 ```
 
 #### Docker Troubleshooting
@@ -197,6 +202,8 @@ DOCKER_VOLUME_MODE=true         # Enable Docker optimizations
 - ✅ Easy deployment and cleanup
 - ✅ Volume mapping for easy file access
 - ✅ **Reliable file monitoring with automatic polling fallback**
+- ✅ **Fixed Office document processing with proper permission management**
+- ✅ **Automated temporary directory setup for document processing**
 
 **Native Development Benefits**:
 - ✅ Faster iteration cycles
@@ -207,7 +214,14 @@ DOCKER_VOLUME_MODE=true         # Enable Docker optimizations
 
 ## Recent Updates and Fixes
 
-The project has been recently updated with significant improvements to the test suite and overall reliability:
+The project has been recently updated with significant improvements to the test suite, Docker deployment, and overall reliability:
+
+### Docker Deployment Improvements ✅
+- **Fixed Office Document Processing**: Resolved permission denied errors when processing .docx/.doc files in Docker containers
+- **Automated Permission Setup**: Deployment scripts now automatically create and configure temporary directories with proper permissions
+- **Enhanced Dockerfile**: Added proper user permissions and temporary directory setup for document processing
+- **Cross-Platform Support**: Updated both Unix/Mac and Windows deployment scripts with automatic temp directory management
+- **Environment Variable Configuration**: Added TMPDIR, TEMP, TMP, and HOME environment variables for proper temp file handling
 
 ### Test Suite Improvements ✅
 - **Fixed all failing tests** across comprehensive integration test files
