@@ -96,6 +96,13 @@ echo   Created: !SOURCE_PATH!
 echo   Created: !SAVED_PATH!
 echo   Created: !ERROR_PATH!
 
+echo [2.5/5] Setting up temporary directory permissions...
+
+REM Create temporary directory for document processing (Windows equivalent)
+if not exist "C:\temp\file-processor-unstructured" mkdir "C:\temp\file-processor-unstructured"
+
+echo   Created: C:\temp\file-processor-unstructured
+
 echo [3/5] Generating environment configuration...
 
 REM Set default model vendor (can be overridden by command line argument)
@@ -151,6 +158,7 @@ echo.
 echo   Source folder:  !SOURCE_PATH!
 echo   Saved folder:   !SAVED_PATH!
 echo   Error folder:   !ERROR_PATH!
+echo   Temp directory: C:\temp\file-processor-unstructured
 echo   Model vendor:   %MODEL_VENDOR%
 echo.
 echo   Container status:

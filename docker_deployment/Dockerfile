@@ -57,6 +57,16 @@ COPY --chown=appuser:appuser docker_deployment/.env* ./
 RUN mkdir -p /app/data/source /app/data/saved /app/data/error /app/data/chroma_db /app/logs \
     && chown -R appuser:appuser /app/data /app/logs
 
+# Create home directory for appuser and set proper permissions
+RUN mkdir -p /home/appuser \
+    && chown -R appuser:appuser /home/appuser \
+    && chmod 755 /home/appuser
+
+# Create temp directory for unstructured processing
+RUN mkdir -p /tmp/unstructured \
+    && chown -R appuser:appuser /tmp/unstructured \
+    && chmod 755 /tmp/unstructured
+
 # Switch to non-root user
 USER appuser
 

@@ -1,3 +1,4 @@
+name: mcp-network
 services:
   rag-file-processor:
     build:
@@ -12,6 +13,12 @@ services:
       - SAVED_FOLDER=/app/data/saved
       - ERROR_FOLDER=/app/data/error
       - LOG_LEVEL=INFO
+      
+      # Temporary directory settings for document processing
+      - TMPDIR=/tmp/unstructured
+      - TEMP=/tmp/unstructured
+      - TMP=/tmp/unstructured
+      - HOME=/home/appuser
       
       # Document processing settings - values from .env file only
       # - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
@@ -38,6 +45,9 @@ services:
       - ./data/chroma_db:/app/data/chroma_db
       - ./logs:/app/logs
       - ./config:/app/config:ro
+      # Temporary directory for document processing
+      - /tmp/file-processor-unstructured:/tmp/unstructured  # Unix/Mac
+      # For Windows, use: C:\temp\file-processor-unstructured:/tmp/unstructured
       
     # Resource limits
     deploy:

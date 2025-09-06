@@ -92,7 +92,18 @@ echo "  Created: $SOURCE_PATH"
 echo "  Created: $SAVED_PATH"
 echo "  Created: $ERROR_PATH"
 
-echo "[3/5] Generating environment configuration..."
+echo "[2.5/5] Setting up temporary directory permissions..."
+
+# Create temporary directory for document processing
+mkdir -p /tmp/file-processor-unstructured
+
+# Set proper permissions (readable/writable by all users)
+chmod 777 /tmp/file-processor-unstructured
+
+echo "  Created: /tmp/file-processor-unstructured"
+echo "  Permissions set: $(ls -ld /tmp/file-processor-unstructured)"
+
+echo "[3/6] Generating environment configuration..."
 
 # Set default model vendor (can be overridden by command line argument)
 MODEL_VENDOR="${1:-google}"
@@ -108,7 +119,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "[4/5] Copying environment file..."
+echo "[4/6] Copying environment file..."
 
 # Copy generated file to .env for docker-compose
 if [ -f ".env.generated" ]; then
@@ -119,7 +130,7 @@ else
     exit 1
 fi
 
-echo "[5/5] Starting Docker containers..."
+echo "[5/6] Starting Docker containers..."
 
 # Build and start the containers
 echo "  Building Docker image..."
@@ -138,6 +149,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo "[6/6] Deployment complete!"
+
 echo
 echo "============================================"
 echo "  Deployment Successful!"
@@ -146,6 +159,7 @@ echo
 echo "  Source folder:  $SOURCE_PATH"
 echo "  Saved folder:   $SAVED_PATH"  
 echo "  Error folder:   $ERROR_PATH"
+echo "  Temp directory: /tmp/file-processor-unstructured"
 echo "  Model vendor:   $MODEL_VENDOR"
 echo
 echo "  Container status:"
