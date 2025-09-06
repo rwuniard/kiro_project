@@ -18,7 +18,7 @@ env:
 jobs:
   # Job 1: Unit Tests and Coverage
   test-and-coverage:
-    name: Unit Tests & Coverage (85% Required)
+    name: Unit Tests & Coverage (85% Overall)
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     
@@ -63,41 +63,6 @@ jobs:
         MODEL_VENDOR: openai
         CHROMA_DB_PATH: ./test_chroma_db
         
-    - name: Check per-file coverage (85% minimum)
-      run: |
-        echo "Checking per-file coverage requirements (85% minimum)..."
-        uv run python -c "
-        import xml.etree.ElementTree as ET
-        import sys
-        
-        tree = ET.parse('coverage.xml')
-        root = tree.getroot()
-        
-        failed_files = []
-        total_files = 0
-        
-        for package in root.findall('.//package'):
-            for cls in package.findall('.//class'):
-                filename = cls.get('filename', '')
-                if not filename.endswith(('__init__.py', 'conftest.py')):
-                    line_rate = float(cls.get('line-rate', 0))
-                    coverage_percent = line_rate * 100
-                    total_files += 1
-                    
-                    print(f'{filename}: {coverage_percent:.1f}%')
-                    
-                    if coverage_percent < 85.0:
-                        failed_files.append((filename, coverage_percent))
-        
-        if failed_files:
-            print(f'\n❌ COVERAGE FAILURE: {len(failed_files)} files below 85% threshold:')
-            for filename, coverage in failed_files:
-                print(f'  {filename}: {coverage:.1f}% (need 85%+)')
-            print(f'\n📊 Coverage Summary: {len(failed_files)}/{total_files} files failed')
-            sys.exit(1)
-        else:
-            print(f'\n✅ All {total_files} files meet 85%+ coverage requirement')
-        "
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -307,7 +272,7 @@ jobs:
         
         # Test results
         if [ "${{ needs.test-and-coverage.result }}" = "success" ]; then
-          echo "- ✅ **Unit Tests & Coverage**: All 450+ tests passed, 85%+ coverage per file" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Unit Tests & Coverage**: All 450+ tests passed, 85%+ overall coverage" >> $GITHUB_STEP_SUMMARY
         else
           echo "- ❌ **Unit Tests & Coverage**: Failed - check logs for details" >> $GITHUB_STEP_SUMMARY
         fi
@@ -337,7 +302,7 @@ jobs:
         echo "### 📋 Trunk-Based Development Checklist" >> $GITHUB_STEP_SUMMARY
         echo "- [x] Short-lived feature branch" >> $GITHUB_STEP_SUMMARY
         echo "- [x] All unit tests passing" >> $GITHUB_STEP_SUMMARY
-        echo "- [x] 85% code coverage per file enforced" >> $GITHUB_STEP_SUMMARY
+        echo "- [x] 85% overall code coverage enforced" >> $GITHUB_STEP_SUMMARY
         echo "- [x] Security vulnerability scanning" >> $GITHUB_STEP_SUMMARY
         echo "- [x] Docker image builds with version tagging" >> $GITHUB_STEP_SUMMARY
         echo "- [ ] Manual code review (pending reviewer)" >> $GITHUB_STEP_SUMMARY

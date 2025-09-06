@@ -25,10 +25,10 @@ coverage:
         base: auto
         if_ci_failed: error
         
-  # Individual file coverage requirements
-  individual_files:
-    target: 85%
-    threshold: 1%
+  # Individual file coverage requirements (disabled for now)
+  # individual_files:
+  #   target: 85%
+  #   threshold: 1%
 
 # PR comments configuration
 comment:

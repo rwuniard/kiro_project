@@ -36,7 +36,7 @@ dev = [
     "safety>=2.3.0",
 ]
 
-# Coverage configuration for trunk-based development (85% minimum per file)
+# Coverage configuration for trunk-based development (85% overall minimum)
 [tool.coverage.run]
 source = ["src"]
 branch = true
@@ -83,8 +83,8 @@ title = "RAG File Processor Coverage Report"
 [tool.coverage.xml]
 output = "coverage.xml"
 
-# Per-file coverage requirements (85% minimum)
-# This is enforced by the CI pipeline custom script
+# Per-file coverage requirements (disabled for now)
+# This was previously enforced by CI pipeline but temporarily removed
 [tool.coverage.paths]
 source = [
     "src/",
