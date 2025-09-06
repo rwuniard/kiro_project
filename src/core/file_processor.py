@@ -167,6 +167,7 @@ class FileProcessor:
         # System files to ignore
         ignored_files = {
             '.ds_store',           # macOS Finder metadata
+            'thumbs.db',           # Windows thumbnail cache
             'desktop.ini',         # Windows folder customization
             '.spotlightv100',      # macOS Spotlight index
             '.fseventsd',          # macOS file system events
@@ -198,6 +199,49 @@ class FileProcessor:
                 return True
         
         return False
+
+    @staticmethod
+    def should_delete_system_file(file_path: str) -> bool:
+        """
+        Determine if a system file should be automatically deleted.
+        
+        This method identifies system files that are safe to delete automatically
+        to prevent them from causing repeated processing attempts.
+        
+        Args:
+            file_path: Path to the file to check
+            
+        Returns:
+            bool: True if the file should be automatically deleted, False otherwise
+        """
+        filename = os.path.basename(file_path).lower()
+        
+        # System files that are safe to delete automatically
+        deletable_system_files = {
+            '.ds_store',           # macOS Finder metadata - safe to delete
+            'thumbs.db',           # Windows thumbnail cache - safe to delete
+            'desktop.ini',         # Windows folder customization - can be regenerated
+            '.spotlightv100',      # macOS Spotlight index - can be regenerated
+            '.fseventsd',          # macOS file system events - system managed
+            '.documentrevisions-v100',  # macOS document revisions - system managed
+        }
+        
+        # Check if filename matches any deletable system files
+        if filename in deletable_system_files:
+            return True
+        
+        # Check for temporary files that are safe to delete
+        temp_patterns = [
+            '.tmp',    # Generic temporary files
+            '.temp',   # Generic temporary files
+            '.swp',    # Vim swap files
+        ]
+        
+        for pattern in temp_patterns:
+            if filename.endswith(pattern):
+                return True
+        
+        return False
         
     def process_file(self, file_path: str) -> ProcessingResult:
         """
@@ -216,7 +260,18 @@ class FileProcessor:
         if self.should_ignore_file(file_path):
             processing_time = (datetime.now() - start_time).total_seconds()
             relative_path = self.file_manager.get_relative_path(file_path) or os.path.basename(file_path)
-            self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
+            
+            # Check if this is a system file that should be automatically deleted
+            if self.should_delete_system_file(file_path):
+                try:
+                    os.remove(file_path)
+                    self.logger.log_info(f"Automatically deleted system file: {relative_path}")
+                    print(f"Deleted system file: {relative_path}")
+                except Exception as e:
+                    self.logger.log_error(f"Failed to delete system file {relative_path}: {str(e)}")
+                    # Continue processing as if file was just ignored
+            else:
+                self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
             
             return ProcessingResult(
                 success=True,

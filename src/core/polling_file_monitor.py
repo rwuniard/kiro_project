@@ -272,7 +272,17 @@ class PollingFileMonitor:
                     
                     # Check if file should be ignored (system/temp files)
                     if FileProcessor.should_ignore_file(file_path_str):
-                        self.logger.log_info(f"Ignoring system/temporary file: {file_path.relative_to(self.source_folder)}")
+                        relative_path = file_path.relative_to(self.source_folder)
+                        
+                        # Check if this is a system file that should be automatically deleted
+                        if FileProcessor.should_delete_system_file(file_path_str):
+                            try:
+                                os.remove(file_path_str)
+                                self.logger.log_info(f"Automatically deleted system file: {relative_path}")
+                            except Exception as e:
+                                self.logger.log_error(f"Failed to delete system file {relative_path}: {str(e)}")
+                        else:
+                            self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
                         continue
                     
                     # Skip files currently being processed
@@ -423,7 +433,17 @@ class PollingFileMonitor:
                         
                         # Check if file should be ignored (system/temp files)
                         if FileProcessor.should_ignore_file(file_path_str):
-                            self.logger.log_info(f"Ignoring system/temporary file during manual scan: {file_path.relative_to(self.source_folder)}")
+                            relative_path = file_path.relative_to(self.source_folder)
+                            
+                            # Check if this is a system file that should be automatically deleted
+                            if FileProcessor.should_delete_system_file(file_path_str):
+                                try:
+                                    os.remove(file_path_str)
+                                    self.logger.log_info(f"Automatically deleted system file during manual scan: {relative_path}")
+                                except Exception as e:
+                                    self.logger.log_error(f"Failed to delete system file {relative_path} during manual scan: {str(e)}")
+                            else:
+                                self.logger.log_info(f"Ignoring system/temporary file during manual scan: {relative_path}")
                             continue
                         
                         self.logger.log_info(f"Processing existing file: {file_path.relative_to(self.source_folder)}")

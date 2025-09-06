@@ -86,7 +86,16 @@ class FileEventHandler(FileSystemEventHandler):
             from src.core.file_processor import FileProcessor
             if FileProcessor.should_ignore_file(event_path):
                 filename = os.path.basename(event_path)
-                self.logger.log_info(f"Ignoring system/temporary file: {filename}")
+                
+                # Check if this is a system file that should be automatically deleted
+                if FileProcessor.should_delete_system_file(event_path):
+                    try:
+                        os.remove(event_path)
+                        self.logger.log_info(f"Automatically deleted system file: {filename}")
+                    except Exception as e:
+                        self.logger.log_error(f"Failed to delete system file {filename}: {str(e)}")
+                else:
+                    self.logger.log_info(f"Ignoring system/temporary file: {filename}")
                 return
             
             # Log the file creation event
@@ -309,7 +318,16 @@ class FileEventHandler(FileSystemEventHandler):
                     from src.core.file_processor import FileProcessor
                     if FileProcessor.should_ignore_file(file_path_str):
                         relative_path = file_path.relative_to(dir_path)
-                        self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
+                        
+                        # Check if this is a system file that should be automatically deleted
+                        if FileProcessor.should_delete_system_file(file_path_str):
+                            try:
+                                os.remove(file_path_str)
+                                self.logger.log_info(f"Automatically deleted system file: {relative_path}")
+                            except Exception as e:
+                                self.logger.log_error(f"Failed to delete system file {relative_path}: {str(e)}")
+                        else:
+                            self.logger.log_info(f"Ignoring system/temporary file: {relative_path}")
                         continue
                     
                     relative_path = file_path.relative_to(dir_path)
@@ -646,7 +664,16 @@ class FileMonitor:
                         from src.core.file_processor import FileProcessor
                         if FileProcessor.should_ignore_file(file_path_str):
                             relative_path = file_path.relative_to(source_path)
-                            self.logger.log_info(f"Ignoring system/temporary file during scan: {relative_path}")
+                            
+                            # Check if this is a system file that should be automatically deleted
+                            if FileProcessor.should_delete_system_file(file_path_str):
+                                try:
+                                    os.remove(file_path_str)
+                                    self.logger.log_info(f"Automatically deleted system file during scan: {relative_path}")
+                                except Exception as e:
+                                    self.logger.log_error(f"Failed to delete system file {relative_path} during scan: {str(e)}")
+                            else:
+                                self.logger.log_info(f"Ignoring system/temporary file during scan: {relative_path}")
                             continue
                         
                         self.logger.log_info(f"Processing existing file: {file_path.relative_to(source_path)}")

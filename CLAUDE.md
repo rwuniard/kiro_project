@@ -463,42 +463,64 @@ The project uses a comprehensive multi-tier testing approach:
 
 **Configuration-Driven**: All behavior controlled through validated environment variables with runtime dependency checks
 
-## File Processing Filtering
+## File Processing Filtering and Automatic System File Cleanup
 
-The application includes intelligent file filtering to prevent system files and temporary files from being processed and cluttering the error folder.
+The application includes intelligent file filtering with **automatic system file deletion** to prevent system files and temporary files from causing repeated processing attempts and cluttering the source folder.
 
-### Automatically Ignored Files
+### Automatically Deleted System Files
 
-**System Files**:
-- `.DS_Store` - macOS Finder metadata files
-- `Thumbs.db` - Windows thumbnail cache files  
-- `desktop.ini` - Windows folder customization files
-- `.spotlightv100` - macOS Spotlight index files
-- `.fseventsd` - macOS file system event files
-- `.documentrevisions-v100` - macOS document revision files
-- System directories (`.trash`, `$recycle.bin`)
+The application automatically deletes these system files when detected (no user action required):
+
+**macOS System Files**:
+- `.DS_Store` - Finder metadata files (automatically deleted)
+- `.spotlightv100` - Spotlight index files (automatically deleted)
+- `.fseventsd` - File system event files (automatically deleted)
+- `.documentrevisions-v100` - Document revision files (automatically deleted)
+
+**Windows System Files**:
+- `Thumbs.db` - Thumbnail cache files (automatically deleted)
+- `desktop.ini` - Folder customization files (automatically deleted)
 
 **Temporary Files**:
-- Files ending with `.tmp`, `.temp` - Generic temporary files
-- Files ending with `.swp` - Vim swap files
-- Files ending with `.lock` - Lock files
+- Files ending with `.tmp`, `.temp` - Generic temporary files (automatically deleted)
+- Files ending with `.swp` - Vim swap files (automatically deleted)
 
-**Hidden Files**:
-- Hidden files starting with `.` (except known document types like `.txt`, `.md`, `.pdf`, `.doc`, `.docx`)
+### System Files Ignored (Not Deleted)
 
-### Files Still Processed
+These system files are ignored but not deleted for safety:
+- `.trash`, `$recycle.bin` - System trash directories
+- `pagefile.sys`, `hiberfil.sys` - Windows system files
+- Files ending with `.lock` - Lock files (may be in use by other processes)
 
-- **Document files**: PDF, DOC, DOCX, TXT, MD, etc.
-- **Office temporary files**: Files starting with `~$` (like `~$document.docx`) are processed as they may be legitimate user files
+### Hidden Files Behavior
+
+- **Hidden files starting with `.`**: Most are ignored (not processed)
 - **Hidden document files**: Files like `.important.txt`, `.document.pdf` are processed due to their document extensions
+- **Office temporary files**: Files starting with `~$` (like `~$document.docx`) are processed as they may be legitimate user files
+
+### Regular Document Processing
+
+These files are processed normally:
+- **Document files**: PDF, DOC, DOCX, TXT, MD, RTF, MHT, etc.
+- **Office files**: Word, Excel, PowerPoint documents and their OpenDocument equivalents
+- **All other files**: Any file not identified as a system file or temporary file
+
+### Benefits of Automatic Deletion
+
+🧹 **Prevents Repeated Processing**: System files like `.DS_Store` and `Thumbs.db` won't cause repeated polling cycles  
+📝 **Cleaner Logs**: Reduces log noise from repeatedly detecting the same system files  
+⚡ **Better Performance**: Eliminates unnecessary file operations and processing overhead  
+🔧 **Maintenance-Free**: No manual cleanup required - system files are removed automatically
 
 ### Implementation
 
-The filtering is implemented at multiple levels:
-- **Early filtering** in `FileProcessor.should_ignore_file()` static method
-- **Event-based monitoring** filtering in `file_monitor.py`
-- **Polling-based monitoring** filtering in `polling_file_monitor.py`  
-- **Directory scanning** filtering for recursive processing
-- **Manual scan** filtering for existing file detection
+The automatic system file deletion is implemented at multiple levels:
+- **FileProcessor**: `should_ignore_file()` and `should_delete_system_file()` methods
+- **Event-based monitoring**: Automatic deletion in `file_monitor.py`
+- **Polling-based monitoring**: Automatic deletion in `polling_file_monitor.py`  
+- **Directory scanning**: Automatic deletion during recursive processing
+- **Manual scan**: Automatic deletion during existing file detection
 
-This ensures consistent filtering across all monitoring modes (auto, events, polling) and both Docker and native environments.
+All deletion attempts are logged for transparency, and the system gracefully handles deletion failures (continues processing normally).
+
+This ensures consistent system file cleanup across all monitoring modes (auto, events, polling) and both Docker and native environments.
