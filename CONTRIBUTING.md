@@ -94,7 +94,7 @@ uv run bandit -r src/
 
 # Check dependency security
 uv add --dev safety  
-uv run safety check
+uv run safety scan
 ```
 
 ### 4. Push and Create Pull Request
