@@ -270,6 +270,11 @@ class BaseRAGIntegrationTest:
                 if "GOOGLE_API_KEY" not in extra_vars:
                     f.write("GOOGLE_API_KEY=AIzaSyCtest1234567890123456789012345678\n")
             
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
+            
             # Add extra variables
             for key, value in extra_vars.items():
                 f.write(f"{key}={value}\n")

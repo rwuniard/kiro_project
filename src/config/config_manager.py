@@ -299,7 +299,7 @@ class ConfigManager:
         # Load .env file if it exists
         if self.env_file and os.path.exists(self.env_file):
             print(f"DEBUG: Loading .env file from: {os.path.abspath(self.env_file)}")
-            load_dotenv(self.env_file)
+            load_dotenv(self.env_file, override=True)
         else:
             print(f"DEBUG: No .env file found at: {self.env_file if self.env_file else 'None'}")
         

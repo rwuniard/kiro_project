@@ -235,8 +235,10 @@ class FolderFileProcessorApp:
                         logger_name="folder_file_processor_error"
                     )
                     temp_logger.log_error(error_msg, e)
-                except:
-                    pass  # If we can't log, at least we printed the error
+                except Exception as logger_error:
+                    # If we can't create logger, print both errors but don't fail silently
+                    print(f"WARNING: Failed to create emergency logger: {logger_error}")
+                    print("Original error has been printed above - continuing without logging")
             
             # Ensure proper cleanup on initialization failure
             self._cleanup_on_failure()

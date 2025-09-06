@@ -2255,3 +2255,236 @@ class TestDocumentProcessingIntegration:
         assert mock_document_processor.process_document.call_count == 1
         assert processor.stats['retries_attempted'] == 0
         assert processor.stats['failed_permanent'] == 1
+
+
+class TestFileProcessorSystemFileHandling:
+    """Test system file handling methods."""
+    
+    def test_should_ignore_file_system_files(self):
+        """Test that system files are correctly identified for ignoring."""
+        system_files = [
+            ".DS_Store",
+            "Thumbs.db", 
+            "desktop.ini",
+            ".spotlightv100",
+            ".fseventsd",
+            ".documentrevisions-v100",
+            ".trash",
+            "$recycle.bin",
+            "pagefile.sys",
+            "hiberfil.sys"
+        ]
+        
+        for filename in system_files:
+            assert FileProcessor.should_ignore_file(filename), f"Should ignore {filename}"
+            assert FileProcessor.should_ignore_file(f"/path/to/{filename}"), f"Should ignore {filename} with path"
+    
+    def test_should_ignore_file_temporary_files(self):
+        """Test that temporary files are correctly identified for ignoring."""
+        temp_files = [
+            "somefile.tmp",
+            "document.temp", 
+            "vim.swp",
+            "process.lock"
+        ]
+        
+        for filename in temp_files:
+            assert FileProcessor.should_ignore_file(filename), f"Should ignore {filename}"
+            assert FileProcessor.should_ignore_file(f"/path/to/{filename}"), f"Should ignore {filename} with path"
+    
+    def test_should_ignore_file_hidden_files(self):
+        """Test that most hidden files are ignored but document hidden files are processed."""
+        # Should be ignored
+        ignored_hidden = [
+            ".hidden",
+            ".config", 
+            ".cache",
+            ".gitignore",
+            ".vscode"
+        ]
+        
+        for filename in ignored_hidden:
+            assert FileProcessor.should_ignore_file(filename), f"Should ignore {filename}"
+        
+        # Should NOT be ignored (document types)
+        processed_hidden = [
+            ".important.txt",
+            ".secret.md",
+            ".config.pdf",
+            ".backup.doc",
+            ".archive.docx"
+        ]
+        
+        for filename in processed_hidden:
+            assert not FileProcessor.should_ignore_file(filename), f"Should NOT ignore {filename}"
+    
+    def test_should_ignore_file_normal_files(self):
+        """Test that normal files are not ignored."""
+        normal_files = [
+            "document.txt",
+            "spreadsheet.xlsx",
+            "presentation.pptx", 
+            "image.jpg",
+            "archive.zip",
+            "code.py",
+            "README.md",
+            "~$tempoffice.docx"  # Office temp files should be processed
+        ]
+        
+        for filename in normal_files:
+            assert not FileProcessor.should_ignore_file(filename), f"Should NOT ignore {filename}"
+            assert not FileProcessor.should_ignore_file(f"/path/to/{filename}"), f"Should NOT ignore {filename} with path"
+    
+    def test_should_delete_system_file_safe_deletions(self):
+        """Test that safe system files are identified for deletion."""
+        deletable_files = [
+            ".DS_Store",
+            "Thumbs.db",
+            "desktop.ini", 
+            ".spotlightv100",
+            ".fseventsd",
+            ".documentrevisions-v100"
+        ]
+        
+        for filename in deletable_files:
+            assert FileProcessor.should_delete_system_file(filename), f"Should delete {filename}"
+            assert FileProcessor.should_delete_system_file(f"/path/to/{filename}"), f"Should delete {filename} with path"
+    
+    def test_should_delete_system_file_temporary_files(self):
+        """Test that temporary files are identified for deletion."""
+        temp_files = [
+            "document.tmp",
+            "process.temp",
+            "vim.swp"
+        ]
+        
+        for filename in temp_files:
+            assert FileProcessor.should_delete_system_file(filename), f"Should delete {filename}"
+    
+    def test_should_delete_system_file_unsafe_deletions(self):
+        """Test that unsafe system files are NOT identified for deletion."""
+        unsafe_files = [
+            ".trash",           # Trash folder - don't delete
+            "$recycle.bin",     # Recycle bin - don't delete  
+            "pagefile.sys",     # Windows system files - don't delete
+            "hiberfil.sys",     # Windows hibernation - don't delete
+            "process.lock",     # Lock files - might be in use
+            "document.txt",     # Normal files
+            "important.pdf"     # User files
+        ]
+        
+        for filename in unsafe_files:
+            assert not FileProcessor.should_delete_system_file(filename), f"Should NOT delete {filename}"
+    
+    def test_should_delete_system_file_case_insensitive(self):
+        """Test that system file detection is case insensitive."""
+        case_variants = [
+            (".DS_Store", ".ds_store", ".DS_STORE"),
+            ("Thumbs.db", "thumbs.db", "THUMBS.DB"),
+            ("desktop.ini", "DESKTOP.INI", "Desktop.Ini")
+        ]
+        
+        for original, lower, upper in case_variants:
+            assert FileProcessor.should_delete_system_file(original), f"Should delete {original}"
+            assert FileProcessor.should_delete_system_file(lower), f"Should delete {lower}"  
+            assert FileProcessor.should_delete_system_file(upper), f"Should delete {upper}"
+
+
+class TestFileProcessorSystemFileDeletionIntegration:
+    """Integration tests for system file deletion behavior."""
+    
+    @pytest.fixture
+    def mock_services(self):
+        """Create mock services for testing."""
+        file_manager = Mock(spec=FileManager)
+        error_handler = Mock(spec=ErrorHandler)
+        logger_service = Mock(spec=LoggerService)
+        
+        return {
+            'file_manager': file_manager,
+            'error_handler': error_handler,
+            'logger_service': logger_service
+        }
+    
+    def test_process_file_deletes_system_files(self, mock_services, tmp_path):
+        """Test that processing system files results in automatic deletion."""
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Create system files in source directory
+        system_files = [".DS_Store", "Thumbs.db", "desktop.ini", "temp.tmp"]
+        created_files = []
+        
+        for filename in system_files:
+            file_path = tmp_path / filename
+            file_path.write_text("system file content")
+            created_files.append(file_path)
+        
+        # Verify files were created
+        for file_path in created_files:
+            assert file_path.exists(), f"Test setup failed: {file_path.name} not created"
+        
+        # Process each system file
+        for file_path in created_files:
+            with patch('builtins.print'):  # Suppress print output
+                result = processor.process_file(str(file_path))
+            
+            # Should return success but file should be deleted
+            assert result.success is True, f"Processing {file_path.name} should succeed"
+            assert not file_path.exists(), f"System file {file_path.name} should be automatically deleted"
+        
+        # Verify no files were moved to saved or error folders
+        mock_services['file_manager'].move_to_saved.assert_not_called()
+        mock_services['file_manager'].move_to_error.assert_not_called()
+    
+    def test_process_file_handles_deletion_errors_gracefully(self, mock_services, tmp_path):
+        """Test that deletion errors don't cause processing to fail."""
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Create a system file
+        system_file = tmp_path / ".DS_Store"
+        system_file.write_text("system content")
+        
+        # Mock os.remove to raise permission error
+        with patch('os.remove', side_effect=PermissionError("Permission denied")):
+            with patch('builtins.print'):  # Suppress print output
+                result = processor.process_file(str(system_file))
+        
+        # Should still return success even if deletion fails
+        assert result.success is True
+        
+        # Should log an error about deletion failure
+        error_calls = [call for call in mock_services['logger_service'].log_error.call_args_list 
+                        if "Failed to delete system file" in str(call)]
+        assert len(error_calls) > 0, "Should log error about deletion failure"
+    
+    def test_process_file_normal_files_not_deleted(self, mock_services, tmp_path):
+        """Test that normal files are processed normally, not deleted."""
+        processor = FileProcessor(
+            file_manager=mock_services['file_manager'],
+            error_handler=mock_services['error_handler'],
+            logger_service=mock_services['logger_service']
+        )
+        
+        # Create a normal file
+        normal_file = tmp_path / "document.txt"
+        normal_file.write_text("normal content")
+        
+        # Mock successful file operations
+        mock_services['file_manager'].move_to_saved.return_value = True
+        mock_services['file_manager'].cleanup_empty_folders.return_value = []
+        
+        with patch('builtins.print'):  # Suppress print output
+            result = processor.process_file(str(normal_file))
+        
+        # Should succeed and file should be moved to saved (not deleted)
+        assert result.success is True
+        mock_services['file_manager'].move_to_saved.assert_called_once_with(str(normal_file))
+        # Note: File doesn't actually get moved since we're using mocks

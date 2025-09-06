@@ -10,7 +10,7 @@ import time
 import tempfile
 import threading
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, mock_open
+from unittest.mock import Mock, patch, MagicMock, mock_open, call
 import pytest
 
 from src.core.file_monitor import FileMonitor, FileEventHandler
@@ -88,19 +88,29 @@ class TestFileEventHandler:
             self.mock_processor.process_file.assert_called_once_with("/test/path/file.txt")
             self.mock_logger.log_error.assert_called_with("File processing failed: Processing failed")
     
-    def test_on_created_ignores_directory_events(self):
-        """Test that directory creation events are ignored."""
+    def test_on_created_handles_directory_events(self):
+        """Test that directory creation events are processed recursively."""
         # Arrange
         mock_event = Mock()
         mock_event.is_directory = True
         mock_event.src_path = "/test/path/directory"
         
-        # Act
-        self.handler.on_created(mock_event)
+        # Mock os.path.isdir to return True
+        with patch('src.core.file_monitor.os.path.isdir', return_value=True):
+            # Mock os.walk to return empty directory
+            with patch('src.core.file_monitor.os.walk', return_value=[]):
+                # Act
+                self.handler.on_created(mock_event)
         
-        # Assert
+        # Assert - directory processing should not call process_file directly
         self.mock_processor.process_file.assert_not_called()
-        self.mock_logger.log_info.assert_not_called()
+        # But should log the directory detection
+        expected_calls = [
+            call('Event received: /test/path/directory (is_directory: True)'),
+            call('New directory detected: /test/path/directory'),
+            call('Starting recursive processing of directory: /test/path/directory')
+        ]
+        self.mock_logger.log_info.assert_has_calls(expected_calls)
     
     def test_on_created_handles_file_not_exists(self):
         """Test handling when file no longer exists after creation event."""

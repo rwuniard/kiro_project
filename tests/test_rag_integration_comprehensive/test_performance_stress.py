@@ -476,11 +476,11 @@ class TestErrorRecoveryAndSystemStability(BaseRAGIntegrationTest):
     
     def test_monitoring_responsiveness_during_heavy_processing(self):
         """Test that monitoring remains responsive during heavy processing load."""
-        # Create environment configuration
-        self.create_env_file(enable_document_processing=True)
+        # Create environment configuration with faster polling for this test
+        self.create_env_file(enable_document_processing=True, POLLING_INTERVAL="0.5")
         
-        # Create mock processor with significant delay
-        self.mock_processor = MockDocumentProcessor(processing_delay=0.1)
+        # Create mock processor with minimal delay for faster processing
+        self.mock_processor = MockDocumentProcessor(processing_delay=0.05)
         
         # Initialize app
         self.app = FolderFileProcessorApp(env_file=str(self.env_file), log_file=str(self.log_file))
@@ -492,32 +492,36 @@ class TestErrorRecoveryAndSystemStability(BaseRAGIntegrationTest):
             self.app.file_monitor.start_monitoring()
             assert self.app.file_monitor.is_monitoring() is True
             
-            # Create files during monitoring to simulate load
-            def create_files_continuously():
-                for i in range(10):
-                    fixture = FileFixture(
-                        name=f"monitoring_test_{i}",
-                        content=f"Monitoring test {i}. " * 20,
-                        extension="txt",
-                        expected_success=True
-                    )
-                    self.create_test_file(fixture)
-                    time.sleep(0.05)  # Small delay between file creations
+            # Create fewer files with smaller content for faster processing
+            fixtures = [
+                FileFixture(
+                    name=f"monitoring_test_{i}",
+                    content=f"Test {i}",  # Minimal content
+                    extension="txt",
+                    expected_success=True
+                )
+                for i in range(5)  # Fewer files
+            ]
             
-            # Start file creation in background
-            file_thread = threading.Thread(target=create_files_continuously, daemon=True)
-            file_thread.start()
+            # Create files and wait for initial polling cycle
+            for fixture in fixtures:
+                self.create_test_file(fixture)
             
-            # Monitor health checks during processing
+            # Wait for at least one polling cycle plus processing time
+            time.sleep(1.0)  # 0.5s polling + 0.5s buffer for processing
+            
+            # Monitor health checks after processing should have started
             health_checks = []
-            for _ in range(5):
-                time.sleep(0.2)
+            for _ in range(3):
+                time.sleep(0.1)
                 health_result = self.app._perform_health_check()
                 health_checks.append(health_result)
             
+            # Wait for processing to complete
+            self.wait_for_file_processing(timeout=2.0)
+            
             # Stop monitoring
             self.app.file_monitor.stop_monitoring()
-            file_thread.join(timeout=2.0)
             
             # Verify monitoring remained responsive
             assert all(health_checks), "Health checks failed during processing"

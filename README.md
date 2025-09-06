@@ -7,7 +7,7 @@ A sophisticated Python application that monitors configurable source folders for
 - **Real-time File Monitoring**: Uses file system events to detect new files immediately
 - **Advanced Document Processing**: Pluggable RAG document processing with ChromaDB vector storage
 - **Multi-format Support**: Comprehensive document support (PDF with OCR, Office formats, web archives, text files)
-- **Smart File Filtering**: Automatically ignores system files (.DS_Store, Thumbs.db) and temporary files to prevent error folder clutter
+- **Automatic System File Cleanup**: Automatically deletes system files (.DS_Store, Thumbs.db) and temporary files to prevent repeated processing cycles
 - **Existing Files Processing**: Automatically processes files already present in source folder on startup
 - **Configurable Folders**: Source, saved, and error folders configurable via environment variables
 - **Folder Structure Preservation**: Maintains original directory structure when moving files
@@ -874,8 +874,8 @@ WARNING - Could not remove empty folder /path/to/folder: Permission denied
 
 **Empty Folders Not Being Moved:**
 - **Check Criteria**: Ensure folders are completely empty (no files AND no subfolders)
-- **Hidden Files**: Folders with hidden files (like `.DS_Store` on macOS) are not considered empty
-- **System Files**: Folders containing system files or metadata will not be moved
+- **Hidden Files**: Folders with hidden files are not considered empty (though system files like `.DS_Store` are automatically deleted)
+- **System Files**: Most system files are automatically deleted, but some folders may contain other metadata that prevents movement
 - **Permissions**: Verify the application has read access to check folder contents
 
 **Empty Folder Movement Failures:**

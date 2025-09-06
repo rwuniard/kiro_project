@@ -1,0 +1,6 @@
+{
+  "source_folder": "~/tmp/rag_store/source",
+  "saved_folder": "~/tmp/rag_store/saved",
+  "error_folder": "~/tmp/rag_store/error", 
+  "description": "Unix/Mac-specific folder paths for local Docker deployment. Modify these paths according to your local setup."
+}
