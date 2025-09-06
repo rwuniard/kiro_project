@@ -63,16 +63,26 @@ jobs:
         MODEL_VENDOR: openai
         CHROMA_DB_PATH: ./test_chroma_db
         
+    - name: Check Codecov token availability
+      run: |
+        if [ -z "${{ secrets.CODECOV_TOKEN }}" ]; then
+          echo "⚠️ WARNING: CODECOV_TOKEN secret is not set"
+          echo "Codecov upload will be skipped"
+        else
+          echo "✅ CODECOV_TOKEN secret is available"
+        fi
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
+      if: ${{ secrets.CODECOV_TOKEN != '' }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         file: ./coverage.xml
         flags: unittests
         name: pr-${{ github.event.pull_request.number }}
-        fail_ci_if_error: true
+        fail_ci_if_error: false
         verbose: true
+      continue-on-error: true
         
     - name: Upload coverage reports as artifacts
       uses: actions/upload-artifact@v4
