@@ -24,6 +24,7 @@ dependencies = [
     "pymupdf>=1.26.4",
     "pytesseract>=0.3.13",
     "pillow>=11.3.0",
+    "python-docx>=0.8.11",  # Required by dependency validation
 ]
 
 [dependency-groups]
