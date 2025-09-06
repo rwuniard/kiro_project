@@ -1,10 +1,7 @@
-name: Deploy Kiro Project
+name: Deploy RAG File Processor
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -19,10 +16,52 @@ on:
         - google
 
 env:
-  DOCKER_IMAGE_NAME: kiro-project
-  DOCKER_TAG: latest
+  REGISTRY: ghcr.io
+  IMAGE_NAME: rag-file-processor
+  PYTHON_VERSION: '3.12'
 
 jobs:
+  # Generate version information
+  version:
+    name: Generate Version
+    runs-on: ubuntu-latest
+    outputs:
+      base_version: ${{ steps.version.outputs.base_version }}
+      full_version: ${{ steps.version.outputs.full_version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Generate version number
+      id: version
+      run: |
+        # Extract base version from pyproject.toml
+        BASE_VERSION=$(python -c "
+        import tomllib
+        with open('pyproject.toml', 'rb') as f:
+            data = tomllib.load(f)
+            print(data['project']['version'])
+        ")
+        
+        # Create version with short SHA
+        SHORT_SHA=${GITHUB_SHA:0:7}
+        FULL_VERSION="${BASE_VERSION}.${SHORT_SHA}"
+        
+        echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
+        echo "full_version=${FULL_VERSION}" >> $GITHUB_OUTPUT
+        echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+        
+        echo "🏷️ Base Version: ${BASE_VERSION}"
+        echo "🏷️ Full Version: ${FULL_VERSION}"
+        echo "🏷️ Short SHA: ${SHORT_SHA}"
+
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -34,22 +73,27 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'
+        python-version: ${{ env.PYTHON_VERSION }}
         
     - name: Install uv
       uses: astral-sh/setup-uv@v3
       
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --all-extras
       
     - name: Run tests
-      run: uv run pytest -v
-      continue-on-error: true  # Don't fail deployment if tests fail
+      run: uv run pytest -v --tb=short
+      env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
 
   build-and-deploy:
-    name: Build and Deploy
+    name: Build and Deploy to GitHub Container Registry
     runs-on: ubuntu-latest
-    needs: test
+    needs: [version, test]
+    permissions:
+      contents: read
+      packages: write
     
     steps:
     - name: Checkout code
@@ -58,101 +102,148 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.12'
+        python-version: ${{ env.PYTHON_VERSION }}
         
-    - name: Generate production environment
+    - name: Generate production environment using local scripts
       run: |
         echo "Generating production environment configuration..."
+        echo "🏷️ Building version: ${{ needs.version.outputs.full_version }}"
         
         # Set model vendor from input or default
         MODEL_VENDOR="${{ github.event.inputs.model_vendor || 'openai' }}"
         echo "Using model vendor: $MODEL_VENDOR"
         
-        # Generate .env file for production
-        python3 docker_deployment/scripts/generate_env.py \
+        # Use existing local deployment script logic
+        cd docker_deployment
+        python scripts/generate_env.py \
           --environment production \
           --platform unix \
           --model-vendor "$MODEL_VENDOR"
+          
+        # Copy generated environment file
+        cp .env.generated .env
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
         GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       
-    - name: Build Docker image
-      run: |
-        # Copy generated environment file
-        cp docker_deployment/.env.generated docker_deployment/.env
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=latest
+          type=raw,value=${{ needs.version.outputs.full_version }}
+          type=raw,value=${{ needs.version.outputs.base_version }}
         
-        # Build Docker image (from docker_deployment directory)
-        cd docker_deployment && docker build -t $DOCKER_IMAGE_NAME:$DOCKER_TAG .
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./docker_deployment
+        file: ./docker_deployment/Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ needs.version.outputs.full_version }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         
     - name: Test Docker image
       run: |
-        echo "Testing Docker image..."
-        # Run a basic health check
-        docker run --rm $DOCKER_IMAGE_NAME:$DOCKER_TAG python -c "
-        import sys
-        import os
+        echo "Testing pushed Docker image..."
+        # Pull and test the image that was just pushed
+        docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }}
         
-        # Check if main modules can be imported
+        # Run basic health check
+        docker run --rm \
+          -e ENABLE_DOCUMENT_PROCESSING=false \
+          ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }} \
+          python -c "
+        import sys
+        print('🐍 Python version:', sys.version)
+        print('🏷️ Image version: ${{ needs.version.outputs.full_version }}')
+        
         try:
             from src.app import FolderFileProcessorApp
             from src.config import ConfigManager
-            print('✓ Core modules import successfully')
+            from src.core import FileProcessor
+            print('✅ Core modules import successfully')
         except ImportError as e:
-            print(f'✗ Import error: {e}')
+            print(f'❌ Import error: {e}')
             sys.exit(1)
             
-        print('✓ Docker image test passed')
+        print('✅ Docker image test passed')
         "
-        
-    - name: Save build artifacts
-      if: success()
-      run: |
-        # Save the built image as tar for potential deployment
-        docker save $DOCKER_IMAGE_NAME:$DOCKER_TAG > kiro-project-image.tar
-        
-    - name: Upload build artifacts
-      if: success()
-      uses: actions/upload-artifact@v3
-      with:
-        name: docker-image
-        path: |
-          kiro-project-image.tar
-          .env.generated
-        retention-days: 7
         
     - name: Deploy summary
       if: success()
       run: |
-        echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Docker image built successfully" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ Image health check passed" >> $GITHUB_STEP_SUMMARY  
-        echo "- ✅ Build artifacts uploaded" >> $GITHUB_STEP_SUMMARY
-        echo "- 🏷️ Image tag: \`$DOCKER_TAG\`" >> $GITHUB_STEP_SUMMARY
-        echo "- 🤖 Model vendor: \`${{ github.event.inputs.model_vendor || 'openai' }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-        echo "1. Download the docker-image artifact" >> $GITHUB_STEP_SUMMARY
-        echo "2. Load the image: \`docker load < kiro-project-image.tar\`" >> $GITHUB_STEP_SUMMARY
-        echo "3. Configure production volumes and run the container" >> $GITHUB_STEP_SUMMARY
+        echo "### ✅ Successfully Deployed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: \`${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: \`${{ needs.version.outputs.full_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Base Version**: \`${{ needs.version.outputs.base_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit SHA**: \`${{ needs.version.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Model Vendor**: \`${{ github.event.inputs.model_vendor || 'openai' }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: \`linux/amd64, linux/arm64\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🏷️ Available Tags" >> $GITHUB_STEP_SUMMARY
+        echo "- \`latest\` - Latest stable release" >> $GITHUB_STEP_SUMMARY
+        echo "- \`${{ needs.version.outputs.full_version }}\` - This specific build" >> $GITHUB_STEP_SUMMARY
+        echo "- \`${{ needs.version.outputs.base_version }}\` - Latest patch version" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🐳 Usage" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Pull the image" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Run with your configuration" >> $GITHUB_STEP_SUMMARY
+        echo "docker run -d \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -v /your/source:/app/data/source \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -v /your/saved:/app/data/saved \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -v /your/error:/app/data/error \\" >> $GITHUB_STEP_SUMMARY
+        echo "  -e OPENAI_API_KEY=\$OPENAI_API_KEY \\" >> $GITHUB_STEP_SUMMARY
+        echo "  ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }}" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    needs: build-and-deploy
+    needs: [version, build-and-deploy]
     continue-on-error: true
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
-        image-ref: 'kiro-project:latest'
+        image-ref: '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }}'
         format: 'sarif'
         output: 'trivy-results.sarif'
       continue-on-error: true
@@ -162,3 +253,12 @@ jobs:
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+        
+    - name: Security scan summary
+      if: always()
+      run: |
+        echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image**: \`${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.full_version }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Scanner**: Trivy" >> $GITHUB_STEP_SUMMARY
+        echo "- **Results**: Check Security tab for detailed findings" >> $GITHUB_STEP_SUMMARY

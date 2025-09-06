@@ -43,6 +43,50 @@ class TestFileState:
         state = FileState.from_file("/path/that/does/not/exist")
         assert state is None
     
+    def test_file_state_has_changed_with_none(self, temp_file):
+        """Test has_changed method when comparing with None."""
+        temp_file.write_text("test content")
+        state = FileState.from_file(str(temp_file))
+        assert state.has_changed(None) is True  # New file
+    
+    def test_file_state_has_changed_same_file(self, temp_file):
+        """Test has_changed method with same file."""
+        temp_file.write_text("test content")
+        state1 = FileState.from_file(str(temp_file))
+        state2 = FileState.from_file(str(temp_file))
+        assert state1.has_changed(state2) is False  # Same file
+    
+    def test_file_state_has_changed_different_size(self, temp_file):
+        """Test has_changed method with different file size."""
+        temp_file.write_text("test content")
+        state1 = FileState.from_file(str(temp_file))
+        
+        # Modify file size
+        temp_file.write_text("test content with more text")
+        state2 = FileState.from_file(str(temp_file))
+        
+        assert state1.has_changed(state2) is True
+    
+    def test_file_state_has_changed_different_mtime(self, temp_file):
+        """Test has_changed method with different modification time."""
+        temp_file.write_text("test content")
+        state1 = FileState.from_file(str(temp_file))
+        
+        # Wait and modify mtime
+        import time
+        time.sleep(0.1)
+        temp_file.touch()  # Update mtime without changing content
+        state2 = FileState.from_file(str(temp_file))
+        
+        assert state1.has_changed(state2) is True
+    
+    def test_file_state_from_file_oserror_handling(self):
+        """Test FileState handles OSError gracefully."""
+        # Mock os.stat to raise OSError
+        with patch('os.stat', side_effect=OSError("Access denied")):
+            state = FileState.from_file("/some/file")
+            assert state is None
+    
     def test_file_state_change_detection(self, temp_file):
         """Test FileState change detection."""
         # Create initial file
@@ -218,6 +262,353 @@ class TestPollingFileMonitor:
         assert 'files_scanned' in stats
         assert 'source_folder' in stats
         assert Path(stats['source_folder']).samefile(temp_dir)  # Handle symlinks
+    
+    def test_polling_monitor_error_scenarios(self, temp_dir, mock_processor, mock_logger):
+        """Test error handling scenarios in PollingFileMonitor."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Test double start
+        monitor.start_monitoring()
+        try:
+            with pytest.raises(RuntimeError, match="Monitoring is already active"):
+                monitor.start_monitoring()
+        finally:
+            monitor.stop_monitoring()
+        
+        # Test start with missing folder
+        import shutil
+        shutil.rmtree(temp_dir)
+        with pytest.raises(RuntimeError, match="Source folder no longer exists"):
+            monitor.start_monitoring()
+    
+    def test_polling_monitor_permission_errors(self, temp_dir, mock_processor, mock_logger):
+        """Test permission error handling."""
+        # Create a test directory that we'll make unreadable
+        test_dir = temp_dir / "unreadable"
+        test_dir.mkdir()
+        
+        monitor = PollingFileMonitor(
+            source_folder=str(test_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Mock os.access to return False (no read access)
+        with patch('os.access', return_value=False):
+            with pytest.raises(RuntimeError, match="No read access to source folder"):
+                monitor.start_monitoring()
+    
+    def test_polling_monitor_thread_health_check(self, temp_dir, mock_processor, mock_logger):
+        """Test health check functionality."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Health check when not monitoring
+        assert not monitor.is_monitoring()
+        
+        # Start monitoring and verify health
+        monitor.start_monitoring()
+        try:
+            assert monitor.is_monitoring()
+            
+            # Test health check when source folder becomes inaccessible
+            import shutil
+            temp_backup = str(temp_dir) + "_backup"
+            shutil.move(str(temp_dir), temp_backup)
+            
+            # Health check should fail now
+            time.sleep(0.1)  # Allow for health check
+            assert not monitor.is_monitoring()
+            
+            # Restore folder for cleanup
+            shutil.move(temp_backup, str(temp_dir))
+        finally:
+            try:
+                monitor.stop_monitoring()
+            except:
+                pass
+    
+    def test_polling_monitor_file_processing_with_errors(self, temp_dir, mock_processor, mock_logger):
+        """Test file processing with various error scenarios."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Create a test file
+        test_file = temp_dir / "test.txt"
+        test_file.write_text("test content")
+        
+        # Mock processor to raise exception 
+        mock_processor.process_file.side_effect = Exception("Processing exception")
+        
+        monitor.start_monitoring()
+        try:
+            # Wait for processing attempt
+            time.sleep(1.0)
+            
+            # Check stats were updated
+            stats = monitor.get_monitoring_stats()
+            assert stats['processing_errors'] > 0  # Exception should be counted
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_polling_monitor_batch_processing(self, temp_dir, mock_processor, mock_logger):
+        """Test Docker-optimized batch processing."""
+        # Set up successful processing
+        mock_processor.process_file.return_value = Mock(success=True)
+        
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5,
+            docker_optimized=True  # Enable batch processing
+        )
+        
+        # Create multiple test files (fewer for faster test)
+        files = []
+        for i in range(3):
+            test_file = temp_dir / f"batch_test_{i}.txt"
+            test_file.write_text(f"batch content {i}")
+            files.append(test_file)
+        
+        monitor.start_monitoring()
+        try:
+            # Wait for batch processing
+            time.sleep(1.5)  # Allow time for processing
+            
+            # Verify files were detected and processed
+            stats = monitor.get_monitoring_stats()
+            assert stats['files_scanned'] >= len(files)
+            assert stats['new_files_detected'] >= len(files)
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_polling_monitor_file_stability(self, temp_dir, mock_processor, mock_logger):
+        """Test file stability checking."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger
+        )
+        
+        # Test with non-existent file
+        assert not monitor._wait_for_file_stability("/path/that/does/not/exist")
+        
+        # Test with real file
+        test_file = temp_dir / "stability_test.txt"
+        test_file.write_text("test content")
+        
+        # Should be stable
+        assert monitor._wait_for_file_stability(str(test_file), stability_delay=0.1)
+        
+        # Test file disappearing during check
+        test_file.unlink()
+        assert not monitor._wait_for_file_stability(str(test_file))
+    
+    def test_polling_monitor_manual_scan(self, temp_dir, mock_processor, mock_logger):
+        """Test manual scan functionality."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger
+        )
+        
+        # Create test files
+        file1 = temp_dir / "manual1.txt"
+        file2 = temp_dir / "manual2.txt"
+        file1.write_text("manual content 1")
+        file2.write_text("manual content 2")
+        
+        # Run manual scan
+        processed = monitor.trigger_manual_scan()
+        assert processed == 2
+        
+        # Test with processing errors
+        mock_processor.process_file.side_effect = Exception("Processing error")
+        processed = monitor.trigger_manual_scan()
+        assert processed == 0
+    
+    def test_polling_monitor_system_file_filtering(self, temp_dir, mock_processor, mock_logger):
+        """Test that system files are properly filtered and deleted."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Create system files that should be deleted automatically
+        system_files = [
+            (temp_dir / ".DS_Store", "system file"),
+            (temp_dir / "Thumbs.db", "system file"),
+            (temp_dir / "test.tmp", "temp file")
+        ]
+        
+        for file_path, content in system_files:
+            file_path.write_text(content)
+            assert file_path.exists(), f"Test setup failed: {file_path.name} not created"
+        
+        # Create legitimate file
+        real_file = temp_dir / "real_file.txt"
+        real_file.write_text("real content")
+        
+        monitor.start_monitoring()
+        try:
+            time.sleep(1.0)  # Allow processing
+            
+            # System files should be automatically deleted
+            for file_path, _ in system_files:
+                assert not file_path.exists(), f"System file {file_path.name} should be automatically deleted"
+            
+            # Real file should still exist (to be processed by mock processor)
+            assert real_file.exists(), "Real file should not be deleted"
+            
+            # Check stats - system files should be scanned but the legitimate file processed
+            stats = monitor.get_monitoring_stats()
+            assert stats['files_scanned'] >= 4, "Should have scanned all files including system files"
+            
+            # Note: In this test the real file won't actually be processed by the mock processor
+            # because the monitor handles system file deletion before calling the processor
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_polling_monitor_context_manager(self, temp_dir, mock_processor, mock_logger):
+        """Test context manager functionality."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Test context manager
+        with monitor:
+            assert monitor.is_monitoring()
+            
+        # Should be stopped after context exit
+        assert not monitor.is_monitoring()
+    
+    def test_polling_monitor_stats_thread_health(self, temp_dir, mock_processor, mock_logger):
+        """Test comprehensive stats including thread health."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        # Stats when not running
+        stats = monitor.get_monitoring_stats()
+        assert not stats['is_monitoring']
+        assert not stats['thread_alive']
+        assert stats['files_being_processed'] == 0
+        
+        # Stats when running
+        monitor.start_monitoring()
+        try:
+            time.sleep(0.1)  # Allow thread to start
+            stats = monitor.get_monitoring_stats()
+            assert stats['is_monitoring']
+            assert stats['thread_alive']
+            assert stats['polling_interval'] == 0.5
+            assert stats['docker_optimized'] == False
+            
+        finally:
+            monitor.stop_monitoring()
+    
+    def test_polling_monitor_thread_timeout_and_errors(self, temp_dir, mock_processor, mock_logger):
+        """Test thread timeout and monitoring loop error handling."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.1  # Very short for fast test
+        )
+        
+        # Mock _poll_directory to raise exception
+        with patch.object(monitor, '_poll_directory', side_effect=Exception("Poll error")):
+            monitor.start_monitoring()
+            try:
+                time.sleep(0.5)  # Allow error to occur
+                
+                # Check error stats
+                stats = monitor.get_monitoring_stats()
+                assert stats['polling_errors'] > 0
+                
+            finally:
+                monitor.stop_monitoring()
+        
+        # Test thread timeout scenario
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.1
+        )
+        
+        monitor.start_monitoring()
+        
+        # Mock thread to not stop gracefully
+        original_is_alive = monitor._monitor_thread.is_alive
+        monitor._monitor_thread.is_alive = Mock(return_value=True)
+        
+        try:
+            monitor.stop_monitoring()  # Should log timeout warning
+            
+        finally:
+            # Restore original method and force stop
+            monitor._monitor_thread.is_alive = original_is_alive
+            monitor._stop_event.set()
+            monitor._monitoring = False
+    
+    def test_polling_monitor_directory_not_directory_error(self, temp_dir, mock_processor, mock_logger):
+        """Test initialization with path that is not a directory."""
+        # Create a file instead of directory
+        not_dir = temp_dir / "not_a_directory.txt"
+        not_dir.write_text("this is a file")
+        
+        with pytest.raises(ValueError, match="Source path is not a directory"):
+            PollingFileMonitor(
+                source_folder=str(not_dir),
+                file_processor=mock_processor,
+                logger_service=mock_logger
+            )
+    
+    def test_polling_monitor_directory_health_check_exception(self, temp_dir, mock_processor, mock_logger):
+        """Test health check exception handling."""
+        monitor = PollingFileMonitor(
+            source_folder=str(temp_dir),
+            file_processor=mock_processor,
+            logger_service=mock_logger,
+            polling_interval=0.5
+        )
+        
+        monitor.start_monitoring()
+        try:
+            # Mock Path.exists to raise exception during health check
+            with patch('pathlib.Path.exists', side_effect=Exception("Health check error")):
+                result = monitor.is_monitoring()
+                assert result is False  # Should return False on exception
+                
+        finally:
+            monitor.stop_monitoring()
 
 
 class TestHybridFileMonitor:
