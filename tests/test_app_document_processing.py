@@ -46,6 +46,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write("GOOGLE_API_KEY=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\n")
             f.write(f"CHROMA_DB_PATH={self.chroma_dir}\n")
             f.write("CHROMA_CLIENT_MODE=embedded\n")
+            # Add missing file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = None
     
@@ -110,6 +114,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")
+            # Add missing file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = FolderFileProcessorApp(env_file=str(env_file_disabled))
         result = self.app.initialize()
@@ -185,6 +193,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")
+            # Add missing file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = FolderFileProcessorApp(env_file=str(env_file_disabled))
         assert self.app.initialize() is True
