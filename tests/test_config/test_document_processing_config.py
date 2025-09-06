@@ -801,7 +801,11 @@ class TestConfigManagerWithDocumentProcessing:
             "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
             "MODEL_VENDOR": "google",
             "CHROMA_DB_PATH": "/tmp/chroma",
-            "CHROMA_CLIENT_MODE": "embedded"
+            "CHROMA_CLIENT_MODE": "embedded",
+            # Add required file monitoring configuration
+            "FILE_MONITORING_MODE": "auto",
+            "POLLING_INTERVAL": "3.0",
+            "DOCKER_VOLUME_MODE": "false"
         }
         
         with patch.dict(os.environ, env_vars, clear=True):
@@ -915,7 +919,11 @@ class TestConfigManagerWithDocumentProcessing:
             "GOOGLE_API_KEY": "AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI",
             "MODEL_VENDOR": "google",
             "CHROMA_DB_PATH": "/tmp/chroma",
-            "CHROMA_CLIENT_MODE": "embedded"
+            "CHROMA_CLIENT_MODE": "embedded",
+            # Add required file monitoring configuration
+            "FILE_MONITORING_MODE": "auto",
+            "POLLING_INTERVAL": "3.0",
+            "DOCKER_VOLUME_MODE": "false"
         }
         
         with patch.dict(os.environ, env_vars, clear=True):

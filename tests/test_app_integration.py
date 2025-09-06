@@ -46,6 +46,10 @@ class TestFolderFileProcessorApp:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")  # Disable by default for existing tests
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.log_file = self.logs_dir / "test.log"
         
@@ -119,6 +123,10 @@ class TestFolderFileProcessorApp:
             f.write("SOURCE_FOLDER=/nonexistent/path\n")
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         app = FolderFileProcessorApp(env_file=str(invalid_env))
         
@@ -291,26 +299,16 @@ class TestFolderFileProcessorApp:
         test_file = subdir / "nested_test.txt"
         test_file.write_text("Nested file content")
         
-        # Start monitoring briefly
-        def run_app():
-            try:
-                app.start()
-            except Exception:
-                pass
-        
-        app_thread = threading.Thread(target=run_app, daemon=True)
-        app_thread.start()
-        
-        # Wait for processing
-        time.sleep(0.2)
-        
-        # Stop the application
-        app.shutdown()
+        # Process the file directly instead of relying on monitoring timing
+        result = app.file_processor.process_file(str(test_file))
+        assert result.success is True
         
         # Check that nested structure is preserved in saved folder
         expected_saved_file = self.saved_dir / "subdir" / "nested" / "nested_test.txt"
-        # Note: File might still be processing, so we check if the directory structure exists
-        assert (self.saved_dir / "subdir").exists() or len(list(self.saved_dir.rglob("*.txt"))) > 0
+        assert expected_saved_file.exists(), f"Expected file not found: {expected_saved_file}"
+        
+        # Verify the content was preserved
+        assert expected_saved_file.read_text() == "Nested file content"
     
     def test_error_file_handling(self):
         """Test handling of files that cause processing errors."""
@@ -397,6 +395,10 @@ class TestApplicationIntegrationScenarios:
             f.write(f"SOURCE_FOLDER={self.source_dir}\n")
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         # Initialize app reference for cleanup
         self.app = None
@@ -505,6 +507,10 @@ class TestApplicationCoverageEnhancement:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = None
     
@@ -802,6 +808,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write("GOOGLE_API_KEY=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\n")
             f.write(f"CHROMA_DB_PATH={self.chroma_dir}\n")
             f.write("CHROMA_CLIENT_MODE=embedded\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = None
     
@@ -869,6 +879,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = FolderFileProcessorApp(env_file=str(env_file_disabled))
         result = self.app.initialize()
@@ -932,6 +946,10 @@ class TestApplicationDocumentProcessingIntegration:
             f.write(f"SAVED_FOLDER={self.saved_dir}\n")
             f.write(f"ERROR_FOLDER={self.error_dir}\n")
             f.write("ENABLE_DOCUMENT_PROCESSING=false\n")
+            # Add required file monitoring configuration
+            f.write("FILE_MONITORING_MODE=auto\n")
+            f.write("POLLING_INTERVAL=3.0\n")
+            f.write("DOCKER_VOLUME_MODE=false\n")
         
         self.app = FolderFileProcessorApp(env_file=str(env_file_disabled))
         assert self.app.initialize() is True
@@ -1149,8 +1167,9 @@ class TestApplicationDocumentProcessingIntegration:
             assert result is False
         
         # Test FileMonitor failure
-        with patch('app.FileMonitor') as mock_file_monitor:
-            mock_file_monitor.side_effect = Exception("File monitor error")
+        with patch('app.create_file_monitor') as mock_create_file_monitor:
+            mock_create_file_monitor.side_effect = Exception("File monitor error")
             app = FolderFileProcessorApp(env_file=str(self.env_file))
             result = app.initialize()
+            # FileMonitor failure should cause initialization to fail
             assert result is False
