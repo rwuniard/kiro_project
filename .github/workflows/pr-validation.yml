@@ -73,11 +73,11 @@ jobs:
         fi
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       if: ${{ secrets.CODECOV_TOKEN != '' }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage.xml
+        files: ./coverage.xml
         flags: unittests
         name: pr-${{ github.event.pull_request.number }}
         fail_ci_if_error: false
