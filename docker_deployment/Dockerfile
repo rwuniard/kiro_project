@@ -1,11 +1,12 @@
 # Multi-stage Docker build for kiro-project
 FROM python:3.12-slim AS builder
 
-# Install system dependencies needed for building
-RUN apt-get update && apt-get install -y \
+# Install system dependencies needed for building (optimized for space)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
@@ -22,19 +23,26 @@ RUN uv sync --frozen --no-dev
 # Production stage
 FROM python:3.12-slim AS production
 
-# Install runtime system dependencies
-RUN apt-get update && apt-get install -y \
+# Install runtime system dependencies (optimized for space)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
     tesseract-ocr \
     tesseract-ocr-eng \
-    libreoffice \
+    libreoffice-core \
+    libreoffice-writer \
+    libreoffice-calc \
+    libreoffice-impress \
     libmagic1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* /var/tmp/* \
+    && find /usr/share/doc -type f -delete \
+    && find /usr/share/man -type f -delete
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
