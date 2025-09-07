@@ -146,19 +146,36 @@ jobs:
           type=raw,value=${{ needs.version.outputs.full_version }}
           type=raw,value=${{ needs.version.outputs.base_version }}
         
+    - name: Free up disk space
+      run: |
+        echo "Disk usage before cleanup:"
+        df -h
+        
+        # Remove unnecessary packages and files to free up space
+        sudo apt-get clean
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo rm -rf /usr/local/share/boost /usr/local/graalvm /usr/local/share/chrom*
+        sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+        
+        # Clean Docker system
+        docker system prune -af --volumes
+        
+        echo "Disk usage after cleanup:"
+        df -h
+        
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker_deployment/Dockerfile
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64  # Only build for amd64 to save space
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ needs.version.outputs.full_version }}
         cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-to: type=gha,mode=min  # Minimize cache to save space
         
     - name: Test Docker image
       run: |
