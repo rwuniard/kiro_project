@@ -20,7 +20,7 @@ jobs:
   test-and-coverage:
     name: Unit Tests & Coverage (85% Overall)
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
     
     steps:
     - name: Checkout code
@@ -97,7 +97,7 @@ jobs:
   security-scan:
     name: Security Vulnerability Scan
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
     
     steps:
     - name: Checkout code
@@ -141,7 +141,7 @@ jobs:
   docker-build-test:
     name: Docker Build Test with Versioning
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
     needs: [test-and-coverage]
     
     steps:
@@ -229,7 +229,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
     needs: [test-and-coverage]
     
     steps:
