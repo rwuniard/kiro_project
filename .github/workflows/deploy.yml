@@ -183,6 +183,23 @@ jobs:
         echo "Disk usage after cleanup:"
         df -h
         
+    - name: Debug build context
+      run: |
+        echo "🔍 Debugging Docker build context..."
+        echo "Current directory: $(pwd)"
+        ls -la
+        echo ""
+        echo "Checking critical files that should be in build context:"
+        echo "main.py: $(test -f main.py && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "CLAUDE.md: $(test -f CLAUDE.md && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "uv.lock: $(test -f uv.lock && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "src/: $(test -d src && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "docker_deployment/Dockerfile: $(test -f docker_deployment/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo ""
+        echo "Contents of .dockerignore:"
+        cat docker_deployment/.dockerignore
+        
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
@@ -194,8 +211,9 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ needs.version.outputs.full_version }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=min  # Minimize cache to save space
+        no-cache: true  # Temporarily disable cache to force clean build
+        # cache-from: type=gha
+        # cache-to: type=gha,mode=min  # Minimize cache to save space
         
     - name: Test Docker image
       run: |
