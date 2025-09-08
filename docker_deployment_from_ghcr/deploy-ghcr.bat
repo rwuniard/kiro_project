@@ -47,7 +47,7 @@ set MODEL_VENDOR=%2
 if "%MODEL_VENDOR%"=="" set MODEL_VENDOR=google
 
 set GHCR_REPO=%3
-if "%GHCR_REPO%"=="" set GHCR_REPO=ghcr.io/ronsonw/kiro-project
+if "%GHCR_REPO%"=="" set GHCR_REPO=ghcr.io/rwuniard/rag-file-processor
 
 echo   Docker image: %GHCR_REPO%:%IMAGE_TAG%
 echo   Model vendor: %MODEL_VENDOR%
