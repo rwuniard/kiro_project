@@ -131,7 +131,10 @@ jobs:
         file: ./docker_deployment/Dockerfile
         platforms: linux/amd64  # Only build for amd64 to save space
         push: ${{ inputs.push_image }}
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: |
+          ${{ steps.meta.outputs.tags }}
+          ${{ inputs.image_name }}:${{ inputs.version }}
+          ${{ inputs.image_name }}:latest
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
@@ -143,21 +146,18 @@ jobs:
       run: |
         echo "Testing built Docker image..."
         
-        if [ "${{ inputs.push_image }}" = "true" ]; then
-          # For pushed images, use the registry URL and pull first
-          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
-          echo "Testing pushed image: $IMAGE_TAG"
-          docker pull "$IMAGE_TAG"
-        else
-          # For local builds, use local tag without registry prefix
-          IMAGE_TAG="${{ inputs.image_name }}:${{ inputs.version }}"
-          echo "Testing local image: $IMAGE_TAG"
-        fi
+        # Always test with the local tag first (created by the build step)
+        LOCAL_TAG="${{ inputs.image_name }}:${{ inputs.version }}"
+        echo "Testing local image: $LOCAL_TAG"
+        
+        # List available images for debugging
+        echo "Available Docker images:"
+        docker images --filter "reference=${{ inputs.image_name }}"
         
         # Run basic health check
         docker run --rm \
           -e ENABLE_DOCUMENT_PROCESSING=false \
-          "$IMAGE_TAG" \
+          "$LOCAL_TAG" \
           python -c "
         import sys
         print('🐍 Python version:', sys.version)
@@ -174,6 +174,15 @@ jobs:
             
         print('✅ Docker image test passed')
         "
+        
+        # Additional test for pushed images: verify registry accessibility
+        if [ "${{ inputs.push_image }}" = "true" ]; then
+          echo "Verifying pushed image accessibility..."
+          REGISTRY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Testing registry image: $REGISTRY_TAG"
+          docker pull "$REGISTRY_TAG"
+          echo "✅ Registry image accessible"
+        fi
         
     - name: Build summary
       run: |
