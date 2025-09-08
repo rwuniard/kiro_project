@@ -64,10 +64,10 @@ deploy-local.*
 ../tests/
 
 # Documentation (except CLAUDE.md which is needed)
-../README.md
-../docs/
-../*.md
-!../CLAUDE.md
+README.md
+docs/
+*.md
+!CLAUDE.md
 
 # Temporary and cache files
 *.tmp
