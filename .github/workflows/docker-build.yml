@@ -101,9 +101,9 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ inputs.registry }}/${{ github.repository_owner }}/${{ inputs.image_name }}
+        images: ${{ inputs.push_image == 'true' && format('{0}/{1}/{2}', inputs.registry, github.repository_owner, inputs.image_name) || inputs.image_name }}
         tags: |
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=latest,enable=${{ inputs.push_image == 'true' }}
           type=raw,value=${{ inputs.version }}
         
     - name: Debug build context
@@ -142,9 +142,17 @@ jobs:
     - name: Test Docker image
       run: |
         echo "Testing built Docker image..."
-        # Use the first tag from the metadata
-        IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
-        echo "Testing image: $IMAGE_TAG"
+        
+        if [ "${{ inputs.push_image }}" = "true" ]; then
+          # For pushed images, use the registry URL and pull first
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Testing pushed image: $IMAGE_TAG"
+          docker pull "$IMAGE_TAG"
+        else
+          # For local builds, use local tag without registry prefix
+          IMAGE_TAG="${{ inputs.image_name }}:${{ inputs.version }}"
+          echo "Testing local image: $IMAGE_TAG"
+        fi
         
         # Run basic health check
         docker run --rm \
