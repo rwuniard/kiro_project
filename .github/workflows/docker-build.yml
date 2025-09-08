@@ -131,6 +131,7 @@ jobs:
         file: ./docker_deployment/Dockerfile
         platforms: linux/amd64  # Only build for amd64 to save space
         push: ${{ inputs.push_image }}
+        load: ${{ inputs.push_image == 'false' }}  # Load to local Docker when not pushing
         tags: |
           ${{ steps.meta.outputs.tags }}
           ${{ inputs.image_name }}:${{ inputs.version }}
@@ -142,19 +143,53 @@ jobs:
         # cache-from: type=gha
         # cache-to: type=gha,mode=min
         
+    - name: Debug build output
+      run: |
+        echo "Build step completed. Checking what was created..."
+        echo "Push mode: ${{ inputs.push_image }}"
+        echo "Load mode: ${{ inputs.push_image == 'false' }}"
+        echo "All current Docker images:"
+        docker images
+        
     - name: Test Docker image
       run: |
         echo "Testing built Docker image..."
         
-        # Always test with the local tag first (created by the build step)
-        LOCAL_TAG="${{ inputs.image_name }}:${{ inputs.version }}"
-        echo "Testing local image: $LOCAL_TAG"
+        # Debug: Show all Docker images
+        echo "All available Docker images:"
+        docker images
         
-        # List available images for debugging
-        echo "Available Docker images:"
-        docker images --filter "reference=${{ inputs.image_name }}"
+        # Debug: Show what tags were supposed to be created
+        echo "Expected tags from build:"
+        echo "- ${{ inputs.image_name }}:${{ inputs.version }}"
+        echo "- ${{ inputs.image_name }}:latest"
+        echo "Metadata tags: ${{ steps.meta.outputs.tags }}"
+        
+        # Check if our expected local tag exists
+        LOCAL_TAG="${{ inputs.image_name }}:${{ inputs.version }}"
+        echo "Looking for local image: $LOCAL_TAG"
+        
+        if docker image inspect "$LOCAL_TAG" >/dev/null 2>&1; then
+          echo "✅ Local image found: $LOCAL_TAG"
+        else
+          echo "❌ Local image NOT found: $LOCAL_TAG"
+          echo "Trying alternative tags..."
+          
+          # Try to find any image with our image name
+          AVAILABLE_TAG=$(docker images --format "table {{.Repository}}:{{.Tag}}" | grep "^${{ inputs.image_name }}:" | head -n1)
+          if [ -n "$AVAILABLE_TAG" ]; then
+            echo "Found alternative tag: $AVAILABLE_TAG"
+            LOCAL_TAG="$AVAILABLE_TAG"
+          else
+            echo "No local images found with name: ${{ inputs.image_name }}"
+            echo "Available images:"
+            docker images --filter "reference=${{ inputs.image_name }}"
+            exit 1
+          fi
+        fi
         
         # Run basic health check
+        echo "Testing image: $LOCAL_TAG"
         docker run --rm \
           -e ENABLE_DOCUMENT_PROCESSING=false \
           "$LOCAL_TAG" \
