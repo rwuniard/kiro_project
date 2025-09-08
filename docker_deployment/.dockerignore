@@ -66,8 +66,9 @@ deploy-local.*
 # Documentation (except CLAUDE.md which is needed)
 README.md
 docs/
-*.md
-!CLAUDE.md
+setup_chromadb/*.md
+docker_deployment/*.md
+tests/*.md
 
 # Temporary and cache files
 *.tmp
