@@ -54,7 +54,7 @@ fi
 # Set default values (can be overridden by command line arguments)
 IMAGE_TAG="${1:-latest}"
 MODEL_VENDOR="${2:-google}"
-GHCR_REPO="${3:-ghcr.io/ronsonw/rag-file-processor}"
+GHCR_REPO="${3:-ghcr.io/rwuniard/rag-file-processor}"
 
 echo "  Docker image: $GHCR_REPO:$IMAGE_TAG"
 echo "  Model vendor: $MODEL_VENDOR"
