@@ -131,7 +131,7 @@ jobs:
         file: ./docker_deployment/Dockerfile
         platforms: linux/amd64  # Only build for amd64 to save space
         push: ${{ inputs.push_image }}
-        load: ${{ inputs.push_image == 'false' }}  # Load to local Docker when not pushing
+        load: ${{ !inputs.push_image }}  # Load to local Docker when not pushing
         tags: |
           ${{ steps.meta.outputs.tags }}
           ${{ inputs.image_name }}:${{ inputs.version }}
@@ -147,7 +147,9 @@ jobs:
       run: |
         echo "Build step completed. Checking what was created..."
         echo "Push mode: ${{ inputs.push_image }}"
-        echo "Load mode: ${{ inputs.push_image == 'false' }}"
+        echo "Load mode (old): ${{ inputs.push_image == 'false' }}"
+        echo "Load mode (new): ${{ inputs.push_image == false }}"
+        echo "Load mode (not): ${{ !inputs.push_image }}"
         echo "All current Docker images:"
         docker images
         
