@@ -95,7 +95,7 @@ jobs:
         
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
-      if: ${{ secrets.CODECOV_TOKEN != '' }}
+      if: ${{ secrets.CODECOV_TOKEN }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./coverage.xml
@@ -233,7 +233,7 @@ jobs:
         echo "- **Base Version**: \`${{ needs.version.outputs.base_version }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Commit SHA**: \`${{ needs.version.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Model Vendor**: \`${{ github.event.inputs.model_vendor || 'openai' }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platforms**: \`linux/amd64, linux/arm64\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: \`linux/amd64\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🏷️ Available Tags" >> $GITHUB_STEP_SUMMARY
         echo "- \`latest\` - Latest stable release" >> $GITHUB_STEP_SUMMARY
