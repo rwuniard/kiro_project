@@ -146,9 +146,9 @@ jobs:
       model_vendor: ${{ github.event.inputs.model_vendor || 'openai' }}
       environment: 'production'
     secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
+      # Note: GITHUB_TOKEN is automatically provided and doesn't need to be passed
       
   deploy-summary:
     name: Deployment Summary

@@ -196,6 +196,7 @@ jobs:
     secrets:
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
+      # Note: GITHUB_TOKEN is automatically provided and doesn't need to be passed
 
   # Job 5: Integration Tests
   integration-tests:
