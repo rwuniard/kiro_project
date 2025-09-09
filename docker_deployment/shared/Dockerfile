@@ -23,6 +23,10 @@ RUN uv sync --frozen --no-dev
 # Production stage
 FROM python:3.12-slim AS production
 
+# Accept VERSION build argument
+ARG VERSION
+ENV APP_VERSION=${VERSION}
+
 # Install runtime system dependencies (optimized for space)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pandoc \
@@ -57,6 +61,10 @@ COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser main.py ./
 COPY --chown=appuser:appuser CLAUDE.md ./
+
+# Create version file with build version info
+RUN echo "${VERSION:-unknown}" > /app/VERSION \
+    && chown appuser:appuser /app/VERSION
 
 # Environment variables are configured by docker-compose.yml
 # No .env files copied - all config via docker-compose environment section

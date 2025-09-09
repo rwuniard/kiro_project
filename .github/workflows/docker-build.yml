@@ -103,7 +103,7 @@ jobs:
       with:
         images: ${{ format('{0}/{1}/{2}', inputs.registry, github.repository_owner, inputs.image_name) }}
         tags: |
-          type=raw,value=latest,enable=${{ inputs.push_image == 'true' }}
+          type=raw,value=latest,enable=${{ inputs.push_image == true }}
           type=raw,value=${{ inputs.version }}
         
     - name: Debug build context
@@ -112,6 +112,12 @@ jobs:
         echo "Current directory: $(pwd)"
         ls -la
         echo ""
+        echo "🏷️ Docker tags that will be created:"
+        echo "${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "Push image: ${{ inputs.push_image }}"
+        echo "Latest tag enabled: ${{ inputs.push_image == true }}"
+        echo ""
         echo "Checking critical files that should be in build context:"
         echo "main.py: $(test -f main.py && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "CLAUDE.md: $(test -f CLAUDE.md && echo '✅ EXISTS' || echo '❌ MISSING')"
@@ -119,9 +125,6 @@ jobs:
         echo "src/: $(test -d src && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "docker_deployment/shared/Dockerfile: $(test -f docker_deployment/shared/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
-        echo ""
-        echo "Contents of .dockerignore:"
-        cat docker_deployment/.dockerignore
         
     - name: Build and optionally push Docker image
       id: build
@@ -169,22 +172,7 @@ jobs:
           docker run --rm \
             -e ENABLE_DOCUMENT_PROCESSING=false \
             "$REGISTRY_TAG" \
-            python -c "
-            import sys
-            print('🐍 Python version:', sys.version)
-            print('🏷️ Image version: ${{ inputs.version }}')
-            
-            try:
-                from src.app import FolderFileProcessorApp
-                from src.config import ConfigManager
-                from src.core import FileProcessor
-                print('✅ Core modules import successfully')
-            except ImportError as e:
-                print(f'❌ Import error: {e}')
-                sys.exit(1)
-                
-            print('✅ Docker registry image test passed')
-            "
+            python -c "import sys; print('🐍 Python version:', sys.version); print('🏷️ Image version: ${{ inputs.version }}'); exec('try:\\n    from src.app import FolderFileProcessorApp\\n    from src.config import ConfigManager\\n    from src.core import FileProcessor\\n    print(\"✅ Core modules import successfully\")\\nexcept ImportError as e:\\n    print(f\"❌ Import error: {e}\")\\n    sys.exit(1)\\nprint(\"✅ Docker registry image test passed\")')"
           
         else
           echo "🧪 PR validation build - Build completed successfully"
