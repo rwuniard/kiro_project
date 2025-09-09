@@ -123,13 +123,15 @@ jobs:
         uv run bandit -r src/ -f txt
       continue-on-error: true
       
-    - name: Run pip-audit scan for dependencies
+    - name: Run Safety scan for dependencies
       run: |
-        uv add --dev pip-audit
-        echo "🔍 Scanning dependencies for security vulnerabilities..."
-        uv run pip-audit --format=json --output=pip-audit-report.json --progress-spinner=off || true
-        uv run pip-audit --progress-spinner=off
+        uv add --dev safety
+        echo "🔍 Scanning dependencies for security vulnerabilities with Safety..."
+        uv run safety scan --json --output safety-report.json || true
+        uv run safety scan
       continue-on-error: true
+      env:
+        SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
       
     - name: Upload security scan results
       uses: actions/upload-artifact@v4
@@ -137,7 +139,7 @@ jobs:
         name: security-reports
         path: |
           bandit-report.json
-          pip-audit-report.json
+          safety-report.json
         retention-days: 30
 
   # Job 3: Generate Version for Docker Build Test
