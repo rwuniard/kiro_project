@@ -75,7 +75,7 @@ jobs:
         
         # Use existing local deployment script logic
         cd docker_deployment
-        python scripts/generate_env.py \
+        python shared/scripts/generate_env.py \
           --environment ${{ inputs.environment }} \
           --platform unix \
           --model-vendor "${{ inputs.model_vendor }}"
@@ -117,7 +117,7 @@ jobs:
         echo "CLAUDE.md: $(test -f CLAUDE.md && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "uv.lock: $(test -f uv.lock && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "src/: $(test -d src && echo '✅ EXISTS' || echo '❌ MISSING')"
-        echo "docker_deployment/Dockerfile: $(test -f docker_deployment/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "docker_deployment/shared/Dockerfile: $(test -f docker_deployment/shared/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo ""
         echo "Contents of .dockerignore:"
@@ -128,7 +128,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: ./docker_deployment/Dockerfile
+        file: ./docker_deployment/shared/Dockerfile
         platforms: linux/amd64  # Only build for amd64 to save space
         push: ${{ inputs.push_image }}
         # Only load locally for production builds (deploy workflow)
@@ -196,7 +196,7 @@ jobs:
           echo ""
           echo "Build outputs:"
           echo "- Image built successfully: ${{ inputs.image_name }}:${{ inputs.version }}"
-          echo "- Build context: Project root with docker_deployment/Dockerfile"
+          echo "- Build context: Project root with docker_deployment/shared/Dockerfile"
           echo "- Dockerfile validation: ✅ All required files accessible"
           echo "- Dependencies installation: ✅ Completed during build"
           echo ""
