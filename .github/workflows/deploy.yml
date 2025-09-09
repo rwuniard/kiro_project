@@ -140,8 +140,8 @@ jobs:
     uses: ./.github/workflows/docker-build.yml
     with:
       push_image: true
-      registry: ${{ env.REGISTRY }}
-      image_name: ${{ env.IMAGE_NAME }}
+      registry: 'ghcr.io'
+      image_name: 'rag-file-processor'
       version: ${{ needs.version.outputs.full_version }}
       model_vendor: ${{ github.event.inputs.model_vendor || 'openai' }}
       environment: 'production'
