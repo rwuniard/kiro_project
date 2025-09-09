@@ -8,7 +8,7 @@ set -e  # Exit on any error
 echo "============================================"
 echo "  Kiro Project - CI Deployment (GHCR Pull)"
 echo "  Platform: Unix/Mac"
-echo "  Image: ghcr.io/ronsonw/kiro_project:latest"
+echo "  Image: ghcr.io/rwuniard/rag-file-processor:latest"
 echo "============================================"
 echo
 
@@ -108,7 +108,7 @@ echo "[4/6] Generating environment configuration..."
 # Set default values (can be overridden by command line arguments)
 IMAGE_TAG="${1:-latest}"
 MODEL_VENDOR="${2:-google}"
-GHCR_REPO="${3:-ghcr.io/ronsonw/kiro_project}"
+GHCR_REPO="${3:-ghcr.io/rwuniard/rag-file-processor}"
 
 echo "  Docker image: $GHCR_REPO:$IMAGE_TAG"
 echo "  Model vendor: $MODEL_VENDOR"
@@ -169,6 +169,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Wait a moment for containers to initialize
+sleep 5
+
 echo
 echo "============================================"
 echo "  CI Deployment Successful!"
@@ -191,4 +194,9 @@ echo "  To restart:      docker-compose restart"
 echo "  To update:       docker-compose pull && docker-compose up -d"
 echo
 echo "  Drop files into the source folder to start processing!"
+echo
+
+# Display current image info
+echo "  Current image info:"
+docker images "$GHCR_REPO" --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedAt}}\t{{.Size}}"
 echo

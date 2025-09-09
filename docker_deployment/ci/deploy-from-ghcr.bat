@@ -7,7 +7,7 @@ setlocal EnableDelayedExpansion
 echo ============================================
 echo   Kiro Project - CI Deployment (GHCR Pull)
 echo   Platform: Windows
-echo   Image: ghcr.io/ronsonw/kiro_project:latest
+echo   Image: ghcr.io/rwuniard/rag-file-processor:latest
 echo ============================================
 echo.
 
@@ -94,7 +94,7 @@ set MODEL_VENDOR=%2
 if "%MODEL_VENDOR%"=="" set MODEL_VENDOR=google
 
 set GHCR_REPO=%3
-if "%GHCR_REPO%"=="" set GHCR_REPO=ghcr.io/ronsonw/kiro_project
+if "%GHCR_REPO%"=="" set GHCR_REPO=ghcr.io/rwuniard/rag-file-processor
 
 echo   Docker image: %GHCR_REPO%:%IMAGE_TAG%
 echo   Model vendor: %MODEL_VENDOR%
@@ -177,6 +177,11 @@ echo   To restart:      docker-compose restart
 echo   To update:       docker-compose pull ^&^& docker-compose up -d
 echo.
 echo   Drop files into the source folder to start processing!
+echo.
+
+REM Display current image info
+echo   Current image info:
+docker images "%GHCR_REPO%" --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedAt}}\t{{.Size}}"
 echo.
 
 pause

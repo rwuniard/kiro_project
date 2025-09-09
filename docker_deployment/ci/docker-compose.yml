@@ -1,12 +1,12 @@
 # CI Deployment docker-compose configuration
 # Uses pre-built images from GitHub Container Registry
-# Based on shared configuration but customized for CI deployment
+# Uses mcp-network to connect with ChromaDB server
 
 services:
   rag-file-processor:
     # Use pre-built image from GHCR instead of building locally
-    image: ${DOCKER_IMAGE:-ghcr.io/ronsonw/kiro_project:latest}
-    container_name: rag-file-processor-ci
+    image: ${DOCKER_IMAGE:-ghcr.io/rwuniard/rag-file-processor:latest}
+    container_name: rag-file-processor-ghcr
     restart: unless-stopped
     
     environment:
