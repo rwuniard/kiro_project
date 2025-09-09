@@ -1,369 +1,242 @@
 # Docker Deployment for Kiro Project
 
-This directory contains all Docker deployment configurations and scripts for the Kiro Project. It provides a complete, isolated environment with all system dependencies pre-installed.
+This directory contains **two distinct Docker deployment paths** for the Kiro Project, each optimized for different use cases:
 
-## 📁 Directory Structure
+## 🚀 Deployment Paths
+
+### CI Deployment (`ci/`)
+**Pull pre-built images from GitHub Container Registry**
+- **Quick Start**: Deploy in ~2 minutes
+- **Use Cases**: Testing, demos, production-like environments
+- **Requirements**: Internet connection, Docker login to GHCR
+
+### Local Development (`local/`)
+**Build images locally from source**
+- **Full Control**: Build and modify locally
+- **Use Cases**: Development, debugging, offline work
+- **Requirements**: Full build environment, longer initial setup
+
+## 📁 New Directory Structure
 
 ```
 docker_deployment/
-├── config/                    # Environment-specific configuration files
-│   ├── dev_chroma_settings.json     # Development ChromaDB configuration
-│   ├── prod_chroma_settings.json    # Production ChromaDB configuration
-│   ├── windows_paths.json           # Windows folder paths
-│   └── unix_paths.json              # Unix/Mac folder paths
-├── scripts/
-│   └── generate_env.py              # Environment configuration generator
-├── Dockerfile                      # Multi-stage Docker build configuration
-├── docker-compose.yml             # Main container configuration
-├── docker-compose.override.yml    # Development-specific overrides
-├── .dockerignore                  # Docker build context exclusions
-├── .env.template                  # Environment template with placeholders
-├── deploy-local.bat               # Windows deployment script
-├── deploy-local.sh                # Unix/Mac deployment script
-└── README.md                      # This file
+├── ci/                          # CI Deployment (pre-built images)
+│   ├── deploy-from-ghcr.sh          # Unix/Mac CI deployment
+│   ├── deploy-from-ghcr.bat         # Windows CI deployment
+│   └── docker-compose.yml           # CI container configuration
+├── local/                       # Local Development (build from source)
+│   ├── build-and-deploy.sh          # Unix/Mac local build
+│   ├── build-and-deploy.bat         # Windows local build
+│   └── docker-compose.yml           # Local build configuration
+├── shared/                      # Shared Infrastructure
+│   ├── config/                       # Platform-specific configurations
+│   │   ├── windows_paths.json            # Windows folder paths
+│   │   └── unix_paths.json               # Unix/Mac folder paths
+│   ├── scripts/
+│   │   └── generate_env.py               # Environment generator (uv-based)
+│   ├── Dockerfile                    # Single source of truth for builds
+│   ├── docker-compose.base.yml      # Common container configuration
+│   └── .env.template                # Environment template
+└── data/                        # Persistent data
+    ├── chroma_db/                    # ChromaDB storage
+    └── logs/                         # Application logs
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start Guide
 
-### Prerequisites
+### Option 1: CI Deployment (Recommended)
 
-- **Docker** and **docker-compose** installed and running
-- **Python 3.8+** (for configuration scripts)
-- **API Keys**: OpenAI and/or Google API keys
-
-### Windows Deployment
-
-1. **Configure Paths**: Edit `config/windows_paths.json`:
-   ```json
-   {
-     "source_folder": "C:\\temp\\kiro\\source",
-     "saved_folder": "C:\\temp\\kiro\\saved", 
-     "error_folder": "C:\\temp\\kiro\\error"
-   }
-   ```
-
-2. **Set API Keys**: Create `.env.local` in project root (parent directory):
-   ```env
-   OPENAI_API_KEY=your_openai_key_here
-   GOOGLE_API_KEY=your_google_key_here
-   ```
-
-3. **Deploy** (from project root):
-   ```cmd
-   docker_deployment\deploy-local.bat
-   docker_deployment\deploy-local.bat google
-   ```
-
-### Unix/Mac Deployment
-
-1. **Configure Paths**: Edit `config/unix_paths.json`:
-   ```json
-   {
-     "source_folder": "/tmp/kiro/source",
-     "saved_folder": "/tmp/kiro/saved",
-     "error_folder": "/tmp/kiro/error"
-   }
-   ```
-
-2. **Set API Keys**: Create `.env.local` in project root (parent directory):
-   ```env
-   OPENAI_API_KEY=your_openai_key_here
-   GOOGLE_API_KEY=your_google_key_here
-   ```
-
-3. **Deploy** (from project root):
-   ```bash
-   ./docker_deployment/deploy-local.sh
-   ./docker_deployment/deploy-local.sh google
-   ```
-
-## 🔧 Configuration Files
-
-### ChromaDB Settings
-
-Both development and production use **client_server** mode by default, connecting to a ChromaDB container named `chromadb` in the `mcp-network`.
-
-#### `config/dev_chroma_settings.json`
-```json
-{
-  "chroma_client_mode": "client_server",
-  "chroma_server_host": "chromadb",
-  "chroma_server_port": 8000,
-  "chroma_collection_name": "rag-kb-dev"
-}
-```
-
-#### `config/prod_chroma_settings.json` 
-```json
-{
-  "chroma_client_mode": "client_server", 
-  "chroma_server_host": "chromadb",
-  "chroma_server_port": 8000,
-  "chroma_collection_name": "rag-kb-prod"
-}
-```
-
-**ChromaDB Mode Options:**
-- `"client_server"`: Uses external ChromaDB server (recommended)
-  - ✅ Better performance and data persistence
-  - ✅ Concurrent access support
-- `"embedded"`: Uses local file-based storage
-  - ✅ Simpler setup, no external dependencies
-  - To use: Uncomment `_chroma_db_path` field and change mode
-
-### Folder Path Settings
-
-Configure where Docker will map local folders for file processing.
-
-#### `config/windows_paths.json`
-```json
-{
-  "source_folder": "C:\\temp\\kiro\\source",
-  "saved_folder": "C:\\temp\\kiro\\saved",
-  "error_folder": "C:\\temp\\kiro\\error",
-  "description": "Windows folder paths - modify for your local setup"
-}
-```
-
-#### `config/unix_paths.json`
-```json
-{
-  "source_folder": "/tmp/kiro/source", 
-  "saved_folder": "/tmp/kiro/saved",
-  "error_folder": "/tmp/kiro/error",
-  "description": "Unix/Mac folder paths - modify for your local setup"
-}
-```
-
-## 🛠️ Scripts
-
-### `deploy-local.bat` / `deploy-local.sh`
-
-**Purpose**: Complete deployment automation for local development
-
-**Usage**:
 ```bash
-# Use OpenAI (default)
-./deploy-local.sh
+# 1. Configure folder paths
+edit docker_deployment/shared/config/unix_paths.json     # Mac/Linux
+edit docker_deployment/shared/config/windows_paths.json  # Windows
 
-# Use Google AI
-./deploy-local.sh google
+# 2. Set API keys in project root
+cat > .env.local << EOF
+OPENAI_API_KEY=your_openai_key_here
+GOOGLE_API_KEY=your_google_key_here
+EOF
+
+# 3. Login to GitHub Container Registry
+docker login ghcr.io
+
+# 4. Deploy using CI scripts
+./docker_deployment/ci/deploy-from-ghcr.sh              # Unix/Mac
+docker_deployment\ci\deploy-from-ghcr.bat               # Windows
 ```
 
-**What it does**:
-1. ✅ Validates prerequisites (Docker, Python, required files)
-2. ✅ Creates local directories from path configuration
-3. ✅ Generates `.env` file from templates and settings
-4. ✅ Builds Docker image with all dependencies
-5. ✅ Starts container with volume mapping
+### Option 2: Local Development
 
-### `scripts/generate_env.py`
-
-**Purpose**: Environment configuration generator that merges templates with settings
-
-**Usage**:
 ```bash
-python scripts/generate_env.py --environment development --platform unix --model-vendor openai
+# 1-2. Same configuration and API key setup as above
+
+# 3. Build and deploy locally
+./docker_deployment/local/build-and-deploy.sh           # Unix/Mac  
+docker_deployment\local\build-and-deploy.bat            # Windows
 ```
 
-**Options**:
-- `--environment`: `development` or `production`
-- `--platform`: `unix` or `windows` 
-- `--model-vendor`: `openai` or `google`
+## 🔧 Development Workflow
 
-**What it does**:
-- Reads `.env.template` and replaces placeholders
-- Loads ChromaDB settings from `config/*.json`
-- Loads folder paths from platform-specific config
-- Injects API keys from `.env.local` (dev) or environment variables (prod)
-- Generates `.env.generated` file for Docker container
-
-## 🐳 Docker Configuration
-
-### Container Architecture
-
-The deployment creates a container named `rag-file-processor` that:
-- ✅ Connects to `mcp-network` for ChromaDB communication
-- ✅ Maps local folders for file processing
-- ✅ Persists ChromaDB data and application logs
-- ✅ Includes all system dependencies (Tesseract, LibreOffice)
-
-### Volume Mapping
-
-```yaml
-Local Path              → Container Path
-${SOURCE_FOLDER}        → /app/data/source    # Files to process
-${SAVED_FOLDER}         → /app/data/saved     # Successfully processed  
-${ERROR_FOLDER}         → /app/data/error     # Failed files with logs
-./data/chroma_db        → /app/data/chroma_db # ChromaDB storage
-./logs                  → /app/logs           # Application logs
-```
-
-### Network Configuration
-
-The container joins the external `mcp-network` to communicate with:
-- **ChromaDB container** (`chromadb:8000`)
-- **Other MCP services** as needed
-
-## 📋 Container Management
-
-### Basic Operations
+### CI Deployment Workflow
 ```bash
-# View container status
-docker-compose ps
+# Deploy latest version
+./docker_deployment/ci/deploy-from-ghcr.sh
 
-# Monitor application logs
-docker-compose logs -f rag-file-processor
-
-# Start containers
-docker-compose up -d
-
-# Stop containers  
-docker-compose down
-
-# Restart containers
+# Monitor and manage
+cd docker_deployment/ci
+docker-compose logs -f
 docker-compose restart
+docker-compose down
+```
 
-# View resource usage
+### Local Development Workflow
+```bash
+# Build and deploy
+./docker_deployment/local/build-and-deploy.sh
+
+# Development cycle
+cd docker_deployment/local
+docker-compose logs -f          # Monitor logs
+# Make code changes...
+cd .. && ./local/build-and-deploy.sh  # Rebuild with changes
+```
+
+## 📊 Deployment Comparison
+
+| Feature | CI Deployment | Local Development |
+|---------|---------------|-------------------|
+| **Setup Time** | ⚡ ~2 minutes | 🔧 ~5-10 minutes |
+| **Internet Required** | ✅ For initial pull | ❌ After setup |
+| **Build Time** | ❌ No build needed | ⏱️ 3-5 minutes |
+| **Code Changes** | 🔄 Need new image | ⚡ Immediate rebuild |
+| **Debugging** | 🔍 Container logs | 🛠️ Full IDE access |
+| **Disk Usage** | 💾 Lower | 💾 Higher (build cache) |
+| **Best For** | Testing, demos | Development, debugging |
+
+## 🛠️ Configuration
+
+### Folder Path Configuration
+
+Edit the appropriate configuration file for your platform:
+
+**Unix/Mac**: `shared/config/unix_paths.json`
+```json
+{
+  "source_folder": "~/tmp/rag_store/source",
+  "saved_folder": "~/tmp/rag_store/saved",
+  "error_folder": "~/tmp/rag_store/error"
+}
+```
+
+**Windows**: `shared/config/windows_paths.json`
+```json
+{
+  "source_folder": "C:\\temp\\rag_store\\source",
+  "saved_folder": "C:\\temp\\rag_store\\saved",
+  "error_folder": "C:\\temp\\rag_store\\error"
+}
+```
+
+### API Key Configuration
+
+Create `.env.local` in the **project root** (not in docker_deployment):
+```env
+# Required: Choose one or both
+OPENAI_API_KEY=your_openai_key_here
+GOOGLE_API_KEY=your_google_key_here
+
+# Optional: ChromaDB configuration (defaults to client_server mode)
+# CHROMA_CLIENT_MODE=embedded
+# CHROMA_SERVER_HOST=localhost
+# CHROMA_SERVER_PORT=8000
+```
+
+## 🧪 Testing Your Deployment
+
+### Test File Processing
+```bash
+# 1. Start your chosen deployment
+# 2. Copy test files to source folder:
+cp test.pdf ~/tmp/rag_store/source/
+cp document.docx ~/tmp/rag_store/source/
+
+# 3. Monitor processing
+cd docker_deployment/[ci|local]
+docker-compose logs -f
+
+# 4. Check results
+ls -la ~/tmp/rag_store/saved/    # Successfully processed
+ls -la ~/tmp/rag_store/error/    # Failed files + .log files
+```
+
+## 🔧 Common Operations
+
+### Container Management (both deployment types)
+```bash
+# Navigate to deployment directory first
+cd docker_deployment/ci          # or docker_deployment/local
+
+# Container operations
+docker-compose ps                 # View status
+docker-compose logs -f            # Monitor logs
+docker-compose restart            # Restart services
+docker-compose down               # Stop all containers
+docker-compose exec rag-file-processor bash  # Access container
+
+# Resource monitoring
 docker stats rag-file-processor
 ```
 
-### Development Operations
+### Troubleshooting
 ```bash
-# Execute commands inside container
-docker-compose exec rag-file-processor bash
+# Check Docker installation
+docker info && docker version
 
-# Run tests inside container
-docker-compose exec rag-file-processor uv run pytest
+# CI Deployment issues
+docker login ghcr.io             # Ensure GHCR access
+docker pull ghcr.io/rwuniard/rag-file-processor:latest
 
-# Check Python version
-docker-compose exec rag-file-processor python --version
+# Local Build issues
+docker-compose build --no-cache  # Clean rebuild
+docker system prune              # Clean up Docker resources
 
-# Rebuild after code changes
-docker-compose down
-docker-compose up --build -d
-```
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-**Docker Build Fails**:
-```bash
-# Check Docker is running
-docker info
-
-# Clean up if needed  
-docker system prune
-
-# Rebuild without cache
-docker-compose build --no-cache
-```
-
-**Container Won't Start**:
-```bash
-# Check container logs
+# Application debugging
 docker-compose logs rag-file-processor
-
-# Validate configuration
-python scripts/generate_env.py --environment development --platform unix
+docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('OK')"
 ```
 
-**Volume Mapping Issues**:
-- ✅ Verify folder paths in `config/*.json` exist
-- ✅ Check folder permissions (readable/writable)
-- ✅ Ensure proper path format (Windows: `C:\path`, Unix: `/path`)
-
-**ChromaDB Connection Issues**:
+### Environment Generation (Advanced)
 ```bash
-# Verify mcp-network exists
-docker network ls | grep mcp-network
+# Manual environment generation
+cd docker_deployment/shared/scripts
 
-# Check if ChromaDB container is running
-docker ps | grep chromadb
+# Development environment
+uv run python generate_env.py --environment development --platform unix --model-vendor google
 
-# Test network connectivity
-docker-compose exec rag-file-processor ping chromadb
+# Production environment  
+uv run python generate_env.py --environment production --platform windows --model-vendor openai
 ```
 
-**API Keys Not Working**:
-- ✅ Verify `.env.local` exists in project root (not docker_deployment folder)
-- ✅ Check keys don't have extra spaces or quotes
-- ✅ Confirm model vendor matches available API key
+## 🚀 Migration from Old Scripts
 
-### Debug Mode
+If you were using the old deployment scripts:
 
-**Manual Environment Generation**:
-```bash
-# Test configuration generation
-python scripts/generate_env.py --help
-python scripts/generate_env.py --environment development --platform unix
+| Old Script | New Equivalent |
+|------------|----------------|
+| `deploy-local.sh` | `local/build-and-deploy.sh` |
+| `deploy-local.bat` | `local/build-and-deploy.bat` |
+| `docker_deployment_from_ghcr/deploy-ghcr.sh` | `ci/deploy-from-ghcr.sh` |
 
-# View generated configuration
-cat .env.generated
-```
+**Benefits of New Structure**:
+- ✅ Clear separation between CI and local deployment
+- ✅ Shared infrastructure reduces duplication
+- ✅ Better organization and maintainability  
+- ✅ Identical container behavior across deployment types
+- ✅ Enhanced documentation and guidance
 
-**Container Inspection**:
-```bash
-# View container filesystem
-docker-compose exec rag-file-processor ls -la /app
+## 📚 Additional Resources
 
-# Check environment variables
-docker-compose exec rag-file-processor env | grep CHROMA
-
-# Test Python imports
-docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('Import successful')"
-```
-
-## 📊 Usage Workflow
-
-### Daily Development Cycle
-
-1. **Start Monitoring**:
-   ```bash
-   docker-compose logs -f rag-file-processor
-   ```
-
-2. **Process Files**:
-   - Drop files into your configured `source_folder`
-   - Monitor logs for processing status
-   - Check results in `saved_folder` or `error_folder`
-
-3. **Stop When Done**:
-   ```bash
-   docker-compose down
-   ```
-
-### File Processing Results
-
-- **✅ Success**: Files moved to `saved_folder` with preserved directory structure
-- **❌ Failure**: Files moved to `error_folder` with detailed `.log` files
-- **📊 Data**: ChromaDB vector storage persisted in `./data/chroma_db`
-- **📝 Logs**: Application logs available in `./logs`
-
-## 🏭 Production Deployment
-
-For production deployment, the GitHub Actions workflow:
-1. Reads API keys from repository secrets
-2. Uses `prod_chroma_settings.json` configuration  
-3. Builds optimized Docker image
-4. Provides deployment artifacts
-
-See `.github/workflows/deploy.yml` for complete CI/CD configuration.
-
----
-
-## 💡 Tips
-
-- **🔄 Iterative Development**: Use `docker-compose restart` after configuration changes
-- **📁 Organize Files**: Use subdirectories in source folder - structure is preserved
-- **🔍 Monitor Progress**: Keep logs open with `docker-compose logs -f`  
-- **🧹 Clean Up**: Use `docker-compose down -v` to remove volumes (⚠️ deletes ChromaDB data)
-- **⚡ Performance**: ChromaDB client_server mode provides better performance than embedded mode
-
-## 🆘 Support
-
-- **Documentation**: Check main project README.md for detailed application information
-- **Logs**: Always check `docker-compose logs rag-file-processor` for error details
-- **Configuration**: Use `generate_env.py --help` for configuration options
-- **Testing**: Run container tests with `docker-compose exec rag-file-processor uv run pytest`
+- **Main Documentation**: See `../CLAUDE.md` for comprehensive Docker guide
+- **Migration Notes**: See `MIGRATION_NOTES.md` for technical migration details
+- **Troubleshooting**: Refer to CLAUDE.md Docker Troubleshooting section
+- **System Dependencies**: LibreOffice, Tesseract OCR (pre-installed in containers)

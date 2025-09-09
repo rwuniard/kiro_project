@@ -20,8 +20,9 @@ class EnvironmentGenerator:
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.docker_deployment_dir = project_root / "docker_deployment"
-        self.config_dir = self.docker_deployment_dir / "config"
-        self.template_file = self.docker_deployment_dir / ".env.template"
+        self.shared_dir = self.docker_deployment_dir / "shared"
+        self.config_dir = self.shared_dir / "config"
+        self.template_file = self.shared_dir / ".env.template"
         self.output_file = self.docker_deployment_dir / ".env.generated"
         
     def load_json_config(self, filename: str) -> Dict[str, Any]:
@@ -218,7 +219,8 @@ def main():
     args = parser.parse_args()
     
     # Get project root (parent of docker_deployment directory)
-    project_root = Path(__file__).parent.parent.parent.absolute()
+    # Script is now in docker_deployment/shared/scripts/, so go up 3 levels
+    project_root = Path(__file__).parent.parent.parent.parent.absolute()
     
     # Generate environment file
     generator = EnvironmentGenerator(project_root)

@@ -1,10 +1,14 @@
-name: mcp-network
+# Local Build docker-compose configuration
+# Builds images locally using shared Dockerfile for development
+# Based on shared configuration but customized for local development
+
 services:
   rag-file-processor:
+    # Build locally using shared Dockerfile instead of pulling from GHCR
     build:
-      context: ..
-      dockerfile: docker_deployment/Dockerfile
-    container_name: rag-file-processor
+      context: ../../  # Project root
+      dockerfile: docker_deployment/shared/Dockerfile
+    container_name: rag-file-processor-local
     restart: unless-stopped
     
     environment:
@@ -20,17 +24,22 @@ services:
       - TMP=/tmp/unstructured
       - HOME=/home/appuser
       
-      # Document processing settings - values from .env file only
-      # - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
-      # - DOCUMENT_PROCESSOR_TYPE=${DOCUMENT_PROCESSOR_TYPE:-rag_store}
-      # - MODEL_VENDOR=${MODEL_VENDOR:-google}
+      # Document processing settings (injected by deployment scripts)
+      - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
+      - DOCUMENT_PROCESSOR_TYPE=${DOCUMENT_PROCESSOR_TYPE:-rag_store}
+      - MODEL_VENDOR=${MODEL_VENDOR:-google}
+      
+      # File monitoring configuration (Docker-optimized)
+      - FILE_MONITORING_MODE=${FILE_MONITORING_MODE:-auto}
+      - POLLING_INTERVAL=${POLLING_INTERVAL:-2.0}
+      - DOCKER_VOLUME_MODE=${DOCKER_VOLUME_MODE:-true}
       
       # API Keys (injected by deployment scripts)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       
       # ChromaDB Configuration
-      - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-embedded}
+      - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-client_server}
       - CHROMA_DB_PATH=${CHROMA_DB_PATH:-./data/chroma_db}
       - CHROMA_SERVER_HOST=${CHROMA_SERVER_HOST}
       - CHROMA_SERVER_PORT=${CHROMA_SERVER_PORT}
@@ -41,10 +50,10 @@ services:
       - ${SOURCE_FOLDER}:/app/data/source
       - ${SAVED_FOLDER}:/app/data/saved 
       - ${ERROR_FOLDER}:/app/data/error
-      # Persist ChromaDB data and logs locally
-      - ./data/chroma_db:/app/data/chroma_db
-      - ./logs:/app/logs
-      - ./config:/app/config:ro
+      # Persist ChromaDB data and logs locally (relative to local/ directory)
+      - ../data/chroma_db:/app/data/chroma_db
+      - ../logs:/app/logs
+      - ../shared/config:/app/config:ro
       # Temporary directory for document processing
       - /tmp/file-processor-unstructured:/tmp/unstructured  # Unix/Mac
       # For Windows, use: C:\temp\file-processor-unstructured:/tmp/unstructured
@@ -74,15 +83,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Optional: Add monitoring with Prometheus
-  # prometheus:
-  #   image: prom/prometheus:latest
-  #   container_name: kiro-prometheus
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-
     networks:
       - mcp-network
 
@@ -91,5 +91,5 @@ networks:
     external: true
 
 volumes:
-  kiro_data:
+  kiro_data_local:
     driver: local

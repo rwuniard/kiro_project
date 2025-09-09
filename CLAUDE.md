@@ -50,89 +50,131 @@ uv run pytest tests/test_rag_integration_comprehensive/
 
 ### Docker Development Commands
 
-This project supports Docker deployment for both local development and production use. The Docker setup provides a complete, isolated environment with all system dependencies pre-installed.
+This project supports **two distinct Docker deployment paths** to meet different development and deployment needs:
 
-#### Local Docker Deployment
+## Deployment Path Choice
+
+### 🚀 CI Deployment (Recommended for Quick Start)
+**Pull pre-built images from GitHub Container Registry**
+- **When to use**: Quick start, production-like testing, minimal setup
+- **Benefits**: Fast deployment, no local build requirements, consistent images
+- **Requirements**: Internet connection, Docker login to GHCR
+
+### 🔧 Local Development Deployment  
+**Build images locally from source**
+- **When to use**: Active development, debugging, offline work, custom modifications
+- **Benefits**: Full control over build process, immediate code changes, offline capability
+- **Requirements**: Local build environment, longer initial setup
+
+---
+
+## CI Deployment (Pre-built Images)
+
+### Quick Start - CI Deployment
 
 ```bash
-# Windows deployment (from project root)
-docker_deployment\deploy-local.bat                # Deploy with OpenAI (default)
-docker_deployment\deploy-local.bat google         # Deploy with Google AI
+# Windows (from project root)
+docker_deployment\ci\deploy-from-ghcr.bat                # Deploy latest (Google AI default)
+docker_deployment\ci\deploy-from-ghcr.bat latest openai  # Deploy with OpenAI
+docker_deployment\ci\deploy-from-ghcr.bat v1.0.0 google  # Deploy specific version
 
-# Unix/Mac deployment (from project root) 
-./docker_deployment/deploy-local.sh               # Deploy with OpenAI (default)
-./docker_deployment/deploy-local.sh google        # Deploy with Google AI
+# Unix/Mac (from project root) 
+./docker_deployment/ci/deploy-from-ghcr.sh                # Deploy latest (Google AI default)
+./docker_deployment/ci/deploy-from-ghcr.sh latest openai  # Deploy with OpenAI
+./docker_deployment/ci/deploy-from-ghcr.sh v1.0.0 google  # Deploy specific version
 ```
 
-#### Docker Container Management
+### CI Deployment Configuration
 
 ```bash
-# View container status
-docker-compose ps
+# One-time setup for CI deployment
+1. Edit docker_deployment/shared/config/unix_paths.json (Mac/Linux) or windows_paths.json (Windows)
+2. Create .env.local with API keys in project root
+3. Login to GitHub Container Registry: docker login ghcr.io
+4. Run CI deployment script
 
-# Monitor real-time application logs
-docker-compose logs -f
-
-# Monitor specific service logs
-docker-compose logs -f rag-file-processor
-
-# Start containers in background
-docker-compose up -d
-
-# Stop all containers
-docker-compose down
-
-# Restart containers
-docker-compose restart
-
-# View container resource usage
-docker stats rag-file-processor
-
-# Execute commands inside container
-docker-compose exec rag-file-processor bash
-docker-compose exec rag-file-processor python --version
-
-# Build and start (force rebuild)
-docker-compose up --build
+# Available images at: ghcr.io/rwuniard/rag-file-processor
+# Tags: latest, v1.0.0, v1.1.0, etc.
 ```
 
-#### Docker Development Workflow
+---
+
+## Local Development Deployment (Build from Source)
+
+### Local Build and Deploy
+
+```bash
+# Windows (from project root)
+docker_deployment\local\build-and-deploy.bat                # Build and deploy (Google AI default)
+docker_deployment\local\build-and-deploy.bat openai        # Build with OpenAI
+docker_deployment\local\build-and-deploy.bat google        # Build with Google AI
+
+# Unix/Mac (from project root)
+./docker_deployment/local/build-and-deploy.sh               # Build and deploy (Google AI default)
+./docker_deployment/local/build-and-deploy.sh openai       # Build with OpenAI
+./docker_deployment/local/build-and-deploy.sh google       # Build with Google AI
+```
+
+### Local Development Workflow
 
 ```bash
 # Initial setup (one time)
-1. Edit docker_deployment/config/unix_paths.json (Mac/Linux) or docker_deployment/config/windows_paths.json (Windows)
+1. Edit docker_deployment/shared/config/unix_paths.json (Mac/Linux) or windows_paths.json (Windows)
 2. Create .env.local with API keys in project root
-3. Run deployment script: ./docker_deployment/deploy-local.sh
-   # Script now automatically sets up temporary directories and permissions
+3. Run local build script: ./docker_deployment/local/build-and-deploy.sh
 
-# Daily development cycle
-docker-compose logs -f          # Monitor application
+# Development cycle
+docker-compose logs -f          # Monitor application (from docker_deployment/local/)
 # Drop test files into source folder (including .docx/.doc files)
 docker-compose restart          # Restart if needed
 docker-compose down             # Stop when done
 
-# Rebuilding after changes
-docker-compose down
-docker-compose up --build -d
+# Rebuilding after code changes
+./docker_deployment/local/build-and-deploy.sh  # Rebuild and redeploy
 ```
 
-#### Docker Configuration Management
+---
+
+## Common Docker Operations
+
+Both deployment paths support the same container management commands:
 
 ```bash
-# Generate environment configuration manually
-python docker_deployment/scripts/generate_env.py --environment development --platform unix
-python docker_deployment/scripts/generate_env.py --environment development --platform windows --model-vendor google
+# Container Management (run from deployment directory: ci/ or local/)
+docker-compose ps               # View container status
+docker-compose logs -f          # Monitor real-time logs
+docker-compose logs -f rag-file-processor  # Monitor specific service
+docker-compose up -d            # Start in background
+docker-compose down             # Stop containers
+docker-compose restart          # Restart containers
+docker stats rag-file-processor # View resource usage
 
-# Validate configuration
-python docker_deployment/scripts/generate_env.py --help
+# Container Debugging
+docker-compose exec rag-file-processor bash
+docker-compose exec rag-file-processor python --version
+docker-compose exec rag-file-processor uv run pytest
+
+# For local builds only
+docker-compose up --build       # Force rebuild
 ```
 
-#### Docker Volume Structure
+### Environment Configuration
 
-The Docker deployment maps local folders to container directories:
+Both deployment paths use shared configuration management:
 
 ```bash
-# Local Folder Structure (configurable via config/*.json)
+# Manual environment generation (if needed)
+cd docker_deployment/shared/scripts
+uv run python generate_env.py --environment production --platform unix --model-vendor google
+uv run python generate_env.py --environment development --platform windows --model-vendor openai
+```
+
+### Docker Volume Structure
+
+Both deployment paths use identical volume mapping:
+
+```bash
+# Local Folder Structure (configurable via shared/config/*.json)
 source/          → /app/data/source     (files to process)
 saved/           → /app/data/saved      (successfully processed files)  
 error/           → /app/data/error      (failed files with .log files)
@@ -144,27 +186,30 @@ error/           → /app/data/error      (failed files with .log files)
 C:\temp\file-processor-unstructured → /tmp/unstructured  (Windows)
 ```
 
-#### Docker Troubleshooting
+### Docker Troubleshooting
 
 ```bash
-# Check Docker daemon
-docker info
-docker version
+# General Docker issues
+docker info && docker version   # Check Docker installation
+docker system prune            # Clean up unused resources
 
-# View build logs if build fails
-docker-compose build --no-cache
+# CI Deployment troubleshooting
+docker login ghcr.io           # Ensure GHCR access
+docker pull ghcr.io/rwuniard/rag-file-processor:latest  # Test image access
 
-# Container debugging
-docker-compose logs rag-file-processor
+# Local Build troubleshooting  
+docker-compose build --no-cache # Force clean rebuild
+docker-compose logs rag-file-processor  # Check container logs
+
+# Container debugging (both paths)
 docker-compose exec rag-file-processor ls -la /app
 docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('Import successful')"
 
-# Clean up Docker resources
-docker system prune
-docker-compose down -v          # Remove volumes (WARNING: deletes ChromaDB data)
+# Clean up (WARNING: deletes ChromaDB data)
+docker-compose down -v
 ```
 
-#### Docker Volume File Monitoring
+### Docker Volume File Monitoring
 
 **Important**: Docker volume mounts have known issues with file system events on Windows and macOS. This application automatically detects Docker environments and uses polling-based monitoring for reliable file detection.
 
@@ -185,32 +230,21 @@ DOCKER_VOLUME_MODE=true         # Enable Docker optimizations
 - For faster response: Reduce `POLLING_INTERVAL` to 1.0-2.0 seconds
 - For batch processing: Enable `DOCKER_VOLUME_MODE=true`
 
-#### Docker vs Native Development
+### Deployment Path Comparison
 
-| Task | Docker Command | Native Command |
-|------|----------------|----------------|
-| **Run Application** | `docker-compose up` | `uv run python main.py` |
-| **View Logs** | `docker-compose logs -f` | Check `logs/application.log` |
-| **Run Tests** | `docker-compose exec rag-file-processor uv run pytest` | `uv run pytest` |
-| **Debug** | `docker-compose exec rag-file-processor bash` | Direct file system access |
-| **Configuration** | Edit docker_deployment/config/*.json + redeploy | Edit `.env` directly |
+| Aspect | CI Deployment | Local Development |
+|--------|---------------|-------------------|
+| **Setup Time** | ⚡ Very Fast (~2 min) | 🔧 Moderate (~5-10 min) |
+| **Internet Required** | ✅ Yes (for pull) | ❌ No (after initial setup) |
+| **Build Requirements** | ❌ None | ✅ Full build environment |
+| **Code Changes** | 🔄 Need new image push | ⚡ Immediate rebuild |
+| **Debugging** | 🔍 Container logs only | 🔧 Full development access |
+| **Disk Usage** | 💾 Lower (no build cache) | 💾 Higher (build cache) |
+| **Use Cases** | Quick start, testing, demos | Development, debugging, offline |
 
-**Docker Benefits for Development**:
-- ✅ Consistent environment across platforms
-- ✅ All system dependencies pre-installed (Tesseract, LibreOffice)
-- ✅ No local system pollution
-- ✅ Easy deployment and cleanup
-- ✅ Volume mapping for easy file access
-- ✅ **Reliable file monitoring with automatic polling fallback**
-- ✅ **Fixed Office document processing with proper permission management**
-- ✅ **Automated temporary directory setup for document processing**
-
-**Native Development Benefits**:
-- ✅ Faster iteration cycles
-- ✅ Direct debugging access
-- ✅ Lower resource overhead
-- ✅ IDE integration
-- ✅ **Fast file system events (no polling needed)**
+**Migration from Old Scripts**:
+- Old `deploy-local.sh` → New `local/build-and-deploy.sh`
+- No direct old equivalent → New `ci/deploy-from-ghcr.sh`
 
 ## Recent Updates and Fixes
 
