@@ -18,7 +18,8 @@ import sys
 docker_deployment_path = Path(__file__).parent.parent / "docker_deployment"
 sys.path.insert(0, str(docker_deployment_path))
 
-from scripts.generate_env import EnvironmentGenerator
+#from scripts.generate_env import EnvironmentGenerator
+from docker_deployment.shared.scripts.generate_env import EnvironmentGenerator
 
 
 class TestEnvironmentGenerator:
