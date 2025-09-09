@@ -1,9 +1,12 @@
-name: mcp-network
+# CI Deployment docker-compose configuration
+# Uses pre-built images from GitHub Container Registry
+# Based on shared configuration but customized for CI deployment
 
 services:
   rag-file-processor:
-    image: ghcr.io/ronsonw/kiro_project:latest
-    container_name: rag-file-processor
+    # Use pre-built image from GHCR instead of building locally
+    image: ${DOCKER_IMAGE:-ghcr.io/ronsonw/kiro_project:latest}
+    container_name: rag-file-processor-ci
     restart: unless-stopped
     
     environment:
@@ -18,6 +21,16 @@ services:
       - TEMP=/tmp/unstructured
       - TMP=/tmp/unstructured
       - HOME=/home/appuser
+      
+      # Document processing settings (injected by deployment scripts)
+      - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
+      - DOCUMENT_PROCESSOR_TYPE=${DOCUMENT_PROCESSOR_TYPE:-rag_store}
+      - MODEL_VENDOR=${MODEL_VENDOR:-google}
+      
+      # File monitoring configuration (Docker-optimized)
+      - FILE_MONITORING_MODE=${FILE_MONITORING_MODE:-auto}
+      - POLLING_INTERVAL=${POLLING_INTERVAL:-2.0}
+      - DOCKER_VOLUME_MODE=${DOCKER_VOLUME_MODE:-true}
       
       # API Keys (injected by deployment scripts)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -35,10 +48,10 @@ services:
       - ${SOURCE_FOLDER}:/app/data/source
       - ${SAVED_FOLDER}:/app/data/saved 
       - ${ERROR_FOLDER}:/app/data/error
-      # Persist ChromaDB data and logs locally
+      # Persist ChromaDB data and logs locally (relative to ci/ directory)
       - ../data/chroma_db:/app/data/chroma_db
       - ../logs:/app/logs
-      - ../config:/app/config:ro
+      - ../shared/config:/app/config:ro
       # Temporary directory for document processing
       - /tmp/file-processor-unstructured:/tmp/unstructured  # Unix/Mac
       # For Windows, use: C:\temp\file-processor-unstructured:/tmp/unstructured
@@ -73,8 +86,8 @@ services:
 
 networks:
   mcp-network:
-    external: true
+    driver: bridge
 
 volumes:
-  kiro_data:
+  kiro_data_ci:
     driver: local
