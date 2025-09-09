@@ -86,7 +86,7 @@ services:
 
 networks:
   mcp-network:
-    driver: bridge
+    external: true
 
 volumes:
   kiro_data_ci:
