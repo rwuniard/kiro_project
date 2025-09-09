@@ -126,7 +126,7 @@ jobs:
     - name: Run Safety scan for dependencies
       run: |
         uv add --dev safety
-        uv run safety scan --json --output json || true
+        uv run safety scan --json --output-file safety-report.json || true
         uv run safety scan
       continue-on-error: true
       
