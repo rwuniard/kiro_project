@@ -131,9 +131,9 @@ jobs:
         file: ./docker_deployment/shared/Dockerfile
         platforms: linux/amd64  # Only build for amd64 to save space
         push: ${{ inputs.push_image }}
-        # Only load locally for production builds (deploy workflow)
-        # PR validation just validates the build succeeds without loading the huge image
-        load: ${{ inputs.push_image == true }}
+        # Never load locally to avoid "no space left on device" errors
+        # Production builds push to registry, PR builds just validate build success
+        load: false
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |

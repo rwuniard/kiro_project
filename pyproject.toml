@@ -13,18 +13,18 @@ dependencies = [
     "langchain-community>=0.3.27",
     "langchain-google-genai>=2.0.10",
     "langchain-openai>=0.2.0",
-    "pypdf>=5.1.0",
+    "pypdf>=6.0.0",
     "structlog>=24.1.0",
     "prometheus-client>=0.21.0",
     # Additional dependencies required by dependency validation
     "google-generativeai>=0.3.0",
-    "cryptography>=3.1",
+    "cryptography>=45.0.7",
     "unstructured[all-docs]>=0.18.14",
     "langchain-unstructured>=0.1.6",
     "pymupdf>=1.26.4",
     "pytesseract>=0.3.13",
     "pillow>=11.3.0",
-    "python-docx>=0.8.11",  # Required by dependency validation
+    "python-docx>=0.8.11",
 ]
 
 [dependency-groups]
