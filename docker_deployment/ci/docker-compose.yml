@@ -37,7 +37,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       
       # ChromaDB Configuration
-      - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-embedded}
+      - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-client_server}
       - CHROMA_DB_PATH=${CHROMA_DB_PATH:-./data/chroma_db}
       - CHROMA_SERVER_HOST=${CHROMA_SERVER_HOST}
       - CHROMA_SERVER_PORT=${CHROMA_SERVER_PORT}
