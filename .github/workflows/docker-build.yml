@@ -101,7 +101,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ inputs.push_image == 'true' && format('{0}/{1}/{2}', inputs.registry, github.repository_owner, inputs.image_name) || inputs.image_name }}
+        images: ${{ format('{0}/{1}/{2}', inputs.registry, github.repository_owner, inputs.image_name) }}
         tags: |
           type=raw,value=latest,enable=${{ inputs.push_image == 'true' }}
           type=raw,value=${{ inputs.version }}
@@ -134,10 +134,7 @@ jobs:
         # Only load locally for production builds (deploy workflow)
         # PR validation just validates the build succeeds without loading the huge image
         load: ${{ inputs.push_image == true }}
-        tags: |
-          ${{ steps.meta.outputs.tags }}
-          ${{ inputs.image_name }}:${{ inputs.version }}
-          ${{ inputs.image_name }}:latest
+        tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
