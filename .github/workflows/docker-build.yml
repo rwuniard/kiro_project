@@ -170,21 +170,21 @@ jobs:
             -e ENABLE_DOCUMENT_PROCESSING=false \
             "$REGISTRY_TAG" \
             python -c "
-          import sys
-          print('🐍 Python version:', sys.version)
-          print('🏷️ Image version: ${{ inputs.version }}')
-          
-          try:
-              from src.app import FolderFileProcessorApp
-              from src.config import ConfigManager
-              from src.core import FileProcessor
-              print('✅ Core modules import successfully')
-          except ImportError as e:
-              print(f'❌ Import error: {e}')
-              sys.exit(1)
-              
-          print('✅ Docker registry image test passed')
-          "
+            import sys
+            print('🐍 Python version:', sys.version)
+            print('🏷️ Image version: ${{ inputs.version }}')
+            
+            try:
+                from src.app import FolderFileProcessorApp
+                from src.config import ConfigManager
+                from src.core import FileProcessor
+                print('✅ Core modules import successfully')
+            except ImportError as e:
+                print(f'❌ Import error: {e}')
+                sys.exit(1)
+                
+            print('✅ Docker registry image test passed')
+            "
           
         else
           echo "🧪 PR validation build - Build completed successfully"
