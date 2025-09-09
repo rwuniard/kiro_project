@@ -9,7 +9,7 @@ on:
       model_vendor:
         description: 'AI model vendor (openai or google)'
         required: false
-        default: 'openai'
+        default: 'google'
         type: choice
         options:
         - openai
