@@ -132,7 +132,25 @@ echo "[5/6] Copying environment file and adding Docker image config..."
 
 # Copy generated file to .env for docker-compose
 if [ -f "../.env.generated" ]; then
-    cp "../.env.generated" ".env"
+    # Copy .env but exclude folder paths (they're hardcoded in docker-compose.yml)
+    grep -v -E "^(SOURCE_FOLDER|SAVED_FOLDER|ERROR_FOLDER)=" "../.env.generated" > ".env"
+    
+    # Add the host folder paths for volume mounting only
+    SOURCE_PATH=$(extract_json_value "../shared/config/unix_paths.json" "source_folder")
+    SAVED_PATH=$(extract_json_value "../shared/config/unix_paths.json" "saved_folder")
+    ERROR_PATH=$(extract_json_value "../shared/config/unix_paths.json" "error_folder")
+    
+    # Expand tilde if present
+    SOURCE_PATH="${SOURCE_PATH/#\~/$HOME}"
+    SAVED_PATH="${SAVED_PATH/#\~/$HOME}"
+    ERROR_PATH="${ERROR_PATH/#\~/$HOME}"
+    
+    # Add host paths for docker-compose volume mounting
+    echo "" >> .env
+    echo "# Host folder paths for volume mounting (not used by application)" >> .env
+    echo "SOURCE_FOLDER=$SOURCE_PATH" >> .env
+    echo "SAVED_FOLDER=$SAVED_PATH" >> .env
+    echo "ERROR_FOLDER=$ERROR_PATH" >> .env
     
     # Add Docker image configuration for CI deployment
     echo "" >> .env

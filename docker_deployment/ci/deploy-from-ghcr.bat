@@ -115,7 +115,20 @@ echo [5/6] Copying environment file and adding Docker image config...
 
 REM Copy generated file to .env for docker-compose
 if exist "..\.env.generated" (
-    copy "..\.env.generated" ".env" >nul
+    REM Copy .env but exclude folder paths (they're hardcoded in docker-compose.yml)
+    findstr /v "^SOURCE_FOLDER= ^SAVED_FOLDER= ^ERROR_FOLDER=" "..\.env.generated" > ".env"
+    
+    REM Add host paths from Windows configuration for volume mounting
+    for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\shared\\config\\windows_paths.json' | ConvertFrom-Json; $json.source_folder}"') do set SOURCE_PATH=%%i
+    for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\shared\\config\\windows_paths.json' | ConvertFrom-Json; $json.saved_folder}"') do set SAVED_PATH=%%i  
+    for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\shared\\config\\windows_paths.json' | ConvertFrom-Json; $json.error_folder}"') do set ERROR_PATH=%%i
+    
+    REM Add host paths for docker-compose volume mounting
+    echo. >> .env
+    echo # Host folder paths for volume mounting (not used by application) >> .env
+    echo SOURCE_FOLDER=%SOURCE_PATH% >> .env
+    echo SAVED_FOLDER=%SAVED_PATH% >> .env
+    echo ERROR_FOLDER=%ERROR_PATH% >> .env
     
     REM Add Docker image configuration for CI deployment
     echo. >> .env
