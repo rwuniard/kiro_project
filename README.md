@@ -1022,201 +1022,43 @@ This will provide more detailed information about file operations and system eve
 
 ## Docker Deployment
 
-The Kiro Project supports both local development and production deployment using Docker. This provides a consistent, isolated environment with all system dependencies pre-installed.
+The Kiro Project includes a comprehensive Docker deployment system with two deployment paths optimized for different use cases:
 
-### Quick Start - Local Docker Deployment
+- **CI Deployment**: Pull pre-built images from GitHub Container Registry (quick 2-minute setup)
+- **Local Development**: Build images locally from source (full control for development)
 
-#### Prerequisites
-- **Docker** and **docker-compose** installed
-- **Python 3.8+** (for configuration scripts)
-- **Git** (to clone the repository)
+### 🚀 Quick Start
 
-#### Windows Deployment
+For complete Docker deployment instructions, configuration options, and troubleshooting guides, see:
 
-1. **Configure Local Paths**: Edit `docker_deployment/config/windows_paths.json` with your desired folder locations:
-```json
-{
-  "source_folder": "C:\\temp\\kiro\\source",
-  "saved_folder": "C:\\temp\\kiro\\saved", 
-  "error_folder": "C:\\temp\\kiro\\error"
-}
-```
+**📚 [Docker Deployment Documentation](docker_deployment/README.md)**
 
-2. **Set API Keys**: Create `.env.local` in project root:
-```env
-OPENAI_API_KEY=your_openai_key_here
-GOOGLE_API_KEY=your_google_key_here
-```
+The docker_deployment directory contains:
+- **Deployment Scripts**: Automated setup for Windows, macOS, and Linux
+- **Configuration Management**: Platform-specific settings and environment generation
+- **Container Orchestration**: Docker Compose configurations for both deployment types
+- **Troubleshooting Guides**: Comprehensive solutions for common issues
 
-3. **Deploy**: Run the Windows deployment script:
-```cmd
-# Deploy with OpenAI (default)
-docker_deployment\deploy-local.bat
+### Quick Reference
 
-# Deploy with Google AI
-docker_deployment\deploy-local.bat google
-```
-
-#### Unix/Mac Deployment
-
-1. **Configure Local Paths**: Edit `docker_deployment/config/unix_paths.json` with your desired folder locations:
-```json
-{
-  "source_folder": "/tmp/kiro/source",
-  "saved_folder": "/tmp/kiro/saved",
-  "error_folder": "/tmp/kiro/error"
-}
-```
-
-2. **Set API Keys**: Create `.env.local` in project root:
-```env
-OPENAI_API_KEY=your_openai_key_here
-GOOGLE_API_KEY=your_google_key_here
-```
-
-3. **Deploy**: Run the Unix deployment script:
 ```bash
-# Deploy with OpenAI (default)
-./docker_deployment/deploy-local.sh
+# CI Deployment (recommended - pulls from GitHub Container Registry)
+./docker_deployment/ci/deploy-from-ghcr.sh              # Unix/Mac
+docker_deployment\ci\deploy-from-ghcr.bat               # Windows
 
-# Deploy with Google AI
-./docker_deployment/deploy-local.sh google
+# Local Development (builds from source)
+./docker_deployment/local/build-and-deploy.sh           # Unix/Mac  
+docker_deployment\local\build-and-deploy.bat            # Windows
 ```
 
-### What the Deployment Scripts Do
+### Benefits of Docker Deployment
+- ✅ **Complete Environment**: All system dependencies (Tesseract OCR, LibreOffice) pre-installed
+- ✅ **Cross-Platform**: Identical behavior on Windows, macOS, and Linux
+- ✅ **Volume Mapping**: Direct access to local folders for file processing
+- ✅ **Permission Management**: Automatic setup of temporary directories with proper permissions
+- ✅ **Persistent Data**: ChromaDB and logs persist between container restarts
 
-1. **Validate Prerequisites**: Check Docker, Python, and required files
-2. **Create Local Directories**: Automatically create source/saved/error folders
-3. **Set Up Temporary Directories**: Create and configure temp directories for document processing
-4. **Generate Configuration**: Create `.env` file from templates and settings
-5. **Build Docker Image**: Build the application with all dependencies
-6. **Start Container**: Launch with volume mapping to local folders
-
-### Docker Container Features
-
-- **Complete Environment**: All system dependencies (Tesseract OCR, LibreOffice) pre-installed
-- **Volume Mapping**: Direct access to local folders for file processing
-- **Permission Management**: Automatic setup of temporary directories with proper permissions
-- **Office Document Support**: Fixed permission issues for .docx/.doc processing in containers
-- **Persistent Data**: ChromaDB and logs persist between container restarts
-- **Resource Management**: Configurable memory and CPU limits
-- **Health Monitoring**: Built-in health checks and status monitoring
-
-### Managing the Docker Deployment
-
-#### Container Management
-```bash
-# View container status
-docker-compose ps
-
-# Monitor real-time logs
-docker-compose logs -f
-
-# Restart the container
-docker-compose restart
-
-# Stop the deployment
-docker-compose down
-
-# View container resource usage
-docker stats rag-file-processor
-```
-
-#### Using Your Deployment
-
-1. **Drop Files**: Copy files into your configured `source_folder`
-2. **Monitor Progress**: Check logs with `docker-compose logs -f`
-3. **Check Results**: 
-   - Successfully processed files appear in `saved_folder`
-   - Failed files appear in `error_folder` with `.log` files
-4. **View Data**: ChromaDB vector storage is persisted in `./data/chroma_db`
-
-### Configuration Customization
-
-#### Environment Settings
-The deployment system uses several configuration files you can customize:
-
-- **`docker_deployment/config/prod_chroma_settings.json`**: Production ChromaDB configuration
-- **`docker_deployment/config/dev_chroma_settings.json`**: Development ChromaDB configuration  
-- **`docker_deployment/config/windows_paths.json`**: Windows folder paths
-- **`docker_deployment/config/unix_paths.json`**: Unix/Mac folder paths
-
-#### Advanced Configuration
-For advanced users, you can directly modify:
-- **`docker_deployment/docker-compose.yml`**: Main container configuration
-- **`docker_deployment/docker-compose.override.yml`**: Development-specific overrides
-- **`docker_deployment/scripts/generate_env.py`**: Environment generation logic
-
-### Production Deployment
-
-The project includes GitHub Actions workflow for production deployment:
-
-1. **GitHub Secrets**: Configure `OPENAI_API_KEY` and `GOOGLE_API_KEY` in your repository
-2. **Trigger Build**: Push to `main` branch or use "Manual Deploy" workflow
-3. **Download Artifacts**: Get the built Docker image from GitHub Actions
-4. **Deploy**: Load and run the image in your production environment
-
-### Troubleshooting Docker Deployment
-
-#### Common Issues
-
-**Docker Build Fails**:
-```bash
-# Check Docker daemon is running
-docker info
-
-# Clean up if needed
-docker system prune
-```
-
-**Volume Mapping Issues**:
-- Verify folder paths in config files exist
-- Check folder permissions (must be readable/writable)
-- Ensure paths use proper format (Windows: `C:\path`, Unix: `/path`)
-
-**Container Won't Start**:
-```bash
-# Check container logs
-docker-compose logs rag-file-processor
-
-# Validate configuration
-python docker_deployment/scripts/generate_env.py --environment development --platform unix
-```
-
-**API Keys Not Working**:
-- Verify `.env.local` file exists and contains valid keys
-- Check that keys don't have extra spaces or quotes
-- Confirm model vendor matches your available API key
-
-**Permission Errors**:
-```bash
-# Fix folder permissions (Unix/Mac)
-chmod 755 /path/to/your/folders
-
-# Check Docker has access to your folders
-ls -la /path/to/your/source/folder
-
-# Office Document Processing Permission Issues (Fixed in latest version)
-# The deployment scripts now automatically set up proper temporary directories
-# If you still encounter permission errors with .docx/.doc files:
-# 1. Ensure deployment script ran successfully (creates /tmp/file-processor-unstructured)
-# 2. Check container logs: docker-compose logs rag-file-processor
-# 3. Verify temp directory exists: docker-compose exec rag-file-processor ls -la /tmp/unstructured
-```
-
-### Docker vs Native Installation
-
-| Aspect | Docker Deployment | Native Installation |
-|--------|------------------|-------------------|
-| **Setup** | One-command deployment | Manual dependency installation |
-| **Dependencies** | Pre-installed (Tesseract, LibreOffice) | Manual system package installation |
-| **Isolation** | Completely isolated environment | Uses host system |
-| **Portability** | Works identically across platforms | Platform-specific setup required |
-| **Updates** | Rebuild container | Update host packages |
-| **Resource Usage** | Container overhead (~100MB) | Direct host usage |
-| **Debugging** | Container logs and exec | Direct file system access |
-
-**Recommendation**: Use Docker deployment for production and simplified development setup. Use native installation for active development with frequent code changes.
+For detailed setup instructions, advanced configuration, and troubleshooting, please refer to the **[Docker Deployment Documentation](docker_deployment/README.md)**.
 
 ## License
 
