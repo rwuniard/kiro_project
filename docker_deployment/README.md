@@ -1,242 +1,236 @@
 # Docker Deployment for Kiro Project
 
-This directory contains **two distinct Docker deployment paths** for the Kiro Project, each optimized for different use cases:
+This directory contains a **simplified Docker deployment system** that cleanly separates build and deployment phases.
 
-## 🚀 Deployment Paths
+## 🚀 New Simplified Workflow
 
-### CI Deployment (`ci/`)
-**Pull pre-built images from GitHub Container Registry**
-- **Quick Start**: Deploy in ~2 minutes
-- **Use Cases**: Testing, demos, production-like environments
-- **Requirements**: Internet connection, Docker login to GHCR
+### Build Phase (Separate)
+- **Local Build**: `./build/build-local.sh` → Creates `local-rag-file-processor` image
+- **CI Build**: `./build/build-ci.sh` → Creates `rag-file-processor-{version}-{sha}` image
 
-### Local Development (`local/`)
-**Build images locally from source**
-- **Full Control**: Build and modify locally
-- **Use Cases**: Development, debugging, offline work
-- **Requirements**: Full build environment, longer initial setup
+### Deploy Phase (Universal)  
+- **Single Script**: `./deploy/deploy.sh [image-name] [env-file]`
+- **No Dependencies**: Only Docker required (NO Python/uv)
+- **User Controls**: Provide your own `.env` file
 
-## 📁 New Directory Structure
+## 📁 Directory Structure
 
 ```
 docker_deployment/
-├── ci/                          # CI Deployment (pre-built images)
-│   ├── deploy-from-ghcr.sh          # Unix/Mac CI deployment
-│   ├── deploy-from-ghcr.bat         # Windows CI deployment
-│   └── docker-compose.yml           # CI container configuration
-├── local/                       # Local Development (build from source)
-│   ├── build-and-deploy.sh          # Unix/Mac local build
-│   ├── build-and-deploy.bat         # Windows local build
-│   └── docker-compose.yml           # Local build configuration
-├── shared/                      # Shared Infrastructure
-│   ├── config/                       # Platform-specific configurations
-│   │   ├── windows_paths.json            # Windows folder paths
-│   │   └── unix_paths.json               # Unix/Mac folder paths
-│   ├── scripts/
-│   │   └── generate_env.py               # Environment generator (uv-based)
-│   ├── Dockerfile                    # Single source of truth for builds
-│   ├── docker-compose.base.yml      # Common container configuration
-│   └── .env.template                # Environment template
-└── data/                        # Persistent data
-    ├── chroma_db/                    # ChromaDB storage
-    └── logs/                         # Application logs
+├── build/                       # Build Scripts (Separate Phase)
+│   ├── build-local.sh              # Local build + push to registry
+│   ├── build-local.bat             # Windows local build
+│   ├── build-ci.sh                 # CI build + push to registry  
+│   └── build-ci.bat                # Windows CI build
+├── deploy/                      # Deployment Scripts (Universal)
+│   ├── deploy.sh                    # Universal deployment (Unix/Mac)
+│   ├── deploy.bat                   # Universal deployment (Windows)
+│   ├── docker-compose.yml           # Simplified compose file
+│   └── .env.development             # Template for easy setup
+└── shared/                      # Shared Resources
+    └── Dockerfile                   # Single Dockerfile for all builds
 ```
 
 ## 🚀 Quick Start Guide
 
-### Option 1: CI Deployment (Recommended)
+### Step 1: Build Phase
 
+**Local Build** (for development):
 ```bash
-# 1. Configure folder paths
-edit docker_deployment/shared/config/unix_paths.json     # Mac/Linux
-edit docker_deployment/shared/config/windows_paths.json  # Windows
+# Unix/Mac
+./build/build-local.sh
 
-# 2. Set API keys in project root
-cat > .env.local << EOF
-OPENAI_API_KEY=your_openai_key_here
+# Windows  
+build\build-local.bat
+
+# Both create: ghcr.io/rwuniard/kiro_project:local-rag-file-processor
+```
+
+**CI Build** (for production):
+```bash
+# Unix/Mac
+./build/build-ci.sh
+
+# Windows
+build\build-ci.bat
+
+# Creates: ghcr.io/rwuniard/kiro_project:rag-file-processor-{version}-{sha}
+# Example: ghcr.io/rwuniard/kiro_project:rag-file-processor-0.1.1-a1b2c3d4
+# Version automatically determined from pyproject.toml + git SHA
+```
+
+### Step 2: Environment Setup
+
+**Copy the development template**:
+```bash
+cd deploy/
+cp .env.development .env.local
+```
+
+**Edit `.env.local` with your settings**:
+```env
+# === Required Settings ===
+
+# Folder paths for file processing (customize these paths)
+SOURCE_FOLDER=~/tmp/rag_store/source
+SAVED_FOLDER=~/tmp/rag_store/saved
+ERROR_FOLDER=~/tmp/rag_store/error
+
+# Document processing configuration
+ENABLE_DOCUMENT_PROCESSING=true
+DOCUMENT_PROCESSOR_TYPE=rag_store
+
+# AI Model vendor (choose one: google or openai)
+MODEL_VENDOR=google
+
+# API Keys (provide the key for your chosen vendor)
 GOOGLE_API_KEY=your_google_key_here
-EOF
+# OPENAI_API_KEY=your_openai_key_here
 
-# 3. Login to GitHub Container Registry
-docker login ghcr.io
+# === Optional Settings ===
 
-# 4. Deploy using CI scripts
-./docker_deployment/ci/deploy-from-ghcr.sh              # Unix/Mac
-docker_deployment\ci\deploy-from-ghcr.bat               # Windows
+# Application logging (DEBUG for development, INFO for production)
+LOG_LEVEL=DEBUG
+
+# File monitoring configuration (optimized for Docker)
+FILE_MONITORING_MODE=auto               # Options: auto, events, polling
+POLLING_INTERVAL=2.0                    # Seconds (for polling mode)
+DOCKER_VOLUME_MODE=true                 # Enable Docker volume optimizations
+
+# ChromaDB mode. The client_server or embedded.
+CHROMA_CLIENT_MODE=client_server        # Options: client_server, embedded
+
+# ChromaDB server settings (if using client_server mode)
+CHROMA_SERVER_HOST=chromadb
+CHROMA_SERVER_PORT=8000
+
+# ChromaDB vector storage configuration for embedded mode.
+#CHROMA_DB_PATH=./data/chroma_db_dev     # Development database path
+#CHROMA_COLLECTION_NAME=rag-kb           # Collection name for documents
 ```
 
-### Option 2: Local Development
+### Step 3: Deployment Phase
 
+**Deploy Local Build**:
 ```bash
-# 1-2. Same configuration and API key setup as above
+# Unix/Mac
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
 
-# 3. Build and deploy locally
-./docker_deployment/local/build-and-deploy.sh           # Unix/Mac  
-docker_deployment\local\build-and-deploy.bat            # Windows
+# Windows
+deploy\deploy.bat ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
 ```
 
-## 🔧 Development Workflow
-
-### CI Deployment Workflow
+**Deploy CI Build**:
 ```bash
-# Deploy latest version
-./docker_deployment/ci/deploy-from-ghcr.sh
+# Unix/Mac
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:rag-file-processor-latest .env.local
 
-# Monitor and manage
-cd docker_deployment/ci
+# Windows  
+deploy\deploy.bat ghcr.io/rwuniard/kiro_project:rag-file-processor-latest .env.local
+```
+
+**Deploy Specific Version**:
+```bash
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:rag-file-processor-0.1.1-a1b2c3d4 .env.local
+```
+
+## 🔧 Prerequisites
+
+### Required
+- **Docker**: Container runtime
+- **Docker login**: `docker login ghcr.io` (for pulling images)
+
+### For ChromaDB Client-Server Mode
+If using `CHROMA_CLIENT_MODE=client_server`, ensure ChromaDB is running:
+```bash
+# Start ChromaDB server (if using setup_chromadb)
+cd ../setup_chromadb
+docker-compose up -d
+```
+
+## 📂 Volume Mapping
+
+The deployment automatically creates and maps these directories:
+
+| Host Directory | Container Directory | Purpose |
+|---------------|-------------------|---------|
+| `${SOURCE_FOLDER}` | `/app/data/source` | Files to process |
+| `${SAVED_FOLDER}` | `/app/data/saved` | Successfully processed files |
+| `${ERROR_FOLDER}` | `/app/data/error` | Failed files + error logs |
+| `../data/chroma_db` | `/app/data/chroma_db` | ChromaDB storage |
+| `../logs` | `/app/logs` | Application logs |
+
+## 🛠️ Management Commands
+
+**View Container Status**:
+```bash
+cd deploy/
+docker-compose ps
+```
+
+**Monitor Logs**:
+```bash
 docker-compose logs -f
-docker-compose restart
+```
+
+**Stop Deployment**:
+```bash
 docker-compose down
 ```
 
-### Local Development Workflow
+**Restart Container**:
 ```bash
-# Build and deploy
-./docker_deployment/local/build-and-deploy.sh
-
-# Development cycle
-cd docker_deployment/local
-docker-compose logs -f          # Monitor logs
-# Make code changes...
-cd .. && ./local/build-and-deploy.sh  # Rebuild with changes
+docker-compose restart
 ```
 
-## 📊 Deployment Comparison
+## 🗂️ Available Images
 
-| Feature | CI Deployment | Local Development |
-|---------|---------------|-------------------|
-| **Setup Time** | ⚡ ~2 minutes | 🔧 ~5-10 minutes |
-| **Internet Required** | ✅ For initial pull | ❌ After setup |
-| **Build Time** | ❌ No build needed | ⏱️ 3-5 minutes |
-| **Code Changes** | 🔄 Need new image | ⚡ Immediate rebuild |
-| **Debugging** | 🔍 Container logs | 🛠️ Full IDE access |
-| **Disk Usage** | 💾 Lower | 💾 Higher (build cache) |
-| **Best For** | Testing, demos | Development, debugging |
+| Image Type | Registry Path | Use Case |
+|-----------|---------------|----------|
+| **Local Development** | `ghcr.io/rwuniard/kiro_project:local-rag-file-processor` | Development builds |
+| **CI/Production** | `ghcr.io/rwuniard/kiro_project:rag-file-processor-latest` | Latest CI build |
+| **Specific Version** | `ghcr.io/rwuniard/kiro_project:rag-file-processor-{version}-{sha}` | Specific version |
 
-## 🛠️ Configuration
+## 🔍 Troubleshooting
 
-### Folder Path Configuration
+### Container Won't Start
+1. Check if ChromaDB is running (if using client_server mode)
+2. Verify API keys are set correctly
+3. Check container logs: `docker-compose logs`
 
-Edit the appropriate configuration file for your platform:
+### File Processing Issues
+1. Ensure source/saved/error directories exist and have proper permissions
+2. Check if files are being detected: `docker-compose logs -f`
+3. Verify Docker volume mounts are working
 
-**Unix/Mac**: `shared/config/unix_paths.json`
-```json
-{
-  "source_folder": "~/tmp/rag_store/source",
-  "saved_folder": "~/tmp/rag_store/saved",
-  "error_folder": "~/tmp/rag_store/error"
-}
-```
+### Network Issues
+1. Ensure mcp-network exists: `docker network ls | grep mcp-network`
+2. If using ChromaDB client_server mode, verify both containers are on same network
 
-**Windows**: `shared/config/windows_paths.json`
-```json
-{
-  "source_folder": "C:\\temp\\rag_store\\source",
-  "saved_folder": "C:\\temp\\rag_store\\saved",
-  "error_folder": "C:\\temp\\rag_store\\error"
-}
-```
+### Permission Issues
+1. Check file permissions in mounted directories
+2. Ensure Docker has access to the specified paths
 
-### API Key Configuration
+## 🚀 Quick Development Workflow
 
-Create `.env.local` in the **project root** (not in docker_deployment):
-```env
-# Required: Choose one or both
-OPENAI_API_KEY=your_openai_key_here
-GOOGLE_API_KEY=your_google_key_here
-
-# Optional: ChromaDB configuration (defaults to client_server mode)
-# CHROMA_CLIENT_MODE=embedded
-# CHROMA_SERVER_HOST=localhost
-# CHROMA_SERVER_PORT=8000
-```
-
-## 🧪 Testing Your Deployment
-
-### Test File Processing
 ```bash
-# 1. Start your chosen deployment
-# 2. Copy test files to source folder:
-cp test.pdf ~/tmp/rag_store/source/
-cp document.docx ~/tmp/rag_store/source/
+# 1. Build local image
+./build/build-local.sh
 
-# 3. Monitor processing
-cd docker_deployment/[ci|local]
+# 2. Setup environment (first time only)
+cd deploy/
+cp .env.development .env.local
+# Edit .env.local with your API keys and paths
+
+# 3. Deploy
+./deploy.sh ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
+
+# 4. Test by dropping files in SOURCE_FOLDER
+# 5. Monitor logs
 docker-compose logs -f
 
-# 4. Check results
-ls -la ~/tmp/rag_store/saved/    # Successfully processed
-ls -la ~/tmp/rag_store/error/    # Failed files + .log files
+# 6. Stop when done
+docker-compose down
 ```
 
-## 🔧 Common Operations
-
-### Container Management (both deployment types)
-```bash
-# Navigate to deployment directory first
-cd docker_deployment/ci          # or docker_deployment/local
-
-# Container operations
-docker-compose ps                 # View status
-docker-compose logs -f            # Monitor logs
-docker-compose restart            # Restart services
-docker-compose down               # Stop all containers
-docker-compose exec rag-file-processor bash  # Access container
-
-# Resource monitoring
-docker stats rag-file-processor
-```
-
-### Troubleshooting
-```bash
-# Check Docker installation
-docker info && docker version
-
-# CI Deployment issues
-docker login ghcr.io             # Ensure GHCR access
-docker pull ghcr.io/rwuniard/rag-file-processor:latest
-
-# Local Build issues
-docker-compose build --no-cache  # Clean rebuild
-docker system prune              # Clean up Docker resources
-
-# Application debugging
-docker-compose logs rag-file-processor
-docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('OK')"
-```
-
-### Environment Generation (Advanced)
-```bash
-# Manual environment generation
-cd docker_deployment/shared/scripts
-
-# Development environment
-uv run python generate_env.py --environment development --platform unix --model-vendor google
-
-# Production environment  
-uv run python generate_env.py --environment production --platform windows --model-vendor openai
-```
-
-## 🚀 Migration from Old Scripts
-
-If you were using the old deployment scripts:
-
-| Old Script | New Equivalent |
-|------------|----------------|
-| `deploy-local.sh` | `local/build-and-deploy.sh` |
-| `deploy-local.bat` | `local/build-and-deploy.bat` |
-| `docker_deployment_from_ghcr/deploy-ghcr.sh` | `ci/deploy-from-ghcr.sh` |
-
-**Benefits of New Structure**:
-- ✅ Clear separation between CI and local deployment
-- ✅ Shared infrastructure reduces duplication
-- ✅ Better organization and maintainability  
-- ✅ Identical container behavior across deployment types
-- ✅ Enhanced documentation and guidance
-
-## 📚 Additional Resources
-
-- **Main Documentation**: See `../CLAUDE.md` for comprehensive Docker guide
-- **Migration Notes**: See `MIGRATION_NOTES.md` for technical migration details
-- **Troubleshooting**: Refer to CLAUDE.md Docker Troubleshooting section
-- **System Dependencies**: LibreOffice, Tesseract OCR (pre-installed in containers)
+This simplified system provides clean separation between building and deploying, with no Python dependencies for deployment!

@@ -17,7 +17,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: rag-file-processor
+  IMAGE_NAME: kiro_project
   PYTHON_VERSION: '3.12'
 
 jobs:
@@ -50,9 +50,9 @@ jobs:
             print(data['project']['version'])
         ")
         
-        # Create version with short SHA
+        # Create version with short SHA (matching build script format)
         SHORT_SHA=${GITHUB_SHA:0:7}
-        FULL_VERSION="${BASE_VERSION}.${SHORT_SHA}"
+        FULL_VERSION="rag-file-processor-${BASE_VERSION}-${SHORT_SHA}"
         
         echo "base_version=${BASE_VERSION}" >> $GITHUB_OUTPUT
         echo "full_version=${FULL_VERSION}" >> $GITHUB_OUTPUT
@@ -141,9 +141,9 @@ jobs:
     with:
       push_image: true
       registry: 'ghcr.io'
-      image_name: 'rag-file-processor'
+      image_name: 'kiro_project'
       version: ${{ needs.version.outputs.full_version }}
-      model_vendor: ${{ github.event.inputs.model_vendor || 'openai' }}
+      model_vendor: ${{ github.event.inputs.model_vendor || 'google' }}
       environment: 'production'
     secrets:
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}

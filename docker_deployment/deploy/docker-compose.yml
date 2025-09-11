@@ -1,14 +1,13 @@
-# Local Build docker-compose configuration
-# Builds images locally using shared Dockerfile for development
-# Based on shared configuration but customized for local development
+# Universal docker-compose configuration for Kiro Project deployment
+# Works with any Docker image specified via DOCKER_IMAGE environment variable
+# Supports user-provided environment files without Python dependencies
 
+name: mcp-network
 services:
   rag-file-processor:
-    # Build locally using shared Dockerfile instead of pulling from GHCR
-    build:
-      context: ../../  # Project root
-      dockerfile: docker_deployment/shared/Dockerfile
-    container_name: rag-file-processor-local
+    # Use image specified in deployment environment
+    image: ${DOCKER_IMAGE:-rag-file-processor:latest}
+    container_name: rag-file-processor-deploy
     restart: unless-stopped
     
     environment:
@@ -16,7 +15,7 @@ services:
       - SOURCE_FOLDER=/app/data/source
       - SAVED_FOLDER=/app/data/saved
       - ERROR_FOLDER=/app/data/error
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       
       # Temporary directory settings for document processing
       - TMPDIR=/tmp/unstructured
@@ -24,7 +23,7 @@ services:
       - TMP=/tmp/unstructured
       - HOME=/home/appuser
       
-      # Document processing settings (injected by deployment scripts)
+      # Document processing settings (from user's env file)
       - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
       - DOCUMENT_PROCESSOR_TYPE=${DOCUMENT_PROCESSOR_TYPE:-rag_store}
       - MODEL_VENDOR=${MODEL_VENDOR:-google}
@@ -34,11 +33,11 @@ services:
       - POLLING_INTERVAL=${POLLING_INTERVAL:-2.0}
       - DOCKER_VOLUME_MODE=${DOCKER_VOLUME_MODE:-true}
       
-      # API Keys (injected by deployment scripts)
+      # API Keys (from user's env file)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       
-      # ChromaDB Configuration
+      # ChromaDB Configuration (from user's env file)
       - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-client_server}
       - CHROMA_DB_PATH=${CHROMA_DB_PATH:-./data/chroma_db}
       - CHROMA_SERVER_HOST=${CHROMA_SERVER_HOST}
@@ -46,17 +45,20 @@ services:
       - CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME:-rag-kb}
       
     volumes:
-      # Map local folders to container data directories (set by deployment scripts)
+      # Map user-specified folders to container data directories
       - ${SOURCE_FOLDER}:/app/data/source
       - ${SAVED_FOLDER}:/app/data/saved 
       - ${ERROR_FOLDER}:/app/data/error
-      # Persist ChromaDB data and logs locally (relative to local/ directory)
+      
+      # Persist ChromaDB data and logs locally (relative to deploy/ directory)
       - ../data/chroma_db:/app/data/chroma_db
       - ../logs:/app/logs
-      - ../shared/config:/app/config:ro
-      # Temporary directory for document processing
-      - /tmp/file-processor-unstructured:/tmp/unstructured  # Unix/Mac
-      # For Windows, use: C:\temp\file-processor-unstructured:/tmp/unstructured
+      - ../config:/app/config:ro
+      
+      # Temporary directory for document processing (platform-specific)
+      # Unix/Mac: /tmp/file-processor-unstructured:/tmp/unstructured
+      # Windows: C:\temp\file-processor-unstructured:/tmp/unstructured
+      - /tmp/file-processor-unstructured:/tmp/unstructured
       
     # Resource limits
     deploy:
@@ -91,5 +93,5 @@ networks:
     external: true
 
 volumes:
-  kiro_data_local:
+  kiro_data_deploy:
     driver: local

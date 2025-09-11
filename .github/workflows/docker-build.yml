@@ -67,24 +67,11 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         
-    - name: Generate production environment using local scripts
+    - name: Use new simplified build approach
       run: |
-        echo "Generating ${{ inputs.environment }} environment configuration..."
         echo "🏷️ Building version: ${{ inputs.version }}"
         echo "🤖 Using model vendor: ${{ inputs.model_vendor }}"
-        
-        # Use existing local deployment script logic
-        cd docker_deployment
-        python shared/scripts/generate_env.py \
-          --environment ${{ inputs.environment }} \
-          --platform unix \
-          --model-vendor "${{ inputs.model_vendor }}"
-          
-        # Copy generated environment file
-        cp .env.generated .env
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        echo "✅ Using new simplified build scripts - no environment generation needed"
         
     - name: Log in to Container Registry
       if: ${{ inputs.push_image }}
@@ -101,9 +88,9 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ format('{0}/{1}/{2}', inputs.registry, github.repository_owner, inputs.image_name) }}
+        images: ${{ format('{0}/{1}/kiro_project', inputs.registry, github.repository_owner) }}
         tags: |
-          type=raw,value=latest,enable=${{ inputs.push_image == true }}
+          type=raw,value=rag-file-processor-latest,enable=${{ inputs.push_image == true }}
           type=raw,value=${{ inputs.version }}
         
     - name: Debug build context
