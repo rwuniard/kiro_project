@@ -15,6 +15,11 @@ on:
         - openai
         - google
 
+# Add workflow-level permissions for GHCR
+permissions:
+  contents: read
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: kiro_project
@@ -134,9 +139,6 @@ jobs:
   build-and-deploy:
     name: Build and Deploy to GitHub Container Registry
     needs: [version, test, cleanup-space]
-    permissions:
-      contents: read
-      packages: write
     uses: ./.github/workflows/docker-build.yml
     with:
       push_image: true
