@@ -150,7 +150,7 @@ jobs:
     secrets:
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
-      REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
       
   deploy-summary:
     name: Deployment Summary
@@ -209,7 +209,7 @@ jobs:
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
-        password: ${{ secrets.REPO_TOKEN }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
         
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
