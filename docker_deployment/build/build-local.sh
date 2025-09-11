@@ -39,12 +39,14 @@ fi
 echo "[2/4] Building Docker image..."
 
 # Set default registry and image name
-REGISTRY="${1:-ghcr.io/rwuniard}"  # Default to GitHub Container Registry (same as CI)
-IMAGE_NAME="local-rag-file-processor"
-FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:latest"
+REGISTRY="${1:-ghcr.io/rwuniard}"  # Default to GitHub Container Registry
+IMAGE_NAME="kiro_project"  # GitHub repository name
+TAG="local-rag-file-processor"  # Local build tag
+FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$TAG"
 
 echo "  Registry: $REGISTRY"
-echo "  Image name: $IMAGE_NAME"
+echo "  Repository: $IMAGE_NAME"
+echo "  Tag: $TAG"
 echo "  Full image: $FULL_IMAGE_NAME"
 
 # Build the image
@@ -60,9 +62,9 @@ fi
 echo "[3/4] Tagging image..."
 
 # Also tag with local name for convenience
-docker tag "$FULL_IMAGE_NAME" "$IMAGE_NAME:latest"
+docker tag "$FULL_IMAGE_NAME" "$IMAGE_NAME:$TAG"
 
-echo "  Tagged as: $IMAGE_NAME:latest"
+echo "  Tagged as: $IMAGE_NAME:$TAG"
 echo "  Tagged as: $FULL_IMAGE_NAME"
 
 echo "[4/4] Pushing to registry..."
@@ -84,12 +86,12 @@ echo "  Local Build Successful!"
 echo "============================================"
 echo
 echo "  Built image: $FULL_IMAGE_NAME"
-echo "  Local tag:   $IMAGE_NAME:latest"
+echo "  Local tag:   $IMAGE_NAME:$TAG"
 echo
 echo "  Image is ready for deployment using:"
 echo "  ../deploy/deploy.sh $FULL_IMAGE_NAME [env-file]"
 echo "  or"
-echo "  ../deploy/deploy.sh $IMAGE_NAME:latest [env-file]"
+echo "  ../deploy/deploy.sh $IMAGE_NAME:$TAG [env-file]"
 echo
 echo "  To view image: docker images $IMAGE_NAME"
 echo

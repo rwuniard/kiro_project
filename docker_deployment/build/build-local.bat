@@ -37,11 +37,13 @@ echo [2/4] Building Docker image...
 REM Set default registry and image name
 set REGISTRY=%1
 if "%REGISTRY%"=="" set REGISTRY=ghcr.io/rwuniard
-set IMAGE_NAME=local-rag-file-processor
-set FULL_IMAGE_NAME=%REGISTRY%/%IMAGE_NAME%:latest
+set IMAGE_NAME=kiro_project
+set TAG=local-rag-file-processor
+set FULL_IMAGE_NAME=%REGISTRY%/%IMAGE_NAME%:%TAG%
 
 echo   Registry: %REGISTRY%
-echo   Image name: %IMAGE_NAME%
+echo   Repository: %IMAGE_NAME%
+echo   Tag: %TAG%
 echo   Full image: %FULL_IMAGE_NAME%
 
 REM Build the image
@@ -57,9 +59,9 @@ if errorlevel 1 (
 echo [3/4] Tagging image...
 
 REM Also tag with local name for convenience
-docker tag "%FULL_IMAGE_NAME%" "%IMAGE_NAME%:latest"
+docker tag "%FULL_IMAGE_NAME%" "%IMAGE_NAME%:%TAG%"
 
-echo   Tagged as: %IMAGE_NAME%:latest
+echo   Tagged as: %IMAGE_NAME%:%TAG%
 echo   Tagged as: %FULL_IMAGE_NAME%
 
 echo [4/4] Pushing to registry...
@@ -81,12 +83,12 @@ echo   Local Build Successful!
 echo ============================================
 echo.
 echo   Built image: %FULL_IMAGE_NAME%
-echo   Local tag:   %IMAGE_NAME%:latest
+echo   Local tag:   %IMAGE_NAME%:%TAG%
 echo.
 echo   Image is ready for deployment using:
 echo   ..\deploy\deploy.bat %FULL_IMAGE_NAME% [env-file]
 echo   or
-echo   ..\deploy\deploy.bat %IMAGE_NAME%:latest [env-file]
+echo   ..\deploy\deploy.bat %IMAGE_NAME%:%TAG% [env-file]
 echo.
 echo   To view image: docker images %IMAGE_NAME%
 echo.

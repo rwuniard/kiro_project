@@ -40,19 +40,19 @@ echo "[2/4] Building Docker image..."
 
 # Set default registry and image name
 REGISTRY="${1:-ghcr.io/rwuniard}"  # Default to GitHub Container Registry
-IMAGE_NAME="rag-file-processor"
+REPO_NAME="kiro_project"  # GitHub repository name
 
 # Auto-determine version from pyproject.toml + git metadata
 BASE_VERSION=$(grep '^version = ' "$PROJECT_ROOT/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
 GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-VERSION="$BASE_VERSION-$GIT_SHA"
-FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$VERSION"
+TAG="rag-file-processor-$BASE_VERSION-$GIT_SHA"
+FULL_IMAGE_NAME="$REGISTRY/$REPO_NAME:$TAG"
 
 echo "  Registry: $REGISTRY"
-echo "  Image name: $IMAGE_NAME"
+echo "  Repository: $REPO_NAME"
 echo "  Base version: $BASE_VERSION (from pyproject.toml)"
 echo "  Git SHA: $GIT_SHA"
-echo "  Full version: $VERSION"
+echo "  Tag: $TAG"
 echo "  Full image: $FULL_IMAGE_NAME"
 
 # Build the image
@@ -67,14 +67,14 @@ fi
 
 echo "[3/4] Tagging image..."
 
-# Also tag with local name and latest for convenience
-docker tag "$FULL_IMAGE_NAME" "$IMAGE_NAME:$VERSION"
-docker tag "$FULL_IMAGE_NAME" "$IMAGE_NAME:latest"
-docker tag "$FULL_IMAGE_NAME" "$REGISTRY/$IMAGE_NAME:latest"
+# Also tag with convenience tags
+docker tag "$FULL_IMAGE_NAME" "$REPO_NAME:$TAG"
+docker tag "$FULL_IMAGE_NAME" "$REPO_NAME:rag-file-processor-latest"
+docker tag "$FULL_IMAGE_NAME" "$REGISTRY/$REPO_NAME:rag-file-processor-latest"
 
-echo "  Tagged as: $IMAGE_NAME:$VERSION"
-echo "  Tagged as: $IMAGE_NAME:latest"
-echo "  Tagged as: $REGISTRY/$IMAGE_NAME:latest"
+echo "  Tagged as: $REPO_NAME:$TAG"
+echo "  Tagged as: $REPO_NAME:rag-file-processor-latest"
+echo "  Tagged as: $REGISTRY/$REPO_NAME:rag-file-processor-latest"
 echo "  Tagged as: $FULL_IMAGE_NAME"
 
 echo "[4/4] Pushing to registry..."
@@ -82,7 +82,7 @@ echo "[4/4] Pushing to registry..."
 # Push to registry
 echo "  Pushing to $REGISTRY..."
 docker push "$FULL_IMAGE_NAME"
-docker push "$REGISTRY/$IMAGE_NAME:latest"
+docker push "$REGISTRY/$REPO_NAME:rag-file-processor-latest"
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to push image to registry"
@@ -101,15 +101,15 @@ echo "  CI Build Successful!"
 echo "============================================"
 echo
 echo "  Built image: $FULL_IMAGE_NAME"
-echo "  Also tagged: $REGISTRY/$IMAGE_NAME:latest"
-echo "  Local tag:   $IMAGE_NAME:$VERSION"
+echo "  Also tagged: $REGISTRY/$REPO_NAME:rag-file-processor-latest"
+echo "  Local tag:   $REPO_NAME:$TAG"
 echo "  Base version: $BASE_VERSION (from pyproject.toml)"
 echo "  Git commit:   $GIT_SHA"
 echo
 echo "  Image is ready for deployment using:"
 echo "  ../deploy/deploy.sh $FULL_IMAGE_NAME [env-file]"
 echo "  or"
-echo "  ../deploy/deploy.sh $REGISTRY/$IMAGE_NAME:latest [env-file]"
+echo "  ../deploy/deploy.sh $REGISTRY/$REPO_NAME:rag-file-processor-latest [env-file]"
 echo
-echo "  To view image: docker images $IMAGE_NAME"
+echo "  To view image: docker images $REPO_NAME"
 echo

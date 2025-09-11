@@ -79,14 +79,12 @@ SOURCE_FOLDER=$(grep "^SOURCE_FOLDER=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' ||
 SAVED_FOLDER=$(grep "^SAVED_FOLDER=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "")
 ERROR_FOLDER=$(grep "^ERROR_FOLDER=" "$ENV_FILE" | cut -d= -f2- | tr -d '"' || echo "")
 
-# If not found in env file, try to get from config files
+# If not found in env file, use sensible defaults
 if [ -z "$SOURCE_FOLDER" ] || [ -z "$SAVED_FOLDER" ] || [ -z "$ERROR_FOLDER" ]; then
-    if [ -f "../config/unix_paths.json" ]; then
-        echo "  Using default paths from config file..."
-        SOURCE_FOLDER="${SOURCE_FOLDER:-$(extract_json_value "../config/unix_paths.json" "source_folder")}"
-        SAVED_FOLDER="${SAVED_FOLDER:-$(extract_json_value "../config/unix_paths.json" "saved_folder")}"
-        ERROR_FOLDER="${ERROR_FOLDER:-$(extract_json_value "../config/unix_paths.json" "error_folder")}"
-    fi
+    echo "  Using default paths (~/tmp/rag_store/...)..."
+    SOURCE_FOLDER="${SOURCE_FOLDER:-~/tmp/rag_store/source}"
+    SAVED_FOLDER="${SAVED_FOLDER:-~/tmp/rag_store/saved}"
+    ERROR_FOLDER="${ERROR_FOLDER:-~/tmp/rag_store/error}"
 fi
 
 # Expand tilde if present

@@ -2,6 +2,7 @@
 # Works with any Docker image specified via DOCKER_IMAGE environment variable
 # Supports user-provided environment files without Python dependencies
 
+name: mcp-network
 services:
   rag-file-processor:
     # Use image specified in deployment environment

@@ -77,20 +77,13 @@ set SOURCE_FOLDER=%SOURCE_FOLDER:"=%
 set SAVED_FOLDER=%SAVED_FOLDER:"=%
 set ERROR_FOLDER=%ERROR_FOLDER:"=%
 
-REM If not found in env file, try to get from config files
+REM If not found in env file, use sensible defaults
 if "%SOURCE_FOLDER%"=="" (
-    if exist "..\config\windows_paths.json" (
-        echo   Using default paths from config file...
-        for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\config\\windows_paths.json' | ConvertFrom-Json; $json.source_folder}"') do set SOURCE_FOLDER=%%i
-        for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\config\\windows_paths.json' | ConvertFrom-Json; $json.saved_folder}"') do set SAVED_FOLDER=%%i
-        for /f "delims=" %%i in ('powershell -Command "& {$json = Get-Content '..\\config\\windows_paths.json' | ConvertFrom-Json; $json.error_folder}"') do set ERROR_FOLDER=%%i
-    )
+    echo   Using default paths (C:\tmp\rag_store\...)...
+    set SOURCE_FOLDER=C:\tmp\rag_store\source
+    set SAVED_FOLDER=C:\tmp\rag_store\saved
+    set ERROR_FOLDER=C:\tmp\rag_store\error
 )
-
-REM Use fallback defaults if still empty
-if "%SOURCE_FOLDER%"=="" set SOURCE_FOLDER=C:\temp\rag_store\source
-if "%SAVED_FOLDER%"=="" set SAVED_FOLDER=C:\temp\rag_store\saved
-if "%ERROR_FOLDER%"=="" set ERROR_FOLDER=C:\temp\rag_store\error
 
 echo   Source folder: %SOURCE_FOLDER%
 echo   Saved folder: %SAVED_FOLDER%

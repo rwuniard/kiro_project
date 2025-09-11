@@ -6,7 +6,7 @@ This directory contains a **simplified Docker deployment system** that cleanly s
 
 ### Build Phase (Separate)
 - **Local Build**: `./build/build-local.sh` → Creates `local-rag-file-processor` image
-- **CI Build**: `./build/build-ci.sh` → Creates `rag-file-processor` image
+- **CI Build**: `./build/build-ci.sh` → Creates `rag-file-processor-{version}-{sha}` image
 
 ### Deploy Phase (Universal)  
 - **Single Script**: `./deploy/deploy.sh [image-name] [env-file]`
@@ -25,15 +25,10 @@ docker_deployment/
 ├── deploy/                      # Deployment Scripts (Universal)
 │   ├── deploy.sh                    # Universal deployment (Unix/Mac)
 │   ├── deploy.bat                   # Universal deployment (Windows)
-│   └── docker-compose.yml           # Simplified compose file
-├── shared/                      # Shared Resources
-│   └── Dockerfile                   # Single Dockerfile for all builds
-├── config/                      # Configuration Files
-│   ├── unix_paths.json              # Default folder paths (Unix/Mac)
-│   └── windows_paths.json           # Default folder paths (Windows)  
-└── data/                        # Persistent Data
-    ├── chroma_db/                   # ChromaDB storage
-    └── logs/                        # Application logs
+│   ├── docker-compose.yml           # Simplified compose file
+│   └── .env.development             # Template for easy setup
+└── shared/                      # Shared Resources
+    └── Dockerfile                   # Single Dockerfile for all builds
 ```
 
 ## 🚀 Quick Start Guide
@@ -43,260 +38,199 @@ docker_deployment/
 **Local Build** (for development):
 ```bash
 # Unix/Mac
-./docker_deployment/build/build-local.sh [registry]
+./build/build-local.sh
 
 # Windows  
-docker_deployment\build\build-local.bat [registry]
+build\build-local.bat
 
-# Examples:
-./build/build-local.sh                    # Uses ghcr.io/rwuniard (GitHub Container Registry)
-./build/build-local.sh docker.io/myorg   # Uses Docker Hub
+# Both create: ghcr.io/rwuniard/kiro_project:local-rag-file-processor
 ```
 
 **CI Build** (for production):
 ```bash
 # Unix/Mac
-./docker_deployment/build/build-ci.sh [registry]
-
-# Windows
-docker_deployment\build\build-ci.bat [registry]
-
-# Examples:
-./build/build-ci.sh                     # Uses ghcr.io/rwuniard
-./build/build-ci.sh docker.io/myorg     # Custom registry
-
-# Version is automatically determined from pyproject.toml + git SHA
-# Example: 0.1.1-a1b2c3d4 (base version from pyproject.toml + git commit)
-```
-
-### Step 2: Deployment Phase
-
-**Create Your Environment File** (e.g., `.env.production`):
-```env
-# Required - Basic file processing
-SOURCE_FOLDER=/path/to/source
-SAVED_FOLDER=/path/to/saved  
-ERROR_FOLDER=/path/to/error
-
-# Required - Document processing with RAG
-ENABLE_DOCUMENT_PROCESSING=true
-DOCUMENT_PROCESSOR_TYPE=rag_store
-MODEL_VENDOR=google
-GOOGLE_API_KEY=your_google_key_here
-
-# Optional - File monitoring (defaults work for Docker)
-FILE_MONITORING_MODE=auto
-POLLING_INTERVAL=2.0
-DOCKER_VOLUME_MODE=true
-
-# Optional - ChromaDB configuration  
-CHROMA_DB_PATH=./data/chroma_db
-CHROMA_CLIENT_MODE=client_server
-```
-
-**Deploy Any Image**:
-```bash
-# Unix/Mac
-./docker_deployment/deploy/deploy.sh [image-name] [env-file]
-
-# Windows
-docker_deployment\deploy\deploy.bat [image-name] [env-file]
-
-# Examples:
-./deploy/deploy.sh local-rag-file-processor:latest .env.development
-./deploy/deploy.sh rag-file-processor:latest .env.production
-./deploy/deploy.sh ghcr.io/myorg/custom:v1.0.0 .env.custom
-```
-
-## 🔧 Complete Workflow Examples
-
-### Development Workflow
-```bash
-# 1. Build locally
-./docker_deployment/build/build-local.sh
-
-# 2. Deploy locally built image
-./docker_deployment/deploy/deploy.sh local-rag-file-processor:latest .env.development
-
-# 3. Monitor
-cd docker_deployment/deploy
-docker-compose logs -f
-```
-
-### Production Workflow  
-```bash
-# 1. Build for production (typically in CI)
-./docker_deployment/build/build-ci.sh ghcr.io/myorg
-
-# 2. Deploy production image (version automatically determined)
-./docker_deployment/deploy/deploy.sh ghcr.io/myorg/rag-file-processor:0.1.1-a1b2c3d4 .env.production
-# Or use latest tag
-./docker_deployment/deploy/deploy.sh ghcr.io/myorg/rag-file-processor:latest .env.production
-
-# 3. Monitor
-cd docker_deployment/deploy
-docker-compose logs -f
-```
-
-## 🔢 Automatic Versioning
-
-**CI builds automatically determine version numbers** - no manual specification required!
-
-### Version Format
-- **Base Version**: Read from `pyproject.toml` (currently: `0.1.1`)
-- **Git Commit**: Short SHA of current commit (e.g., `a1b2c3d4`)
-- **Final Version**: `{base}-{sha}` (e.g., `0.1.1-a1b2c3d4`)
-
-### Example Build Output
-```bash
 ./build/build-ci.sh
-# Output:
-#   Base version: 0.1.1 (from pyproject.toml)
-#   Git SHA: a1b2c3d4  
-#   Full version: 0.1.1-a1b2c3d4
-#   Built image: ghcr.io/rwuniard/rag-file-processor:0.1.1-a1b2c3d4
+
+# Windows
+build\build-ci.bat
+
+# Creates: ghcr.io/rwuniard/kiro_project:rag-file-processor-{version}-{sha}
+# Example: ghcr.io/rwuniard/kiro_project:rag-file-processor-0.1.1-a1b2c3d4
+# Version automatically determined from pyproject.toml + git SHA
 ```
 
-### Benefits
-✅ **No manual versioning errors**  
-✅ **Automatic traceability** to git commits  
-✅ **Consistent with project version** in pyproject.toml  
-✅ **CI/CD friendly** - works in any environment  
+### Step 2: Environment Setup
 
-## 🛠️ Configuration
+**Copy the development template**:
+```bash
+cd deploy/
+cp .env.development .env.local
+```
 
-### Environment File Structure
-
-Your `.env` file should contain all the configuration needed:
-
+**Edit `.env.local` with your settings**:
 ```env
 # === Required Settings ===
+
+# Folder paths for file processing (customize these paths)
 SOURCE_FOLDER=~/tmp/rag_store/source
 SAVED_FOLDER=~/tmp/rag_store/saved
 ERROR_FOLDER=~/tmp/rag_store/error
+
+# Document processing configuration
 ENABLE_DOCUMENT_PROCESSING=true
 DOCUMENT_PROCESSOR_TYPE=rag_store
-MODEL_VENDOR=google                     # or openai
-GOOGLE_API_KEY=your_key_here           # if using Google
-OPENAI_API_KEY=your_key_here           # if using OpenAI
+
+# AI Model vendor (choose one: google or openai)
+MODEL_VENDOR=google
+
+# API Keys (provide the key for your chosen vendor)
+GOOGLE_API_KEY=your_google_key_here
+# OPENAI_API_KEY=your_openai_key_here
 
 # === Optional Settings ===
-LOG_LEVEL=INFO
-FILE_MONITORING_MODE=auto
-POLLING_INTERVAL=2.0
-DOCKER_VOLUME_MODE=true
-CHROMA_DB_PATH=./data/chroma_db
-CHROMA_CLIENT_MODE=client_server
-CHROMA_COLLECTION_NAME=rag-kb
+
+# Application logging (DEBUG for development, INFO for production)
+LOG_LEVEL=DEBUG
+
+# File monitoring configuration (optimized for Docker)
+FILE_MONITORING_MODE=auto               # Options: auto, events, polling
+POLLING_INTERVAL=2.0                    # Seconds (for polling mode)
+DOCKER_VOLUME_MODE=true                 # Enable Docker volume optimizations
+
+# ChromaDB mode. The client_server or embedded.
+CHROMA_CLIENT_MODE=client_server        # Options: client_server, embedded
+
+# ChromaDB server settings (if using client_server mode)
+CHROMA_SERVER_HOST=chromadb
+CHROMA_SERVER_PORT=8000
+
+# ChromaDB vector storage configuration for embedded mode.
+#CHROMA_DB_PATH=./data/chroma_db_dev     # Development database path
+#CHROMA_COLLECTION_NAME=rag-kb           # Collection name for documents
 ```
 
-### Default Folder Paths
+### Step 3: Deployment Phase
 
-If not specified in your `.env` file, defaults are read from:
-
-**Unix/Mac**: `config/unix_paths.json`
-```json
-{
-  "source_folder": "~/tmp/rag_store/source",
-  "saved_folder": "~/tmp/rag_store/saved", 
-  "error_folder": "~/tmp/rag_store/error"
-}
-```
-
-**Windows**: `config/windows_paths.json`
-```json
-{
-  "source_folder": "C:\\temp\\rag_store\\source",
-  "saved_folder": "C:\\temp\\rag_store\\saved",
-  "error_folder": "C:\\temp\\rag_store\\error"
-}
-```
-
-## 🔧 Container Management
-
-### Basic Operations
+**Deploy Local Build**:
 ```bash
-# Navigate to deploy directory first
-cd docker_deployment/deploy
+# Unix/Mac
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
 
-# Container operations
-docker-compose ps                          # View status
-docker-compose logs -f                     # Monitor logs  
-docker-compose restart                     # Restart services
-docker-compose down                        # Stop containers
-docker-compose exec rag-file-processor bash # Access container
-
-# Resource monitoring
-docker stats rag-file-processor
+# Windows
+deploy\deploy.bat ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
 ```
 
-### File Processing Test
+**Deploy CI Build**:
 ```bash
-# 1. Drop test files into source folder
-cp test.pdf ~/tmp/rag_store/source/
-cp document.docx ~/tmp/rag_store/source/
+# Unix/Mac
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:rag-file-processor-latest .env.local
 
-# 2. Monitor processing
+# Windows  
+deploy\deploy.bat ghcr.io/rwuniard/kiro_project:rag-file-processor-latest .env.local
+```
+
+**Deploy Specific Version**:
+```bash
+./deploy/deploy.sh ghcr.io/rwuniard/kiro_project:rag-file-processor-0.1.1-a1b2c3d4 .env.local
+```
+
+## 🔧 Prerequisites
+
+### Required
+- **Docker**: Container runtime
+- **Docker login**: `docker login ghcr.io` (for pulling images)
+
+### For ChromaDB Client-Server Mode
+If using `CHROMA_CLIENT_MODE=client_server`, ensure ChromaDB is running:
+```bash
+# Start ChromaDB server (if using setup_chromadb)
+cd ../setup_chromadb
+docker-compose up -d
+```
+
+## 📂 Volume Mapping
+
+The deployment automatically creates and maps these directories:
+
+| Host Directory | Container Directory | Purpose |
+|---------------|-------------------|---------|
+| `${SOURCE_FOLDER}` | `/app/data/source` | Files to process |
+| `${SAVED_FOLDER}` | `/app/data/saved` | Successfully processed files |
+| `${ERROR_FOLDER}` | `/app/data/error` | Failed files + error logs |
+| `../data/chroma_db` | `/app/data/chroma_db` | ChromaDB storage |
+| `../logs` | `/app/logs` | Application logs |
+
+## 🛠️ Management Commands
+
+**View Container Status**:
+```bash
+cd deploy/
+docker-compose ps
+```
+
+**Monitor Logs**:
+```bash
+docker-compose logs -f
+```
+
+**Stop Deployment**:
+```bash
+docker-compose down
+```
+
+**Restart Container**:
+```bash
+docker-compose restart
+```
+
+## 🗂️ Available Images
+
+| Image Type | Registry Path | Use Case |
+|-----------|---------------|----------|
+| **Local Development** | `ghcr.io/rwuniard/kiro_project:local-rag-file-processor` | Development builds |
+| **CI/Production** | `ghcr.io/rwuniard/kiro_project:rag-file-processor-latest` | Latest CI build |
+| **Specific Version** | `ghcr.io/rwuniard/kiro_project:rag-file-processor-{version}-{sha}` | Specific version |
+
+## 🔍 Troubleshooting
+
+### Container Won't Start
+1. Check if ChromaDB is running (if using client_server mode)
+2. Verify API keys are set correctly
+3. Check container logs: `docker-compose logs`
+
+### File Processing Issues
+1. Ensure source/saved/error directories exist and have proper permissions
+2. Check if files are being detected: `docker-compose logs -f`
+3. Verify Docker volume mounts are working
+
+### Network Issues
+1. Ensure mcp-network exists: `docker network ls | grep mcp-network`
+2. If using ChromaDB client_server mode, verify both containers are on same network
+
+### Permission Issues
+1. Check file permissions in mounted directories
+2. Ensure Docker has access to the specified paths
+
+## 🚀 Quick Development Workflow
+
+```bash
+# 1. Build local image
+./build/build-local.sh
+
+# 2. Setup environment (first time only)
+cd deploy/
+cp .env.development .env.local
+# Edit .env.local with your API keys and paths
+
+# 3. Deploy
+./deploy.sh ghcr.io/rwuniard/kiro_project:local-rag-file-processor .env.local
+
+# 4. Test by dropping files in SOURCE_FOLDER
+# 5. Monitor logs
 docker-compose logs -f
 
-# 3. Check results
-ls -la ~/tmp/rag_store/saved/    # Successfully processed
-ls -la ~/tmp/rag_store/error/    # Failed files + .log files
+# 6. Stop when done
+docker-compose down
 ```
 
-## 🚀 Key Benefits
-
-✅ **Clean Separation**: Build and deployment are completely separate phases  
-✅ **No Python Dependencies**: Deployment only needs Docker + shell scripts  
-✅ **Universal Deployment**: Single script works for any image source  
-✅ **User Control**: Complete control over environment via `.env` files  
-✅ **Registry Flexible**: Works with Docker Hub, GHCR, or any registry  
-✅ **Cross-Platform**: Full Windows and Unix/Mac support
-
-## 🔧 Troubleshooting
-
-### Build Issues
-```bash
-# Check Docker
-docker --version
-
-# Local build troubleshooting
-./build/build-local.sh docker.io/test
-
-# CI build troubleshooting  
-./build/build-ci.sh docker.io/test
-# Version automatically determined from pyproject.toml + git
-```
-
-### Deployment Issues
-```bash
-# Check environment file
-cat .env.production
-
-# Test deployment
-./deploy/deploy.sh test-image:latest .env.production
-
-# Check logs
-cd deploy && docker-compose logs -f
-```
-
-### Registry Issues
-```bash
-# Login to registry
-docker login docker.io          # Docker Hub
-docker login ghcr.io           # GitHub Container Registry
-
-# Test image pull
-docker pull your-image:latest
-```
-
-## 📚 Migration from Old System
-
-| Old Approach | New Approach |
-|-------------|--------------|
-| Complex CI/local paths | Simple build + deploy separation |
-| Python/uv dependencies | Docker-only deployment |
-| Generated .env files | User-provided .env files |
-| Mixed build/deploy | Clean phase separation |
-
-See `REQUIREMENTS.md` for detailed implementation requirements.
+This simplified system provides clean separation between building and deploying, with no Python dependencies for deployment!
