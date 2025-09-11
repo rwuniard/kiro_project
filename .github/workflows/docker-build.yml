@@ -90,7 +90,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ format('{0}/{1}/kiro_project', inputs.registry, github.repository_owner) }}
+        images: ${{ format('{0}/{1}/{2}', inputs.registry, github.repository, inputs.image_name) }}
         tags: |
           type=raw,value=rag-file-processor-latest,enable=${{ inputs.push_image == true }}
           type=raw,value=latest,enable=${{ inputs.push_image == true }}
