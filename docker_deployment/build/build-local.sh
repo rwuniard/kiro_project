@@ -39,9 +39,9 @@ fi
 echo "[2/4] Building Docker image..."
 
 # Set default registry and image name
-REGISTRY="${1:-ghcr.io/rwuniard}"  # Default to GitHub Container Registry
-IMAGE_NAME="kiro_project"  # GitHub repository name
-TAG="local-rag-file-processor"  # Local build tag
+REGISTRY="${1:-ghcr.io/rwuniard/kiro_project}"  # Default to GitHub Container Registry with repo path
+IMAGE_NAME="local-rag-file-processor"  # Local build package name
+TAG="latest"  # Local build tag
 FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$TAG"
 
 echo "  Registry: $REGISTRY"
