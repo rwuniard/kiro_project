@@ -18,12 +18,18 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from rag_store.store_embeddings import (
     ModelVendor,
+    ChromaClientMode,
+    create_chroma_client,
+    get_chroma_collection_name,
     get_text_splitter,
     load_embedding_model,
     load_txt_documents,
     process_documents_from_directory,
     process_pdf_files,
     process_text_files,
+    ensure_data_directory,
+    store_to_chroma,
+    load_documents_from_directory,
 )
 
 
@@ -367,6 +373,313 @@ class TestMainFunction(unittest.TestCase):
         
         # Verify it attempted processing
         mock_process_docs.assert_called_once()
+
+
+class TestChromaDBClientCreation(unittest.TestCase):
+    """Test ChromaDB client creation functionality."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.persist_dir = Path(self.temp_dir) / "chroma_db"
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        shutil.rmtree(self.temp_dir)
+
+    def test_chroma_client_mode_enum(self):
+        """Test ChromaClientMode enum values."""
+        self.assertEqual(ChromaClientMode.EMBEDDED.value, "embedded")
+        self.assertEqual(ChromaClientMode.CLIENT_SERVER.value, "client_server")
+
+    @patch('rag_store.store_embeddings.chromadb.Client')
+    def test_create_chroma_client_embedded_with_persistence(self, mock_client_class):
+        """Test creating embedded ChromaDB client with persistence."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        
+        result = create_chroma_client(
+            client_mode="embedded",
+            persist_directory=self.persist_dir
+        )
+        
+        self.assertEqual(result, mock_client)
+        mock_client_class.assert_called_once()
+
+    @patch('rag_store.store_embeddings.chromadb.Client')
+    def test_create_chroma_client_embedded_in_memory(self, mock_client_class):
+        """Test creating embedded ChromaDB client in memory."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        
+        result = create_chroma_client(client_mode="embedded")
+        
+        self.assertEqual(result, mock_client)
+        mock_client_class.assert_called_once()
+
+    @patch('rag_store.store_embeddings.chromadb.HttpClient')
+    def test_create_chroma_client_server_mode(self, mock_http_client_class):
+        """Test creating ChromaDB client in server mode."""
+        mock_client = Mock()
+        mock_http_client_class.return_value = mock_client
+        
+        result = create_chroma_client(
+            client_mode="client_server",
+            server_host="test-host",
+            server_port=9000
+        )
+        
+        self.assertEqual(result, mock_client)
+        mock_http_client_class.assert_called_once_with(host="test-host", port=9000)
+
+    def test_create_chroma_client_invalid_mode(self):
+        """Test creating ChromaDB client with invalid mode."""
+        with self.assertRaises(ValueError) as context:
+            create_chroma_client(client_mode="invalid_mode")
+        
+        self.assertIn("Invalid client mode: invalid_mode", str(context.exception))
+
+    def test_get_chroma_collection_name_custom(self):
+        """Test getting ChromaDB collection name with custom name."""
+        result = get_chroma_collection_name(ModelVendor.OPENAI, "custom_collection")
+        self.assertEqual(result, "custom_collection")
+
+    def test_get_chroma_collection_name_openai_default(self):
+        """Test getting default ChromaDB collection name for OpenAI."""
+        result = get_chroma_collection_name(ModelVendor.OPENAI)
+        self.assertEqual(result, "documents_openai")
+
+    def test_get_chroma_collection_name_google_default(self):
+        """Test getting default ChromaDB collection name for Google."""
+        result = get_chroma_collection_name(ModelVendor.GOOGLE)
+        self.assertEqual(result, "documents_google")
+
+    def test_ensure_data_directory_openai(self):
+        """Test ensuring data directory for OpenAI."""
+        with patch('rag_store.store_embeddings.DATA_DIR', Path(self.temp_dir)):
+            result = ensure_data_directory(ModelVendor.OPENAI)
+            expected_path = Path(self.temp_dir) / "chroma_db_openai"
+            self.assertEqual(result, expected_path)
+            self.assertTrue(expected_path.exists())
+
+    def test_ensure_data_directory_google(self):
+        """Test ensuring data directory for Google."""
+        with patch('rag_store.store_embeddings.DATA_DIR', Path(self.temp_dir)):
+            result = ensure_data_directory(ModelVendor.GOOGLE)
+            expected_path = Path(self.temp_dir) / "chroma_db_google"
+            self.assertEqual(result, expected_path)
+            self.assertTrue(expected_path.exists())
+
+
+class TestStoreToChroma(unittest.TestCase):
+    """Test store_to_chroma functionality."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.persist_dir = Path(self.temp_dir) / "chroma_db"
+        self.mock_docs = [
+            Mock(page_content="Test content 1", metadata={"source": "test1.txt"}),
+            Mock(page_content="Test content 2", metadata={"source": "test2.txt"})
+        ]
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        shutil.rmtree(self.temp_dir)
+
+    @patch('rag_store.store_embeddings.Chroma.from_documents')
+    @patch('rag_store.store_embeddings.load_embedding_model')
+    @patch('rag_store.store_embeddings.ensure_data_directory')
+    def test_store_to_chroma_embedded_mode(self, mock_ensure_dir, mock_load_model, mock_chroma):
+        """Test storing documents to ChromaDB in embedded mode."""
+        # Mock setup
+        mock_embedding = Mock()
+        mock_load_model.return_value = mock_embedding
+        mock_ensure_dir.return_value = self.persist_dir
+        mock_vectorstore = Mock()
+        mock_chroma.return_value = mock_vectorstore
+        
+        # Call function
+        result = store_to_chroma(
+            documents=self.mock_docs,
+            model_vendor=ModelVendor.GOOGLE,
+            client_mode="embedded"
+        )
+        
+        # Assertions
+        self.assertEqual(result, mock_vectorstore)
+        mock_load_model.assert_called_once_with(ModelVendor.GOOGLE)
+        mock_ensure_dir.assert_called_once_with(ModelVendor.GOOGLE)
+        mock_chroma.assert_called_once_with(
+            documents=self.mock_docs,
+            embedding=mock_embedding,
+            persist_directory=str(self.persist_dir),
+            collection_name="documents_google"
+        )
+
+    @patch('rag_store.store_embeddings.Chroma.from_documents')
+    @patch('rag_store.store_embeddings.load_embedding_model')
+    @patch('rag_store.store_embeddings.create_chroma_client')
+    def test_store_to_chroma_client_server_mode(self, mock_create_client, mock_load_model, mock_chroma):
+        """Test storing documents to ChromaDB in client-server mode."""
+        # Mock setup
+        mock_embedding = Mock()
+        mock_load_model.return_value = mock_embedding
+        mock_client = Mock()
+        mock_create_client.return_value = mock_client
+        mock_vectorstore = Mock()
+        mock_chroma.return_value = mock_vectorstore
+        
+        # Call function
+        result = store_to_chroma(
+            documents=self.mock_docs,
+            model_vendor=ModelVendor.OPENAI,
+            client_mode="client_server",
+            server_host="test-host",
+            server_port=9000,
+            collection_name="test_collection"
+        )
+        
+        # Assertions
+        self.assertEqual(result, mock_vectorstore)
+        mock_load_model.assert_called_once_with(ModelVendor.OPENAI)
+        mock_create_client.assert_called_once_with(
+            client_mode="client_server",
+            server_host="test-host",
+            server_port=9000
+        )
+        mock_chroma.assert_called_once_with(
+            documents=self.mock_docs,
+            embedding=mock_embedding,
+            client=mock_client,
+            collection_name="test_collection"
+        )
+
+    @patch('rag_store.store_embeddings.load_embedding_model')
+    def test_store_to_chroma_invalid_mode(self, mock_load_model):
+        """Test store_to_chroma with invalid client mode."""
+        mock_load_model.return_value = Mock()
+        
+        with self.assertRaises(ValueError) as context:
+            store_to_chroma(
+                documents=self.mock_docs,
+                model_vendor=ModelVendor.GOOGLE,
+                client_mode="invalid_mode"
+            )
+        
+        self.assertIn("Invalid client mode: invalid_mode", str(context.exception))
+
+    @patch('rag_store.store_embeddings.Chroma.from_documents')
+    @patch('rag_store.store_embeddings.load_embedding_model')
+    def test_store_to_chroma_with_custom_persist_directory(self, mock_load_model, mock_chroma):
+        """Test store_to_chroma with custom persist directory."""
+        mock_embedding = Mock()
+        mock_load_model.return_value = mock_embedding
+        mock_vectorstore = Mock()
+        mock_chroma.return_value = mock_vectorstore
+        custom_dir = Path(self.temp_dir) / "custom_chroma"
+        
+        result = store_to_chroma(
+            documents=self.mock_docs,
+            model_vendor=ModelVendor.GOOGLE,
+            client_mode="embedded",
+            persist_directory=custom_dir
+        )
+        
+        self.assertEqual(result, mock_vectorstore)
+        mock_chroma.assert_called_once_with(
+            documents=self.mock_docs,
+            embedding=mock_embedding,
+            persist_directory=str(custom_dir),
+            collection_name="documents_google"
+        )
+
+
+class TestAdditionalFunctions(unittest.TestCase):
+    """Test additional functions for improved coverage."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        shutil.rmtree(self.temp_dir)
+
+    def test_load_documents_from_directory_legacy_function(self):
+        """Test the legacy load_documents_from_directory function."""
+        with patch('rag_store.store_embeddings.process_documents_from_directory') as mock_process:
+            mock_docs = [Mock(page_content="test", metadata={"source": "test.txt"})]
+            mock_process.return_value = mock_docs
+            
+            result = load_documents_from_directory(Path(self.temp_dir))
+            
+            mock_process.assert_called_once_with(Path(self.temp_dir))
+            self.assertEqual(result, mock_docs)
+
+    def test_process_documents_from_directory_file_not_found(self):
+        """Test process_documents_from_directory with non-existent directory."""
+        non_existent_dir = Path(self.temp_dir) / "nonexistent"
+        
+        with self.assertRaises(FileNotFoundError) as context:
+            process_documents_from_directory(non_existent_dir)
+        
+        self.assertIn(str(non_existent_dir), str(context.exception))
+
+    @patch('rag_store.store_embeddings.get_document_processor_registry')
+    def test_process_text_files_processing_error(self, mock_registry_func):
+        """Test process_text_files with processing error."""
+        # Create text file
+        txt_file = Path(self.temp_dir) / "test.txt"
+        txt_file.write_text("test content")
+        
+        # Mock registry to raise exception
+        mock_registry = Mock()
+        mock_registry_func.return_value = mock_registry
+        mock_registry.process_document.side_effect = Exception("Processing error")
+        
+        result = process_text_files(Path(self.temp_dir))
+        
+        # Should return empty list due to error
+        self.assertEqual(result, [])
+        mock_registry.process_document.assert_called_once()
+
+    @patch('rag_store.store_embeddings.get_document_processor_registry')
+    def test_process_pdf_files_processing_error(self, mock_registry_func):
+        """Test process_pdf_files with processing error."""
+        # Create PDF file
+        pdf_file = Path(self.temp_dir) / "test.pdf"
+        pdf_file.write_bytes(b"fake pdf content")
+        
+        # Mock registry to raise exception
+        mock_registry = Mock()
+        mock_registry_func.return_value = mock_registry
+        mock_registry.process_document.side_effect = Exception("PDF processing error")
+        
+        result = process_pdf_files(Path(self.temp_dir))
+        
+        # Should return empty list due to error
+        self.assertEqual(result, [])
+        mock_registry.process_document.assert_called_once()
+
+    @patch('rag_store.store_embeddings.get_document_processor_registry')
+    def test_process_documents_from_directory_no_processor_returned(self, mock_registry_func):
+        """Test process_documents_from_directory when processor returns None."""
+        # Create a file
+        test_file = Path(self.temp_dir) / "test.txt"
+        test_file.write_text("test content")
+        
+        # Mock registry
+        mock_registry = Mock()
+        mock_registry_func.return_value = mock_registry
+        mock_registry.get_supported_extensions.return_value = {'.txt'}
+        mock_registry.get_processor_for_file.return_value = None  # No processor found
+        
+        result = process_documents_from_directory(Path(self.temp_dir))
+        
+        # Should return empty list
+        self.assertEqual(result, [])
+        mock_registry.get_processor_for_file.assert_called_once()
 
 
 class TestStoreEmbeddingsIntegration(unittest.TestCase):
