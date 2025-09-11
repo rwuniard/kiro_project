@@ -1,0 +1,117 @@
+@echo off
+REM CI build script for Kiro Project (Windows)
+REM Builds Docker image for CI/production and pushes to registry as 'rag-file-processor'
+
+setlocal EnableDelayedExpansion
+
+echo ============================================
+echo   Kiro Project - CI Build
+echo   Building and pushing: rag-file-processor
+echo ============================================
+echo.
+
+REM Change to script directory for relative path resolution
+cd /d "%~dp0"
+
+REM Navigate to project root (two levels up from build directory)
+cd ..\..
+
+echo [1/4] Checking prerequisites...
+
+REM Check if Docker is available
+docker --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Docker is not installed or not running
+    echo Please install Docker Desktop and ensure it's running
+    exit /b 1
+)
+
+REM Check if Dockerfile exists
+if not exist "docker_deployment\shared\Dockerfile" (
+    echo ERROR: docker_deployment\shared\Dockerfile not found
+    exit /b 1
+)
+
+echo [2/4] Building Docker image...
+
+REM Set default registry and image name
+set REGISTRY=%1
+if "%REGISTRY%"=="" set REGISTRY=ghcr.io/rwuniard
+set IMAGE_NAME=rag-file-processor
+
+REM Auto-determine version from pyproject.toml + git metadata
+for /f "tokens=3 delims= =" %%i in ('findstr "^version = " "pyproject.toml"') do set BASE_VERSION=%%i
+set BASE_VERSION=%BASE_VERSION:"=%
+for /f %%i in ('git rev-parse --short HEAD 2^>nul') do set GIT_SHA=%%i
+if "%GIT_SHA%"=="" set GIT_SHA=unknown
+set VERSION=%BASE_VERSION%-%GIT_SHA%
+set FULL_IMAGE_NAME=%REGISTRY%/%IMAGE_NAME%:%VERSION%
+
+echo   Registry: %REGISTRY%
+echo   Image name: %IMAGE_NAME%
+echo   Base version: %BASE_VERSION% (from pyproject.toml)
+echo   Git SHA: %GIT_SHA%
+echo   Full version: %VERSION%
+echo   Full image: %FULL_IMAGE_NAME%
+
+REM Build the image
+echo   Building image...
+docker build -f docker_deployment\shared\Dockerfile -t "%FULL_IMAGE_NAME%" .
+
+if errorlevel 1 (
+    echo ERROR: Docker build failed
+    echo Check the Dockerfile and project dependencies
+    exit /b 1
+)
+
+echo [3/4] Tagging image...
+
+REM Also tag with local name and latest for convenience
+docker tag "%FULL_IMAGE_NAME%" "%IMAGE_NAME%:%VERSION%"
+docker tag "%FULL_IMAGE_NAME%" "%IMAGE_NAME%:latest"
+docker tag "%FULL_IMAGE_NAME%" "%REGISTRY%/%IMAGE_NAME%:latest"
+
+echo   Tagged as: %IMAGE_NAME%:%VERSION%
+echo   Tagged as: %IMAGE_NAME%:latest
+echo   Tagged as: %REGISTRY%/%IMAGE_NAME%:latest
+echo   Tagged as: %FULL_IMAGE_NAME%
+
+echo [4/4] Pushing to registry...
+
+REM Push to registry
+echo   Pushing to %REGISTRY%...
+docker push "%FULL_IMAGE_NAME%"
+docker push "%REGISTRY%/%IMAGE_NAME%:latest"
+
+if errorlevel 1 (
+    echo ERROR: Failed to push image to registry
+    echo Make sure you are logged in to the registry:
+    echo %REGISTRY% | findstr "ghcr.io" >nul
+    if not errorlevel 1 (
+        echo   docker login ghcr.io
+    ) else (
+        echo   docker login %REGISTRY%
+    )
+    exit /b 1
+)
+
+echo.
+echo ============================================
+echo   CI Build Successful!
+echo ============================================
+echo.
+echo   Built image: %FULL_IMAGE_NAME%
+echo   Also tagged: %REGISTRY%/%IMAGE_NAME%:latest
+echo   Local tag:   %IMAGE_NAME%:%VERSION%
+echo   Base version: %BASE_VERSION% (from pyproject.toml)
+echo   Git commit:   %GIT_SHA%
+echo.
+echo   Image is ready for deployment using:
+echo   ..\deploy\deploy.bat %FULL_IMAGE_NAME% [env-file]
+echo   or
+echo   ..\deploy\deploy.bat %REGISTRY%/%IMAGE_NAME%:latest [env-file]
+echo.
+echo   To view image: docker images %IMAGE_NAME%
+echo.
+
+pause

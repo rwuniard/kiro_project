@@ -1,0 +1,96 @@
+# Universal docker-compose configuration for Kiro Project deployment
+# Works with any Docker image specified via DOCKER_IMAGE environment variable
+# Supports user-provided environment files without Python dependencies
+
+services:
+  rag-file-processor:
+    # Use image specified in deployment environment
+    image: ${DOCKER_IMAGE:-rag-file-processor:latest}
+    container_name: rag-file-processor-deploy
+    restart: unless-stopped
+    
+    environment:
+      # Application settings - container paths (mapped from host)
+      - SOURCE_FOLDER=/app/data/source
+      - SAVED_FOLDER=/app/data/saved
+      - ERROR_FOLDER=/app/data/error
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Temporary directory settings for document processing
+      - TMPDIR=/tmp/unstructured
+      - TEMP=/tmp/unstructured
+      - TMP=/tmp/unstructured
+      - HOME=/home/appuser
+      
+      # Document processing settings (from user's env file)
+      - ENABLE_DOCUMENT_PROCESSING=${ENABLE_DOCUMENT_PROCESSING:-true}
+      - DOCUMENT_PROCESSOR_TYPE=${DOCUMENT_PROCESSOR_TYPE:-rag_store}
+      - MODEL_VENDOR=${MODEL_VENDOR:-google}
+      
+      # File monitoring configuration (Docker-optimized)
+      - FILE_MONITORING_MODE=${FILE_MONITORING_MODE:-auto}
+      - POLLING_INTERVAL=${POLLING_INTERVAL:-2.0}
+      - DOCKER_VOLUME_MODE=${DOCKER_VOLUME_MODE:-true}
+      
+      # API Keys (from user's env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      
+      # ChromaDB Configuration (from user's env file)
+      - CHROMA_CLIENT_MODE=${CHROMA_CLIENT_MODE:-client_server}
+      - CHROMA_DB_PATH=${CHROMA_DB_PATH:-./data/chroma_db}
+      - CHROMA_SERVER_HOST=${CHROMA_SERVER_HOST}
+      - CHROMA_SERVER_PORT=${CHROMA_SERVER_PORT}
+      - CHROMA_COLLECTION_NAME=${CHROMA_COLLECTION_NAME:-rag-kb}
+      
+    volumes:
+      # Map user-specified folders to container data directories
+      - ${SOURCE_FOLDER}:/app/data/source
+      - ${SAVED_FOLDER}:/app/data/saved 
+      - ${ERROR_FOLDER}:/app/data/error
+      
+      # Persist ChromaDB data and logs locally (relative to deploy/ directory)
+      - ../data/chroma_db:/app/data/chroma_db
+      - ../logs:/app/logs
+      - ../config:/app/config:ro
+      
+      # Temporary directory for document processing (platform-specific)
+      # Unix/Mac: /tmp/file-processor-unstructured:/tmp/unstructured
+      # Windows: C:\temp\file-processor-unstructured:/tmp/unstructured
+      - /tmp/file-processor-unstructured:/tmp/unstructured
+      
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    external: true
+
+volumes:
+  kiro_data_deploy:
+    driver: local
