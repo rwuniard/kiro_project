@@ -39,17 +39,17 @@ fi
 echo "[2/4] Building Docker image..."
 
 # Set default registry and image name
-REGISTRY="${1:-ghcr.io/rwuniard}"  # Default to GitHub Container Registry
-REPO_NAME="kiro_project"  # GitHub repository name
+REGISTRY="${1:-ghcr.io/rwuniard/kiro_project}"  # Default to GitHub Container Registry with repo path
+IMAGE_NAME="rag-file-processor"  # Package name
 
 # Auto-determine version from pyproject.toml + git metadata
 BASE_VERSION=$(grep '^version = ' "$PROJECT_ROOT/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
 GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-TAG="rag-file-processor-$BASE_VERSION-$GIT_SHA"
-FULL_IMAGE_NAME="$REGISTRY/$REPO_NAME:$TAG"
+TAG="$BASE_VERSION-$GIT_SHA"
+FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$TAG"
 
 echo "  Registry: $REGISTRY"
-echo "  Repository: $REPO_NAME"
+echo "  Image: $IMAGE_NAME"
 echo "  Base version: $BASE_VERSION (from pyproject.toml)"
 echo "  Git SHA: $GIT_SHA"
 echo "  Tag: $TAG"

@@ -36,9 +36,9 @@ echo [2/4] Building Docker image...
 
 REM Set default registry and image name
 set REGISTRY=%1
-if "%REGISTRY%"=="" set REGISTRY=ghcr.io/rwuniard
-set IMAGE_NAME=kiro_project
-set TAG=local-rag-file-processor
+if "%REGISTRY%"=="" set REGISTRY=ghcr.io/rwuniard/kiro_project
+set IMAGE_NAME=local-rag-file-processor
+set TAG=latest
 set FULL_IMAGE_NAME=%REGISTRY%/%IMAGE_NAME%:%TAG%
 
 echo   Registry: %REGISTRY%
