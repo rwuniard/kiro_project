@@ -5,7 +5,7 @@ coverage:
   # Overall project coverage target
   range: 85..100
   round: down
-  precision: 1
+  precision: 2
 
   # Individual file coverage requirements (85% minimum)
   status:
