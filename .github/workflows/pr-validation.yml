@@ -84,6 +84,8 @@ jobs:
         name: pr-${{ github.event.pull_request.number }}
         fail_ci_if_error: false
         verbose: true
+        override_pr: ${{ github.event.pull_request.number }}
+        override_commit: ${{ github.event.pull_request.head.sha }}
       continue-on-error: true
         
     - name: Upload coverage reports as artifacts
