@@ -44,6 +44,17 @@ IMAGE_NAME="local-rag-file-processor"  # Local build package name
 TAG="latest"  # Local build tag
 FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$TAG"
 
+# Generate version tag with short SHA (consistent with CI format)
+BASE_VERSION=$(python3 -c "
+import tomllib
+with open('pyproject.toml', 'rb') as f:
+    data = tomllib.load(f)
+    print(data['project']['version'])
+" 2>/dev/null || echo "0.1.1")
+SHORT_SHA=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "local")
+VERSION_TAG="${BASE_VERSION}.${SHORT_SHA}"
+VERSIONED_IMAGE_NAME="$REGISTRY/$IMAGE_NAME:$VERSION_TAG"
+
 echo "  Registry: $REGISTRY"
 echo "  Repository: $IMAGE_NAME"
 echo "  Tag: $TAG"
@@ -51,7 +62,7 @@ echo "  Full image: $FULL_IMAGE_NAME"
 
 # Build the image
 echo "  Building image..."
-docker build -f docker_deployment/shared/Dockerfile -t "$FULL_IMAGE_NAME" .
+docker build -f docker_deployment/shared/Dockerfile -t "$FULL_IMAGE_NAME" -t "$VERSIONED_IMAGE_NAME" .
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Docker build failed"
@@ -63,21 +74,32 @@ echo "[3/4] Tagging image..."
 
 # Also tag with local name for convenience
 docker tag "$FULL_IMAGE_NAME" "$IMAGE_NAME:$TAG"
+docker tag "$VERSIONED_IMAGE_NAME" "$IMAGE_NAME:$VERSION_TAG"
 
 echo "  Tagged as: $IMAGE_NAME:$TAG"
+echo "  Tagged as: $IMAGE_NAME:$VERSION_TAG"
 echo "  Tagged as: $FULL_IMAGE_NAME"
+echo "  Tagged as: $VERSIONED_IMAGE_NAME"
 
 echo "[4/4] Pushing to registry..."
 
-# Push to registry
-echo "  Pushing to $REGISTRY..."
+# Push both tags to registry
+echo "  Pushing latest tag to $REGISTRY..."
 docker push "$FULL_IMAGE_NAME"
 
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to push image to registry"
+    echo "ERROR: Failed to push latest tag to registry"
     echo "Make sure you are logged in to the registry:"
     echo "  docker login $REGISTRY"
     exit 1
+fi
+
+echo "  Pushing version tag to $REGISTRY..."
+docker push "$VERSIONED_IMAGE_NAME"
+
+if [ $? -ne 0 ]; then
+    echo "WARNING: Failed to push version tag to registry"
+    echo "Latest tag was pushed successfully"
 fi
 
 echo
@@ -85,13 +107,19 @@ echo "============================================"
 echo "  Local Build Successful!"
 echo "============================================"
 echo
-echo "  Built image: $FULL_IMAGE_NAME"
-echo "  Local tag:   $IMAGE_NAME:$TAG"
+echo "  Built images:"
+echo "    Latest: $FULL_IMAGE_NAME"
+echo "    Version: $VERSIONED_IMAGE_NAME"
+echo "  Local tags:"
+echo "    $IMAGE_NAME:$TAG"
+echo "    $IMAGE_NAME:$VERSION_TAG"
 echo
 echo "  Image is ready for deployment using:"
 echo "  ../deploy/deploy.sh $FULL_IMAGE_NAME [env-file]"
-echo "  or"
+echo "  ../deploy/deploy.sh $VERSIONED_IMAGE_NAME [env-file]"
+echo "  or with local tags:"
 echo "  ../deploy/deploy.sh $IMAGE_NAME:$TAG [env-file]"
+echo "  ../deploy/deploy.sh $IMAGE_NAME:$VERSION_TAG [env-file]"
 echo
-echo "  To view image: docker images $IMAGE_NAME"
+echo "  To view images: docker images $IMAGE_NAME"
 echo

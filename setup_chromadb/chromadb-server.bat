@@ -57,8 +57,8 @@ if errorlevel 1 (
 REM Create data directory
 if not exist "data\chroma_data" mkdir "data\chroma_data"
 
-REM Start ChromaDB with docker-compose
-docker-compose -f "%SETUP_DIR%docker-compose.yml" up -d chromadb
+REM Start ChromaDB with docker compose
+docker compose -f "%SETUP_DIR%docker-compose.yml" up -d chromadb
 if errorlevel 1 (
     echo ❌ Failed to start ChromaDB server
     exit /b 1
@@ -71,7 +71,7 @@ goto :eof
 
 :stop_server
 echo 🛑 Stopping ChromaDB server...
-docker-compose -f "%SETUP_DIR%docker-compose.yml" down
+docker compose -f "%SETUP_DIR%docker-compose.yml" down
 if errorlevel 1 (
     echo ❌ Failed to stop ChromaDB server
     exit /b 1
@@ -88,12 +88,12 @@ goto :eof
 
 :show_status
 echo 📊 ChromaDB server status:
-docker-compose -f "%SETUP_DIR%docker-compose.yml" ps chromadb
+docker compose -f "%SETUP_DIR%docker-compose.yml" ps chromadb
 goto :eof
 
 :show_logs
 echo 📋 ChromaDB server logs:
-docker-compose -f "%SETUP_DIR%docker-compose.yml" logs -f chromadb
+docker compose -f "%SETUP_DIR%docker-compose.yml" logs -f chromadb
 goto :eof
 
 :check_health

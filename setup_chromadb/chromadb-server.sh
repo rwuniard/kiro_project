@@ -38,8 +38,8 @@ start_server() {
     # Create data directory
     mkdir -p data/chroma_data
     
-    # Start ChromaDB with docker-compose
-    docker-compose -f "$SETUP_DIR/docker-compose.yml" up -d chromadb
+    # Start ChromaDB with docker compose
+    docker compose -f "$SETUP_DIR/docker-compose.yml" up -d chromadb
     
     echo "✅ ChromaDB server started on http://localhost:8000"
     echo "🌐 Container name: chromadb (accessible from mcp-network)"
@@ -48,7 +48,7 @@ start_server() {
 
 stop_server() {
     echo "🛑 Stopping ChromaDB server..."
-    docker-compose -f "$SETUP_DIR/docker-compose.yml" down
+    docker compose -f "$SETUP_DIR/docker-compose.yml" down
     echo "✅ ChromaDB server stopped"
 }
 
@@ -61,12 +61,12 @@ restart_server() {
 
 show_status() {
     echo "📊 ChromaDB server status:"
-    docker-compose -f "$SETUP_DIR/docker-compose.yml" ps chromadb
+    docker compose -f "$SETUP_DIR/docker-compose.yml" ps chromadb
 }
 
 show_logs() {
     echo "📋 ChromaDB server logs:"
-    docker-compose -f "$SETUP_DIR/docker-compose.yml" logs -f chromadb
+    docker compose -f "$SETUP_DIR/docker-compose.yml" logs -f chromadb
 }
 
 check_health() {

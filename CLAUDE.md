@@ -124,10 +124,10 @@ docker_deployment\local\build-and-deploy.bat google        # Build with Google A
 3. Run local build script: ./docker_deployment/local/build-and-deploy.sh
 
 # Development cycle
-docker-compose logs -f          # Monitor application (from docker_deployment/local/)
+docker compose logs -f          # Monitor application (from docker_deployment/local/)
 # Drop test files into source folder (including .docx/.doc files)
-docker-compose restart          # Restart if needed
-docker-compose down             # Stop when done
+docker compose restart          # Restart if needed
+docker compose down             # Stop when done
 
 # Rebuilding after code changes
 ./docker_deployment/local/build-and-deploy.sh  # Rebuild and redeploy
@@ -141,21 +141,21 @@ Both deployment paths support the same container management commands:
 
 ```bash
 # Container Management (run from deployment directory: ci/ or local/)
-docker-compose ps               # View container status
-docker-compose logs -f          # Monitor real-time logs
-docker-compose logs -f rag-file-processor  # Monitor specific service
-docker-compose up -d            # Start in background
-docker-compose down             # Stop containers
-docker-compose restart          # Restart containers
+docker compose ps               # View container status
+docker compose logs -f          # Monitor real-time logs
+docker compose logs -f rag-file-processor  # Monitor specific service
+docker compose up -d            # Start in background
+docker compose down             # Stop containers
+docker compose restart          # Restart containers
 docker stats rag-file-processor # View resource usage
 
 # Container Debugging
-docker-compose exec rag-file-processor bash
-docker-compose exec rag-file-processor python --version
-docker-compose exec rag-file-processor uv run pytest
+docker compose exec rag-file-processor bash
+docker compose exec rag-file-processor python --version
+docker compose exec rag-file-processor uv run pytest
 
 # For local builds only
-docker-compose up --build       # Force rebuild
+docker compose up --build       # Force rebuild
 ```
 
 ### Environment Configuration
@@ -198,15 +198,15 @@ docker login ghcr.io           # Ensure GHCR access
 docker pull ghcr.io/rwuniard/rag-file-processor:latest  # Test image access
 
 # Local Build troubleshooting  
-docker-compose build --no-cache # Force clean rebuild
-docker-compose logs rag-file-processor  # Check container logs
+docker compose build --no-cache # Force clean rebuild
+docker compose logs rag-file-processor  # Check container logs
 
 # Container debugging (both paths)
-docker-compose exec rag-file-processor ls -la /app
-docker-compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('Import successful')"
+docker compose exec rag-file-processor ls -la /app
+docker compose exec rag-file-processor python -c "from src.app import FolderFileProcessorApp; print('Import successful')"
 
 # Clean up (WARNING: deletes ChromaDB data)
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Docker Volume File Monitoring

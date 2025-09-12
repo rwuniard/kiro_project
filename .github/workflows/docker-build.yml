@@ -90,7 +90,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ format('{0}/{1}/rag-file-processor', inputs.registry, github.repository) }}
+        images: ${{ format('{0}/{1}/{2}', inputs.registry, github.repository, inputs.image_name) }}
         tags: |
           type=raw,value=latest,enable=${{ inputs.push_image == true }}
           type=raw,value=${{ inputs.version }}
