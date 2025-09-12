@@ -110,6 +110,8 @@ jobs:
         name: deploy-coverage
         fail_ci_if_error: false
         verbose: true
+        override_branch: main
+        override_commit: ${{ github.sha }}
       continue-on-error: true
 
   # Free up disk space before Docker build
