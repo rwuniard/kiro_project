@@ -145,7 +145,7 @@ If using `CHROMA_CLIENT_MODE=client_server`, ensure ChromaDB is running:
 ```bash
 # Start ChromaDB server (if using setup_chromadb)
 cd ../setup_chromadb
-docker-compose up -d
+docker compose up -d
 ```
 
 ## 📂 Volume Mapping
@@ -165,22 +165,22 @@ The deployment automatically creates and maps these directories:
 **View Container Status**:
 ```bash
 cd deploy/
-docker-compose ps
+docker compose ps
 ```
 
 **Monitor Logs**:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 **Stop Deployment**:
 ```bash
-docker-compose down
+docker compose down
 ```
 
 **Restart Container**:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 ## 🗂️ Available Images
@@ -196,11 +196,11 @@ docker-compose restart
 ### Container Won't Start
 1. Check if ChromaDB is running (if using client_server mode)
 2. Verify API keys are set correctly
-3. Check container logs: `docker-compose logs`
+3. Check container logs: `docker compose logs`
 
 ### File Processing Issues
 1. Ensure source/saved/error directories exist and have proper permissions
-2. Check if files are being detected: `docker-compose logs -f`
+2. Check if files are being detected: `docker compose logs -f`
 3. Verify Docker volume mounts are working
 
 ### Network Issues
@@ -227,10 +227,10 @@ cp .env.development .env.local
 
 # 4. Test by dropping files in SOURCE_FOLDER
 # 5. Monitor logs
-docker-compose logs -f
+docker compose logs -f
 
 # 6. Stop when done
-docker-compose down
+docker compose down
 ```
 
 This simplified system provides clean separation between building and deploying, with no Python dependencies for deployment!

@@ -30,11 +30,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if docker-compose is available
-docker-compose --version >nul 2>&1
+REM Check if docker compose is available
+docker compose version >nul 2>&1
 if errorlevel 1 (
-    echo ERROR: docker-compose is not installed or not in PATH
-    echo Please install docker-compose and try again
+    echo ERROR: docker compose is not available
+    echo Please install Docker with Compose V2 support and try again
     exit /b 1
 )
 
@@ -118,7 +118,7 @@ if errorlevel 1 (
 
 REM Use the deployment env file
 echo   Starting containers...
-docker-compose --env-file .env.deploy up -d
+docker compose --env-file .env.deploy up -d
 
 if errorlevel 1 (
     echo ERROR: Failed to start containers
@@ -134,11 +134,11 @@ echo   Deployment Successful!
 echo ============================================
 echo.
 echo   Container status:
-docker-compose --env-file .env.deploy ps
+docker compose --env-file .env.deploy ps
 
 echo.
-echo   To monitor logs: docker-compose --env-file .env.deploy logs -f
-echo   To stop:         docker-compose --env-file .env.deploy down
+echo   To monitor logs: docker compose --env-file .env.deploy logs -f
+echo   To stop:         docker compose --env-file .env.deploy down
 echo   Drop files into %SOURCE_FOLDER% to start processing!
 
 REM Clean up temporary deployment env file

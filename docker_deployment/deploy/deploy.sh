@@ -55,10 +55,10 @@ if ! command_exists docker; then
     exit 1
 fi
 
-# Check if docker-compose is available
-if ! command_exists docker-compose; then
-    echo "ERROR: docker-compose is not installed or not in PATH"
-    echo "Please install docker-compose and try again"
+# Check if docker compose is available
+if ! docker compose version >/dev/null 2>&1; then
+    echo "ERROR: docker compose is not available"
+    echo "Please install Docker with Compose V2 support and try again"
     exit 1
 fi
 
@@ -71,7 +71,7 @@ fi
 
 echo "[2/6] Loading environment configuration..."
 
-# Create a temporary .env file for docker-compose
+# Create a temporary .env file for docker compose
 cp "$ENV_FILE" .env.deploy
 
 # Read folder paths from environment file or use defaults
@@ -159,7 +159,7 @@ docker network create mcp-network 2>/dev/null || true
 # Use the deployment env file
 export COMPOSE_FILE=docker-compose.yml
 echo "  Starting containers with image: $IMAGE_NAME"
-docker-compose --env-file .env.deploy up -d
+docker compose --env-file .env.deploy up -d
 
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to start containers"
@@ -182,12 +182,12 @@ echo "  Error folder:   $ERROR_FOLDER"
 echo "  Temp directory: /tmp/file-processor-unstructured"
 echo
 echo "  Container status:"
-docker-compose --env-file .env.deploy ps
+docker compose --env-file .env.deploy ps
 
 echo
-echo "  To monitor logs: docker-compose --env-file .env.deploy logs -f"
-echo "  To stop:         docker-compose --env-file .env.deploy down"
-echo "  To restart:      docker-compose --env-file .env.deploy restart"
+echo "  To monitor logs: docker compose --env-file .env.deploy logs -f"
+echo "  To stop:         docker compose --env-file .env.deploy down"
+echo "  To restart:      docker compose --env-file .env.deploy restart"
 echo
 echo "  Drop files into the source folder to start processing!"
 echo
