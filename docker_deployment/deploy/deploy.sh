@@ -128,16 +128,10 @@ echo "  Created: $SOURCE_FOLDER"
 echo "  Created: $SAVED_FOLDER"
 echo "  Created: $ERROR_FOLDER"
 
-echo "[4/6] Setting up temporary directory permissions..."
+echo "[4/6] Preparing Docker environment..."
 
-# Create temporary directory for document processing
-mkdir -p /tmp/file-processor-unstructured
-
-# Set proper permissions (readable/writable by all users)
-chmod 777 /tmp/file-processor-unstructured
-
-echo "  Created: /tmp/file-processor-unstructured"
-echo "  Permissions set: $(ls -ld /tmp/file-processor-unstructured)"
+# Note: Temporary directory is now internal to container - no host setup needed
+echo "  Temporary directory will be created internally by Docker container"
 
 echo "[5/6] Pulling Docker image..."
 
@@ -179,7 +173,7 @@ echo "  Environment:    $ENV_FILE"
 echo "  Source folder:  $SOURCE_FOLDER"
 echo "  Saved folder:   $SAVED_FOLDER"  
 echo "  Error folder:   $ERROR_FOLDER"
-echo "  Temp directory: /tmp/file-processor-unstructured"
+echo "  Temp directory: Internal (/tmp/unstructured)"
 echo
 echo "  Container status:"
 docker compose --env-file .env.deploy ps

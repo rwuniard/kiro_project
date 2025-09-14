@@ -93,8 +93,8 @@ REM Create Docker data directories (relative to deploy directory)
 if not exist "..\data\chroma_db" mkdir "..\data\chroma_db"
 if not exist "..\logs" mkdir "..\logs"
 
-REM Create temporary directory for document processing
-if not exist "C:\temp\file-processor-unstructured" mkdir "C:\temp\file-processor-unstructured"
+REM Note: Temporary directory is now internal to container - no host setup needed
+echo   Temporary directory will be created internally by Docker container
 
 echo   Created directories successfully
 echo   Source folder: %SOURCE_FOLDER%

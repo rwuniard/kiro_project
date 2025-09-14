@@ -194,53 +194,16 @@ class OfficeProcessor(DocumentProcessor):
         )
 
         try:
-            # Set up temporary directory for unstructured processing
-            import os
-            import tempfile
-            
-            # Use custom temp directory if available, otherwise use system default
-            temp_dir = os.environ.get('TMPDIR', os.environ.get('TEMP', os.environ.get('TMP', None)))
-            if temp_dir and os.path.exists(temp_dir) and os.access(temp_dir, os.W_OK):
-                # Create a temporary directory within our custom temp location
-                with tempfile.TemporaryDirectory(dir=temp_dir) as custom_temp_dir:
-                    # Set environment variables for this process
-                    old_tmpdir = os.environ.get('TMPDIR')
-                    old_temp = os.environ.get('TEMP')
-                    old_tmp = os.environ.get('TMP')
-                    
-                    try:
-                        os.environ['TMPDIR'] = custom_temp_dir
-                        os.environ['TEMP'] = custom_temp_dir
-                        os.environ['TMP'] = custom_temp_dir
-                        
-                        # Use UnstructuredLoader with all-docs support for unified processing
-                        loader = UnstructuredLoader(
-                            file_path=str(file_path),
-                            mode="elements",  # Extract structured elements for better content organization
-                            strategy="fast",   # Use fast strategy for better performance
-                        )
-                        
-                        # Load the document
-                        raw_documents = loader.load()
-                        
-                    finally:
-                        # Restore original environment variables
-                        if old_tmpdir is not None:
-                            os.environ['TMPDIR'] = old_tmpdir
-                        if old_temp is not None:
-                            os.environ['TEMP'] = old_temp
-                        if old_tmp is not None:
-                            os.environ['TMP'] = old_tmp
-            else:
-                # Fallback to default behavior
-                loader = UnstructuredLoader(
-                    file_path=str(file_path),
-                    mode="elements",  # Extract structured elements for better content organization
-                    strategy="fast",   # Use fast strategy for better performance
-                )
-                
-                # Load the document
-                raw_documents = loader.load()
+            # Use UnstructuredLoader with all-docs support for unified processing
+            # Container environment already has TMPDIR=/tmp/unstructured configured
+            loader = UnstructuredLoader(
+                file_path=str(file_path),
+                mode="elements",  # Extract structured elements for better content organization
+                strategy="fast",   # Use fast strategy for better performance
+            )
+
+            # Load the document
+            raw_documents = loader.load()
             
             # Clean metadata to remove complex types that ChromaDB can't handle
             for doc in raw_documents:
