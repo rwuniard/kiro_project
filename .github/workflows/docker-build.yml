@@ -53,12 +53,13 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
-  # Common setup job for both platforms
-  setup:
-    name: Build Setup
+  build:
+    name: Multi-Platform Build with Space Management
     runs-on: ubuntu-latest
     outputs:
       image_url: ${{ steps.meta.outputs.tags }}
+      image_digest: ${{ steps.build.outputs.digest }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -68,11 +69,19 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Build info
+    - name: Build info and space optimization
       run: |
         echo "🏷️ Building version: ${{ inputs.version }}"
         echo "🤖 Using model vendor: ${{ inputs.model_vendor }}"
-        echo "🏗️ Using sequential platform builds to manage disk space"
+        echo "🏗️ Using optimized concurrent build with aggressive space management"
+
+        # Pre-build cleanup to maximize available space
+        echo "🧹 Pre-build cleanup..."
+        docker system prune -af --volumes
+        docker builder prune -af
+
+        echo "💾 Available space before build:"
+        df -h
 
     - name: Log in to Container Registry
       if: ${{ inputs.push_image }}
@@ -81,6 +90,18 @@ jobs:
         registry: ${{ inputs.registry }}
         username: ${{ github.actor }}
         password: ${{ secrets.REGISTRY_TOKEN }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        # Very aggressive garbage collection with minimal retention
+        buildkitd-config-inline: |
+          [worker.oci]
+            gc = true
+            gckeepstorage = 128000000
+          [worker.containerd]
+            gc = true
+            gckeepstorage = 128000000
 
     - name: Extract metadata for Docker
       id: meta
@@ -91,225 +112,106 @@ jobs:
           type=raw,value=latest,enable=${{ inputs.push_image == true }}
           type=raw,value=${{ inputs.version }}
 
-  # Build AMD64 platform
-  build-amd64:
-    name: Build AMD64
-    runs-on: ubuntu-latest
-    needs: setup
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Log in to Container Registry
-      if: ${{ inputs.push_image }}
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ inputs.registry }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.REGISTRY_TOKEN }}
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        buildkitd-config-inline: |
-          [worker.oci]
-            gc = true
-            gckeepstorage = 256000000
-          [worker.containerd]
-            gc = true
-            gckeepstorage = 256000000
-
     - name: Debug build context
       run: |
-        echo "🔍 Building AMD64 platform..."
+        echo "🔍 Debugging Docker build context..."
         echo "Current directory: $(pwd)"
-        echo "🏷️ Docker tags: ${{ needs.setup.outputs.image_url }}"
-        echo "Checking critical files:"
-        echo "main.py: $(test -f main.py && echo '✅' || echo '❌')"
-        echo "src/: $(test -d src && echo '✅' || echo '❌')"
-        echo "Dockerfile: $(test -f docker_deployment/shared/Dockerfile && echo '✅' || echo '❌')"
+        ls -la
+        echo ""
+        echo "🏷️ Docker tags that will be created:"
+        echo "${{ steps.meta.outputs.tags }}"
+        echo ""
+        echo "Push image: ${{ inputs.push_image }}"
+        echo "Latest tag enabled: ${{ inputs.push_image == true }}"
+        echo ""
+        echo "Checking critical files that should be in build context:"
+        echo "main.py: $(test -f main.py && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "CLAUDE.md: $(test -f CLAUDE.md && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "uv.lock: $(test -f uv.lock && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "src/: $(test -d src && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "docker_deployment/shared/Dockerfile: $(test -f docker_deployment/shared/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
+        echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
 
-    - name: Build AMD64 image
+    - name: Build and optionally push Docker image
+      id: build
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker_deployment/shared/Dockerfile
-        platforms: linux/amd64
+        platforms: linux/amd64,linux/arm64  # Multi-platform support for Intel and ARM (Apple Silicon)
         push: ${{ inputs.push_image }}
+        # Never load locally to avoid "no space left on device" errors
+        # Production builds push to registry, PR builds just validate build success
         load: false
-        tags: ${{ needs.setup.outputs.image_url }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
-        cache-from: type=gha,scope=amd64
-        cache-to: type=gha,mode=min,scope=amd64
+        # Use minimal cache to save space
+        cache-from: type=gha
+        cache-to: type=gha,mode=min
 
-    - name: Cleanup after AMD64 build
-      if: always()
+    - name: Debug build output
       run: |
-        echo "🧹 Cleaning up AMD64 build artifacts..."
-        docker builder prune -af
-        docker system prune -af --volumes
-        echo "💾 Disk space after AMD64 cleanup:"
-        df -h
-
-  # Build ARM64 platform
-  build-arm64:
-    name: Build ARM64
-    runs-on: ubuntu-latest
-    needs: [setup, build-amd64]
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Log in to Container Registry
-      if: ${{ inputs.push_image }}
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ inputs.registry }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.REGISTRY_TOKEN }}
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      with:
-        buildkitd-config-inline: |
-          [worker.oci]
-            gc = true
-            gckeepstorage = 256000000
-          [worker.containerd]
-            gc = true
-            gckeepstorage = 256000000
-
-    - name: Debug build context
-      run: |
-        echo "🔍 Building ARM64 platform..."
-        echo "Current directory: $(pwd)"
-        echo "🏷️ Docker tags: ${{ needs.setup.outputs.image_url }}"
-        echo "💾 Disk space before ARM64 build:"
-        df -h
-
-    - name: Build ARM64 image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker_deployment/shared/Dockerfile
-        platforms: linux/arm64
-        push: ${{ inputs.push_image }}
-        load: false
-        tags: ${{ needs.setup.outputs.image_url }}
-        build-args: |
-          VERSION=${{ inputs.version }}
-        cache-from: type=gha,scope=arm64
-        cache-to: type=gha,mode=min,scope=arm64
-
-    - name: Cleanup after ARM64 build
-      if: always()
-      run: |
-        echo "🧹 Cleaning up ARM64 build artifacts..."
-        docker builder prune -af
-        docker system prune -af --volumes
-
-  # Create multi-platform manifest and test
-  finalize:
-    name: Finalize Multi-Platform Build
-    runs-on: ubuntu-latest
-    needs: [setup, build-amd64, build-arm64]
-    outputs:
-      image_url: ${{ needs.setup.outputs.image_url }}
-      image_digest: ${{ steps.manifest.outputs.digest }}
-    steps:
-    - name: Log in to Container Registry
-      if: ${{ inputs.push_image }}
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ inputs.registry }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.REGISTRY_TOKEN }}
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Create and push manifest
-      if: ${{ inputs.push_image }}
-      id: manifest
-      run: |
-        echo "🔗 Creating multi-platform manifest..."
-        TAGS="${{ needs.setup.outputs.image_url }}"
-
-        # Create manifest for each tag
-        for TAG in $(echo "$TAGS" | tr '\n' ' '); do
-          echo "Creating manifest for: $TAG"
-          docker buildx imagetools create \
-            --tag "$TAG" \
-            "$TAG"
-        done
-
-        # Get digest from the first tag
-        FIRST_TAG=$(echo "$TAGS" | head -n1)
-        DIGEST=$(docker buildx imagetools inspect "$FIRST_TAG" --format '{{.Manifest.Digest}}')
-        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+        echo "Build step completed. Checking what was created..."
+        echo "Push mode: ${{ inputs.push_image }}"
+        echo "Load mode (old): ${{ inputs.push_image == 'false' }}"
+        echo "Load mode (new): ${{ inputs.push_image == false }}"
+        echo "Load mode (not): ${{ !inputs.push_image }}"
+        echo "All current Docker images:"
+        docker images
 
     - name: Test Docker image
-      if: ${{ inputs.push_image }}
       run: |
-        echo "🚀 Testing multi-platform image from registry..."
+        echo "Testing Docker build results..."
 
-        REGISTRY_TAG=$(echo "${{ needs.setup.outputs.image_url }}" | head -n1)
-        echo "Testing image: $REGISTRY_TAG"
+        if [ "${{ inputs.push_image }}" = "true" ]; then
+          echo "🚀 Production build - Testing pushed image from registry"
 
-        docker pull "$REGISTRY_TAG"
+          # For production builds, test the pushed image
+          REGISTRY_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Pulling and testing registry image: $REGISTRY_TAG"
 
-        # Run basic health check
-        docker run --rm \
-          -e ENABLE_DOCUMENT_PROCESSING=false \
-          "$REGISTRY_TAG" \
-          python -c "import sys; print('🐍 Python version:', sys.version); print('🏷️ Image version: ${{ inputs.version }}'); exec('try:\\n    from src.app import FolderFileProcessorApp\\n    from src.config import ConfigManager\\n    from src.core import FileProcessor\\n    print(\"✅ Core modules import successfully\")\\nexcept ImportError as e:\\n    print(f\"❌ Import error: {e}\")\\n    sys.exit(1)\\nprint(\"✅ Multi-platform Docker image test passed\")')"
+          docker pull "$REGISTRY_TAG"
 
-    - name: PR validation summary
-      if: ${{ !inputs.push_image }}
-      run: |
-        echo "🧪 PR validation build completed successfully"
-        echo "✅ Both AMD64 and ARM64 platforms built successfully"
-        echo "✅ Sequential build strategy prevented disk space issues"
-        echo ""
-        echo "Build outputs:"
-        echo "- Platforms: linux/amd64, linux/arm64 (built separately)"
-        echo "- Image: ${{ inputs.image_name }}:${{ inputs.version }}"
-        echo "- Build approach: Sequential platform builds"
+          # Run basic health check on registry image
+          docker run --rm \
+            -e ENABLE_DOCUMENT_PROCESSING=false \
+            "$REGISTRY_TAG" \
+            python -c "import sys; print('🐍 Python version:', sys.version); print('🏷️ Image version: ${{ inputs.version }}'); exec('try:\\n    from src.app import FolderFileProcessorApp\\n    from src.config import ConfigManager\\n    from src.core import FileProcessor\\n    print(\"✅ Core modules import successfully\")\\nexcept ImportError as e:\\n    print(f\"❌ Import error: {e}\")\\n    sys.exit(1)\\nprint(\"✅ Docker registry image test passed\")')"
+
+        else
+          echo "🧪 PR validation build - Build completed successfully"
+          echo "✅ Docker build validation passed without loading huge image locally"
+          echo "   (Avoids 'no space left on device' errors in CI)"
+          echo ""
+          echo "Build outputs:"
+          echo "- Image built successfully: ${{ inputs.image_name }}:${{ inputs.version }}"
+          echo "- Build context: Project root with docker_deployment/shared/Dockerfile"
+          echo "- Dockerfile validation: ✅ All required files accessible"
+          echo "- Dependencies installation: ✅ Completed during build"
+          echo ""
+          echo "Note: Full integration testing happens on deployment to main branch"
+        fi
 
     - name: Build summary
       run: |
-        echo "## 🐳 Sequential Multi-Platform Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "## 🐳 Optimized Multi-Platform Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### ✅ Build Details" >> $GITHUB_STEP_SUMMARY
         echo "- **Image**: \`${{ inputs.registry }}/${{ github.repository_owner }}/${{ inputs.image_name }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Model Vendor**: \`${{ inputs.model_vendor }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment**: \`${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platforms**: \`linux/amd64, linux/arm64\` (built sequentially)" >> $GITHUB_STEP_SUMMARY
-        echo "- **Build Strategy**: Sequential platform builds to manage disk space" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: \`linux/amd64, linux/arm64\` (concurrent with space optimization)" >> $GITHUB_STEP_SUMMARY
+        echo "- **Build Strategy**: Aggressive space management with minimal cache retention" >> $GITHUB_STEP_SUMMARY
         if [ "${{ inputs.push_image }}" = "true" ]; then
-          echo "- **Registry Push**: ✅ Enabled with multi-platform manifest" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry Push**: ✅ Enabled" >> $GITHUB_STEP_SUMMARY
         else
           echo "- **Registry Push**: ❌ Test build only" >> $GITHUB_STEP_SUMMARY
         fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🏷️ Available Tags" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        echo "${{ needs.setup.outputs.image_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-  # Maintain compatibility with existing workflow outputs
-  build:
-    name: Build Compatibility
-    runs-on: ubuntu-latest
-    needs: finalize
-    outputs:
-      image_url: ${{ needs.finalize.outputs.image_url }}
-      image_digest: ${{ needs.finalize.outputs.image_digest }}
-    steps:
-    - name: Pass through outputs
-      run: |
-        echo "✅ Sequential multi-platform build completed"
-        echo "Image URL: ${{ needs.finalize.outputs.image_url }}"
-        echo "Image Digest: ${{ needs.finalize.outputs.image_digest }}"
