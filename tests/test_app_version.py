@@ -551,7 +551,7 @@ class TestVersionLoggingIntegration:
             f.write("ENABLE_DOCUMENT_PROCESSING=true\n")
             f.write("DOCUMENT_PROCESSOR_TYPE=rag_store\n")
             f.write("MODEL_VENDOR=google\n")
-            f.write("GOOGLE_API_KEY=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\n")
+            f.write("GOOGLE_API_KEY=AIzaSyFAKE_TEST_KEY_123456789012345678\n")
             f.write("CHROMA_DB_PATH=./data/chroma_db\n")
             f.write("FILE_MONITORING_MODE=auto\n")
             f.write("POLLING_INTERVAL=3.0\n")
