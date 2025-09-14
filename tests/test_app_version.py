@@ -557,20 +557,38 @@ class TestVersionLoggingIntegration:
             f.write("POLLING_INTERVAL=3.0\n")
             f.write("DOCKER_VOLUME_MODE=false\n")
 
-        # Mock the RAGStoreProcessor to avoid actual initialization
+        # Mock the RAGStoreProcessor and dependency validation to avoid actual initialization
         with patch('app.RAGStoreProcessor') as mock_processor_class:
             mock_processor = MagicMock()
             mock_processor.get_supported_extensions.return_value = {'.txt', '.pdf'}
             mock_processor_class.return_value = mock_processor
 
-            with patch('builtins.print') as mock_print:
-                self.app = FolderFileProcessorApp(env_file=str(env_file_with_docproc))
-                result = self.app.initialize()
-                assert result is True
+            # Also need to mock the config manager's dependency validation in CI environment
+            with patch('app.ConfigManager') as mock_config_manager_class:
+                mock_config_manager = MagicMock()
+                mock_config = MagicMock()
 
-                # Check that version was printed to console
-                expected_message = f"RAG File Processor v{test_version}"
-                mock_print.assert_any_call(expected_message)
+                # Set up the config mock to return valid configuration
+                mock_config.source_folder = str(self.source_dir)
+                mock_config.saved_folder = str(self.saved_dir)
+                mock_config.error_folder = str(self.error_dir)
+                mock_config.document_processing.enable_processing = True
+                mock_config.document_processing.processor_type = "rag_store"
+                mock_config.document_processing.model_vendor = "google"
+                mock_config.document_processing.chroma_db_path = "./data/chroma_db"
+
+                mock_config_manager.initialize.return_value = mock_config
+                mock_config_manager.validate_dependencies.return_value = []  # No dependency errors
+                mock_config_manager_class.return_value = mock_config_manager
+
+                with patch('builtins.print') as mock_print:
+                    self.app = FolderFileProcessorApp(env_file=str(env_file_with_docproc))
+                    result = self.app.initialize()
+                    assert result is True
+
+                    # Check that version was printed to console
+                    expected_message = f"RAG File Processor v{test_version}"
+                    mock_print.assert_any_call(expected_message)
 
     def test_version_function_called_during_initialization(self):
         """Test that get_application_version function is actually called during initialization."""
