@@ -181,9 +181,8 @@ error/           → /app/data/error      (failed files with .log files)
 ./data/chroma_db → /app/data/chroma_db  (persistent ChromaDB storage)
 ./logs           → /app/logs            (application logs)
 
-# Temporary Directories (automatically created by deployment scripts)
-/tmp/file-processor-unstructured → /tmp/unstructured  (Unix/Mac)
-C:\temp\file-processor-unstructured → /tmp/unstructured  (Windows)
+# Temporary Directories (internal to container only)
+# No host mapping needed - container creates /tmp/unstructured internally
 ```
 
 ### Docker Troubleshooting

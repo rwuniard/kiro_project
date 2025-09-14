@@ -55,10 +55,8 @@ services:
       - ../logs:/app/logs
       - ../config:/app/config:ro
       
-      # Temporary directory for document processing (platform-specific)
-      # Unix/Mac: /tmp/file-processor-unstructured:/tmp/unstructured
-      # Windows: C:\temp\file-processor-unstructured:/tmp/unstructured
-      - /tmp/file-processor-unstructured:/tmp/unstructured
+      # Temporary directory is now internal-only (no host mapping needed)
+      # Container creates /tmp/unstructured internally for document processing
       
     # Resource limits
     deploy:
