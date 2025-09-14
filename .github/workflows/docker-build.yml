@@ -121,7 +121,7 @@ jobs:
       with:
         context: .
         file: ./docker_deployment/shared/Dockerfile
-        platforms: linux/amd64  # Only build for amd64 to save space
+        platforms: linux/amd64,linux/arm64  # Multi-platform support for Intel and ARM (Apple Silicon)
         push: ${{ inputs.push_image }}
         # Never load locally to avoid "no space left on device" errors
         # Production builds push to registry, PR builds just validate build success
@@ -186,7 +186,7 @@ jobs:
         echo "- **Version**: \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Model Vendor**: \`${{ inputs.model_vendor }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment**: \`${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platform**: \`linux/amd64\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Platforms**: \`linux/amd64, linux/arm64\`" >> $GITHUB_STEP_SUMMARY
         if [ "${{ inputs.push_image }}" = "true" ]; then
           echo "- **Registry Push**: ✅ Enabled" >> $GITHUB_STEP_SUMMARY
         else

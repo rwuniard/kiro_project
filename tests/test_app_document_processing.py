@@ -44,7 +44,7 @@ class TestApplicationDocumentProcessingIntegration:
             f.write("ENABLE_DOCUMENT_PROCESSING=true\n")
             f.write("DOCUMENT_PROCESSOR_TYPE=rag_store\n")
             f.write("MODEL_VENDOR=google\n")
-            f.write("GOOGLE_API_KEY=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI\n")
+            f.write("GOOGLE_API_KEY=AIzaSyFAKE_TEST_KEY_1234567890123456789\n")
             f.write(f"CHROMA_DB_PATH={self.chroma_dir}\n")
             f.write("CHROMA_CLIENT_MODE=embedded\n")
             # Add missing file monitoring configuration

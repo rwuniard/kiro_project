@@ -5,6 +5,7 @@ This module contains the main application class that coordinates all components,
 handles startup sequence, graceful shutdown, and error handling for monitoring failures.
 """
 
+import os
 import signal
 import sys
 import time
@@ -29,6 +30,37 @@ except ImportError as e:
     RAGStoreProcessor = None
     DocumentProcessingInterface = None
     DOCUMENT_PROCESSING_AVAILABLE = False
+
+
+def get_application_version() -> str:
+    """
+    Get the application version from environment variable or version file.
+
+    Returns:
+        Application version string or 'unknown' if not found
+    """
+    # Try environment variable first (preferred in Docker)
+    version = os.environ.get('APP_VERSION')
+    if version:
+        return version
+
+    # Fall back to version file if it exists
+    version_file = Path('/app/VERSION')
+    if version_file.exists():
+        try:
+            return version_file.read_text().strip()
+        except Exception:
+            pass
+
+    # Try relative version file (for local development)
+    version_file = Path('VERSION')
+    if version_file.exists():
+        try:
+            return version_file.read_text().strip()
+        except Exception:
+            pass
+
+    return 'unknown'
 
 
 class FolderFileProcessorApp:
@@ -89,6 +121,10 @@ class FolderFileProcessorApp:
             print("Loading configuration...")
             self.config_manager = ConfigManager(self.env_file)
             self.config = self.config_manager.initialize()
+
+            # Show application version early in startup
+            app_version = get_application_version()
+            print(f"RAG File Processor v{app_version}")
             print(f"Configuration loaded successfully:")
             print(f"  Source folder: {self.config.source_folder}")
             print(f"  Saved folder: {self.config.saved_folder}")
@@ -124,10 +160,10 @@ class FolderFileProcessorApp:
                 logger_name="folder_file_processor"
             )
             
-            # Log initialization start with configuration details
+            # Log initialization start with configuration details and version
             doc_processing_status = "enabled" if self.config.document_processing.enable_processing else "disabled"
-            self.logger_service.log_info(f"Application initialization started - Document processing: {doc_processing_status}")
-            
+            self.logger_service.log_info(f"Application initialization started - Version: {app_version}, Document processing: {doc_processing_status}")
+
             if self.config.document_processing.enable_processing:
                 self.logger_service.log_info(f"Document processing config - Vendor: {self.config.document_processing.model_vendor}, "
                                            f"Processor: {self.config.document_processing.processor_type}, "
