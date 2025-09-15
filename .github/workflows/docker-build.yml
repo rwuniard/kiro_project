@@ -54,11 +54,11 @@ env:
 
 jobs:
   build:
-    name: Multi-Platform Build with Space Management
+    name: Sequential Multi-Platform Build with Space Recycling
     runs-on: ubuntu-latest
     outputs:
       image_url: ${{ steps.meta.outputs.tags }}
-      image_digest: ${{ steps.build.outputs.digest }}
+      image_digest: ${{ steps.build-amd64.outputs.digest }}
 
     steps:
     - name: Checkout code
@@ -75,17 +75,38 @@ jobs:
         echo "🤖 Using model vendor: ${{ inputs.model_vendor }}"
 
         if [ "${{ inputs.push_image }}" = "true" ]; then
-          echo "🏗️ Production build: Multi-platform (AMD64 + ARM64) with registry push"
+          echo "🏗️ Production build: Sequential multi-platform (AMD64 → ARM64) with space recycling"
         else
           echo "🧪 PR validation build: Single platform (AMD64) for faster feedback"
         fi
 
-        # Pre-build cleanup to maximize available space
-        echo "🧹 Pre-build cleanup..."
+        # Emergency space optimization - most aggressive cleanup possible
+        echo "🧹 Emergency pre-build cleanup..."
+
+        # Remove all Docker resources
         docker system prune -af --volumes
         docker builder prune -af
+        docker image prune -af
+        docker container prune -f
+        docker volume prune -f
+        docker network prune -f
 
-        echo "💾 Available space before build:"
+        # Clear package manager caches
+        sudo apt-get clean
+        sudo apt-get autoclean
+        sudo apt-get autoremove -y
+
+        # Remove additional large directories if they exist
+        sudo rm -rf /usr/share/dotnet || true
+        sudo rm -rf /usr/local/lib/android || true
+        sudo rm -rf /opt/ghc || true
+        sudo rm -rf /usr/local/share/boost || true
+        sudo rm -rf /usr/local/graalvm || true
+        sudo rm -rf /usr/share/swift || true
+        sudo rm -rf /usr/local/julia* || true
+        sudo rm -rf /opt/hostedtoolcache || true
+
+        echo "💾 Available space after emergency cleanup:"
         df -h
 
     - name: Log in to Container Registry
@@ -99,14 +120,14 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
-        # Very aggressive garbage collection with minimal retention
+        # Emergency space optimization - minimal cache retention
         buildkitd-config-inline: |
           [worker.oci]
             gc = true
-            gckeepstorage = 128000000
+            gckeepstorage = 64000000
           [worker.containerd]
             gc = true
-            gckeepstorage = 128000000
+            gckeepstorage = 64000000
 
     - name: Extract metadata for Docker
       id: meta
@@ -137,24 +158,58 @@ jobs:
         echo "docker_deployment/shared/Dockerfile: $(test -f docker_deployment/shared/Dockerfile && echo '✅ EXISTS' || echo '❌ MISSING')"
         echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
 
-    - name: Build and optionally push Docker image
-      id: build
+    # Sequential platform builds to prevent space exhaustion
+    - name: Build AMD64 platform
+      id: build-amd64
       uses: docker/build-push-action@v5
       with:
         context: .
         file: ./docker_deployment/shared/Dockerfile
-        platforms: ${{ inputs.push_image && 'linux/amd64,linux/arm64' || 'linux/amd64' }}  # Multi-platform for production, single platform for PR validation
+        platforms: linux/amd64
         push: ${{ inputs.push_image }}
-        # Never load locally to avoid "no space left on device" errors
-        # Production builds push to registry, PR builds just validate build success
         load: false
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
-        # Use minimal cache to save space
         cache-from: type=gha
         cache-to: type=gha,mode=min
+
+    # Cleanup between platform builds to recycle space
+    - name: Cleanup between platform builds
+      if: inputs.push_image == true
+      run: |
+        echo "🧹 Cleaning up between AMD64 and ARM64 builds..."
+        docker builder prune -af
+        docker system prune -af --volumes
+        echo "💾 Available space after AMD64 cleanup:"
+        df -h
+
+    - name: Build ARM64 platform
+      id: build-arm64
+      if: inputs.push_image == true  # Only build ARM64 for production
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker_deployment/shared/Dockerfile
+        platforms: linux/arm64
+        push: ${{ inputs.push_image }}
+        load: false
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ inputs.version }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=min
+
+    - name: Emergency post-build cleanup
+      if: always()
+      run: |
+        echo "🧹 Post-build space cleanup..."
+        docker builder prune -af
+        docker system prune -af --volumes
+        echo "💾 Available space after build cleanup:"
+        df -h
 
     - name: Debug build output
       run: |
@@ -210,8 +265,8 @@ jobs:
         echo "- **Environment**: \`${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
         # Dynamic platform reporting
         if [ "${{ inputs.push_image }}" = "true" ]; then
-          echo "- **Platforms**: \`linux/amd64, linux/arm64\` (production multi-platform)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Strategy**: Multi-platform with aggressive space management" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: \`linux/amd64, linux/arm64\` (sequential multi-platform)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Strategy**: Sequential platform builds with space recycling" >> $GITHUB_STEP_SUMMARY
         else
           echo "- **Platforms**: \`linux/amd64\` (validation build)" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Strategy**: Single platform for faster PR feedback" >> $GITHUB_STEP_SUMMARY
