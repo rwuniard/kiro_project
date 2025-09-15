@@ -5,6 +5,7 @@ This module contains the main application class that coordinates all components,
 handles startup sequence, graceful shutdown, and error handling for monitoring failures.
 """
 
+import logging
 import os
 import signal
 import sys
@@ -49,16 +50,18 @@ def get_application_version() -> str:
     if version_file.exists():
         try:
             return version_file.read_text().strip()
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError) as e:
+            # Use basic logging since this function runs before LoggerService is initialized
+            logging.getLogger(__name__).warning(f"Failed to read version file {version_file}: {e}")
 
     # Try relative version file (for local development)
     version_file = Path('VERSION')
     if version_file.exists():
         try:
             return version_file.read_text().strip()
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError) as e:
+            # Use basic logging since this function runs before LoggerService is initialized
+            logging.getLogger(__name__).warning(f"Failed to read version file {version_file}: {e}")
 
     return 'unknown'
 
