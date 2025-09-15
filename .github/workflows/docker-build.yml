@@ -163,30 +163,58 @@ jobs:
       id: platform-tags
       if: inputs.push_image == true
       run: |
+        # Read tags from step output (multi-line format)
         BASE_TAGS="${{ steps.meta.outputs.tags }}"
         AMD64_TAGS=""
         ARM64_TAGS=""
+        FINAL_TAGS=""
 
-        # Convert base tags to platform-specific tags
+        echo "🔍 Processing base tags:"
+        echo "$BASE_TAGS"
+
+        # Convert base tags to platform-specific tags, handling multi-line format
         while IFS= read -r tag; do
-          if [ -n "$tag" ]; then
-            AMD64_TAGS="${AMD64_TAGS}${tag}-amd64,"
-            ARM64_TAGS="${ARM64_TAGS}${tag}-arm64,"
+          # Skip empty lines
+          if [ -n "$tag" ] && [ "$tag" != " " ]; then
+            # Trim whitespace
+            tag=$(echo "$tag" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+            if [ -n "$tag" ]; then
+              echo "Processing tag: '$tag'"
+
+              # Build platform-specific tags
+              if [ -n "$AMD64_TAGS" ]; then
+                AMD64_TAGS="${AMD64_TAGS},${tag}-amd64"
+                ARM64_TAGS="${ARM64_TAGS},${tag}-arm64"
+              else
+                AMD64_TAGS="${tag}-amd64"
+                ARM64_TAGS="${tag}-arm64"
+              fi
+
+              # Build final tags list
+              if [ -n "$FINAL_TAGS" ]; then
+                FINAL_TAGS="${FINAL_TAGS}"$'\n'"${tag}"
+              else
+                FINAL_TAGS="${tag}"
+              fi
+            fi
           fi
         done <<< "$BASE_TAGS"
 
-        # Remove trailing commas
-        AMD64_TAGS="${AMD64_TAGS%,}"
-        ARM64_TAGS="${ARM64_TAGS%,}"
-
-        echo "amd64_tags=$AMD64_TAGS" >> $GITHUB_OUTPUT
-        echo "arm64_tags=$ARM64_TAGS" >> $GITHUB_OUTPUT
-        echo "final_tags=$BASE_TAGS" >> $GITHUB_OUTPUT
+        # Set outputs using proper escaping for multi-line
+        {
+          echo "amd64_tags=$AMD64_TAGS"
+          echo "arm64_tags=$ARM64_TAGS"
+          echo "final_tags<<EOF"
+          echo "$FINAL_TAGS"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
 
         echo "🏷️ Platform-specific tags generated:"
         echo "AMD64: $AMD64_TAGS"
         echo "ARM64: $ARM64_TAGS"
-        echo "Final: $BASE_TAGS"
+        echo "Final tags:"
+        echo "$FINAL_TAGS"
 
     - name: Build AMD64 platform
       id: build-amd64
