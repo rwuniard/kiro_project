@@ -225,12 +225,33 @@ jobs:
         platforms: linux/amd64
         push: ${{ inputs.push_image }}
         load: false
-        tags: ${{ inputs.push_image && steps.platform-tags.outputs.amd64_tags || steps.meta.outputs.tags }}
+        tags: ${{ inputs.push_image && steps.meta.outputs.tags || steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=min
+        provenance: false  # Disable provenance to avoid manifest list creation
+        sbom: false       # Disable SBOM to avoid manifest list creation
+
+    # Tag AMD64 images with platform-specific tags
+    - name: Tag AMD64 images
+      if: inputs.push_image == true
+      run: |
+        echo "🏷️ Creating platform-specific tags for AMD64..."
+        AMD64_TAGS="${{ steps.platform-tags.outputs.amd64_tags }}"
+        FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
+
+        # Re-tag each image with platform-specific suffix
+        while IFS= read -r tag; do
+          if [ -n "$tag" ]; then
+            tag=$(echo "$tag" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ -n "$tag" ]; then
+              echo "Tagging $tag as ${tag}-amd64"
+              docker buildx imagetools create --tag "${tag}-amd64" "$tag"
+            fi
+          fi
+        done <<< "$FINAL_TAGS"
 
     # Cleanup between platform builds to recycle space
     - name: Cleanup between platform builds
@@ -252,12 +273,33 @@ jobs:
         platforms: linux/arm64
         push: ${{ inputs.push_image }}
         load: false
-        tags: ${{ steps.platform-tags.outputs.arm64_tags }}
+        tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=min
+        provenance: false  # Disable provenance to avoid manifest list creation
+        sbom: false       # Disable SBOM to avoid manifest list creation
+
+    # Tag ARM64 images with platform-specific tags
+    - name: Tag ARM64 images
+      if: inputs.push_image == true
+      run: |
+        echo "🏷️ Creating platform-specific tags for ARM64..."
+        ARM64_TAGS="${{ steps.platform-tags.outputs.arm64_tags }}"
+        FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
+
+        # Re-tag each image with platform-specific suffix
+        while IFS= read -r tag; do
+          if [ -n "$tag" ]; then
+            tag=$(echo "$tag" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ -n "$tag" ]; then
+              echo "Tagging $tag as ${tag}-arm64"
+              docker buildx imagetools create --tag "${tag}-arm64" "$tag"
+            fi
+          fi
+        done <<< "$FINAL_TAGS"
 
     # Create multi-platform manifest
     - name: Create multi-platform manifest
