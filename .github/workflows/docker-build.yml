@@ -193,8 +193,7 @@ jobs:
 
               # Build final tags list
               if [ -n "$FINAL_TAGS" ]; then
-                FINAL_TAGS="${FINAL_TAGS}
-${tag}"
+                FINAL_TAGS="${FINAL_TAGS}"$'\n'"${tag}"
               else
                 FINAL_TAGS="${tag}"
               fi
