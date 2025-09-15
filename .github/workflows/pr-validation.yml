@@ -15,6 +15,12 @@ env:
   PYTHON_VERSION: '3.12'
   UV_VERSION: 'latest'
 
+# Parallel execution strategy for faster feedback:
+# - test-and-coverage, security-scan, integration-tests: Run in parallel immediately
+# - generate-version: Depends on test-and-coverage for version generation
+# - docker-build-test: Depends on test-and-coverage + generate-version for version info
+# - pr-summary: Waits for all jobs to provide complete status
+
 jobs:
   # Job 1: Unit Tests and Coverage
   test-and-coverage:
@@ -97,11 +103,12 @@ jobs:
           htmlcov/
         retention-days: 30
 
-  # Job 2: Security Scan
+  # Job 2: Security Scan (runs in parallel with tests)
   security-scan:
     name: Security Vulnerability Scan
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
+    # No dependencies - runs immediately in parallel with tests
     
     steps:
     - name: Checkout code
@@ -185,9 +192,9 @@ jobs:
         
         echo "🏷️ Version: ${FULL_VERSION}"
 
-  # Job 4: Docker Build Test using reusable workflow
+  # Job 4: Docker Build Test using reusable workflow (AMD64 only for speed)
   docker-build-test:
-    name: Docker Build Test with Versioning
+    name: Docker Build Test (AMD64 Validation)
     needs: [test-and-coverage, generate-version]
     if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
     uses: ./.github/workflows/docker-build.yml
@@ -203,12 +210,12 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY_API }}
       REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
 
-  # Job 5: Integration Tests
+  # Job 5: Integration Tests (runs in parallel with unit tests)
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && (github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch')
-    needs: [test-and-coverage]
+    # No dependencies - can run in parallel with unit tests
     
     steps:
     - name: Checkout code

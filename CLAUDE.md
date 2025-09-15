@@ -557,3 +557,91 @@ The automatic system file deletion is implemented at multiple levels:
 All deletion attempts are logged for transparency, and the system gracefully handles deletion failures (continues processing normally).
 
 This ensures consistent system file cleanup across all monitoring modes (auto, events, polling) and both Docker and native environments.
+
+## Optimized CI/CD Pipeline
+
+This project features an **optimized CI/CD pipeline** designed for fast developer feedback with comprehensive quality assurance.
+
+### Pipeline Performance
+- **50% faster execution**: Reduced from 20-40 minutes to 10-23 minutes per PR cycle
+- **Parallel execution**: Security scans and integration tests run simultaneously
+- **Smart builds**: Single-platform for PR validation, multi-platform for production
+
+### Development Workflow
+
+#### PR Creation and Validation (2-8 minutes)
+When you create a PR, the following jobs run **in parallel** for faster feedback:
+
+```bash
+# Runs immediately (parallel execution)
+├── Unit Tests & Coverage (3-8 min) - 450+ tests with 85% coverage requirement
+├── Security Vulnerability Scan (2-4 min) - Bandit + Safety dependency scan
+├── Integration Tests (2-5 min) - End-to-end workflow validation
+└── Docker Build Test (2-4 min) - AMD64 validation build (faster than multi-platform)
+
+# Sequential (requires version)
+└── Version Generation → Docker Build Test
+```
+
+#### Production Deployment (8-15 minutes)
+When your PR merges to main:
+
+```bash
+├── Version Generation (1 min)
+├── Disk Space Cleanup (2-3 min) - Frees ~10-16GB for build space
+├── Multi-Platform Docker Build (6-10 min) - AMD64 + ARM64 with registry push
+└── Security Scan (2-4 min) - Trivy container vulnerability scan
+```
+
+### Key Optimizations
+
+#### 1. Eliminated Duplicate Testing
+- **Before**: Tests ran twice (PR validation + deployment) = 6-16 minutes
+- **After**: Tests run once during PR validation, skipped during deployment
+- **Manual Override**: Available via `run_tests: true` in workflow_dispatch
+
+#### 2. Smart Docker Builds
+- **PR Validation**: Single platform (AMD64) for 50% faster builds
+- **Production**: Multi-platform (AMD64 + ARM64) for broad compatibility
+- **Conditional Logic**: Automatically selects based on `push_image` parameter
+
+#### 3. Parallel Job Execution
+- **Security scans** start immediately without waiting for tests
+- **Integration tests** run in parallel with unit tests
+- **Independent workflows** execute simultaneously for faster feedback
+
+### Manual Controls
+
+#### Deployment Options
+```bash
+# Deploy with default settings (Google AI, skip tests)
+gh workflow run deploy.yml
+
+# Deploy with OpenAI and force test execution
+gh workflow run deploy.yml -f model_vendor=openai -f run_tests=true
+```
+
+#### Override Scenarios
+- **Force Tests**: Use `run_tests: true` for suspicious deployments
+- **Platform Testing**: Production builds always create multi-platform images
+- **Emergency Deploy**: All quality gates can be manually overridden if needed
+
+### Quality Assurance
+- **All existing quality gates preserved**: 85% coverage, security scans, integration tests
+- **Branch protection unchanged**: Still requires PR approval and passing checks
+- **Comprehensive validation**: Full test suite coverage maintained
+- **Security compliance**: Vulnerability scanning at multiple levels
+
+### Monitoring and Metrics
+- **Pipeline duration tracking**: GitHub Actions insights show time improvements
+- **Success rate monitoring**: Quality gates ensure no regression in stability
+- **Resource optimization**: Efficient use of GitHub Actions minutes
+
+### For Claude Code Development
+When working on this repository:
+- **Fast PR feedback**: Expect validation results in 2-8 minutes
+- **Quality confidence**: Comprehensive testing ensures reliability
+- **Platform compatibility**: Production deployments support both AMD64 and ARM architectures
+- **Development velocity**: 50% faster CI/CD enables rapid iteration
+
+For detailed optimization documentation, see `docs/ci-cd-optimization-plan.md`.

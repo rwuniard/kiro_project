@@ -73,7 +73,12 @@ jobs:
       run: |
         echo "🏷️ Building version: ${{ inputs.version }}"
         echo "🤖 Using model vendor: ${{ inputs.model_vendor }}"
-        echo "🏗️ Using optimized concurrent build with aggressive space management"
+
+        if [ "${{ inputs.push_image }}" = "true" ]; then
+          echo "🏗️ Production build: Multi-platform (AMD64 + ARM64) with registry push"
+        else
+          echo "🧪 PR validation build: Single platform (AMD64) for faster feedback"
+        fi
 
         # Pre-build cleanup to maximize available space
         echo "🧹 Pre-build cleanup..."
@@ -138,7 +143,7 @@ jobs:
       with:
         context: .
         file: ./docker_deployment/shared/Dockerfile
-        platforms: linux/amd64,linux/arm64  # Multi-platform support for Intel and ARM (Apple Silicon)
+        platforms: ${{ inputs.push_image && 'linux/amd64,linux/arm64' || 'linux/amd64' }}  # Multi-platform for production, single platform for PR validation
         push: ${{ inputs.push_image }}
         # Never load locally to avoid "no space left on device" errors
         # Production builds push to registry, PR builds just validate build success
@@ -181,17 +186,17 @@ jobs:
             python -c "import sys; print('🐍 Python version:', sys.version); print('🏷️ Image version: ${{ inputs.version }}'); exec('try:\\n    from src.app import FolderFileProcessorApp\\n    from src.config import ConfigManager\\n    from src.core import FileProcessor\\n    print(\"✅ Core modules import successfully\")\\nexcept ImportError as e:\\n    print(f\"❌ Import error: {e}\")\\n    sys.exit(1)\\nprint(\"✅ Docker registry image test passed\")')"
 
         else
-          echo "🧪 PR validation build - Build completed successfully"
-          echo "✅ Docker build validation passed without loading huge image locally"
-          echo "   (Avoids 'no space left on device' errors in CI)"
+          echo "🧪 PR validation build - Single platform validation completed"
+          echo "✅ Docker build validation passed (AMD64 platform)"
+          echo "✅ Dockerfile syntax and dependencies verified"
+          echo "✅ Build context and file access confirmed"
           echo ""
           echo "Build outputs:"
+          echo "- Platform: linux/amd64 (validation sufficient)"
           echo "- Image built successfully: ${{ inputs.image_name }}:${{ inputs.version }}"
-          echo "- Build context: Project root with docker_deployment/shared/Dockerfile"
-          echo "- Dockerfile validation: ✅ All required files accessible"
-          echo "- Dependencies installation: ✅ Completed during build"
+          echo "- Build time optimized for PR feedback speed"
           echo ""
-          echo "Note: Full integration testing happens on deployment to main branch"
+          echo "Note: Production deployment will build multi-platform (AMD64 + ARM64)"
         fi
 
     - name: Build summary
@@ -203,8 +208,14 @@ jobs:
         echo "- **Version**: \`${{ inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Model Vendor**: \`${{ inputs.model_vendor }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Environment**: \`${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Platforms**: \`linux/amd64, linux/arm64\` (concurrent with space optimization)" >> $GITHUB_STEP_SUMMARY
-        echo "- **Build Strategy**: Aggressive space management with minimal cache retention" >> $GITHUB_STEP_SUMMARY
+        # Dynamic platform reporting
+        if [ "${{ inputs.push_image }}" = "true" ]; then
+          echo "- **Platforms**: \`linux/amd64, linux/arm64\` (production multi-platform)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Strategy**: Multi-platform with aggressive space management" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Platforms**: \`linux/amd64\` (validation build)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Strategy**: Single platform for faster PR feedback" >> $GITHUB_STEP_SUMMARY
+        fi
         if [ "${{ inputs.push_image }}" = "true" ]; then
           echo "- **Registry Push**: ✅ Enabled" >> $GITHUB_STEP_SUMMARY
         else
