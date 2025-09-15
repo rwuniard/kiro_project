@@ -75,7 +75,7 @@ jobs:
         echo "🤖 Using model vendor: ${{ inputs.model_vendor }}"
 
         if [ "${{ inputs.push_image }}" = "true" ]; then
-          echo "🏗️ Production build: Sequential multi-platform (AMD64 → ARM64) with space recycling"
+          echo "🏗️ Production build: Sequential multi-platform (AMD64 → ARM64 → manifest) with space recycling"
         else
           echo "🧪 PR validation build: Single platform (AMD64) for faster feedback"
         fi
@@ -159,6 +159,35 @@ jobs:
         echo "docker_deployment/.dockerignore: $(test -f docker_deployment/.dockerignore && echo '✅ EXISTS' || echo '❌ MISSING')"
 
     # Sequential platform builds to prevent space exhaustion
+    - name: Generate platform-specific tags
+      id: platform-tags
+      if: inputs.push_image == true
+      run: |
+        BASE_TAGS="${{ steps.meta.outputs.tags }}"
+        AMD64_TAGS=""
+        ARM64_TAGS=""
+
+        # Convert base tags to platform-specific tags
+        while IFS= read -r tag; do
+          if [ -n "$tag" ]; then
+            AMD64_TAGS="${AMD64_TAGS}${tag}-amd64,"
+            ARM64_TAGS="${ARM64_TAGS}${tag}-arm64,"
+          fi
+        done <<< "$BASE_TAGS"
+
+        # Remove trailing commas
+        AMD64_TAGS="${AMD64_TAGS%,}"
+        ARM64_TAGS="${ARM64_TAGS%,}"
+
+        echo "amd64_tags=$AMD64_TAGS" >> $GITHUB_OUTPUT
+        echo "arm64_tags=$ARM64_TAGS" >> $GITHUB_OUTPUT
+        echo "final_tags=$BASE_TAGS" >> $GITHUB_OUTPUT
+
+        echo "🏷️ Platform-specific tags generated:"
+        echo "AMD64: $AMD64_TAGS"
+        echo "ARM64: $ARM64_TAGS"
+        echo "Final: $BASE_TAGS"
+
     - name: Build AMD64 platform
       id: build-amd64
       uses: docker/build-push-action@v5
@@ -168,7 +197,7 @@ jobs:
         platforms: linux/amd64
         push: ${{ inputs.push_image }}
         load: false
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ inputs.push_image && steps.platform-tags.outputs.amd64_tags || steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
@@ -195,12 +224,41 @@ jobs:
         platforms: linux/arm64
         push: ${{ inputs.push_image }}
         load: false
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.platform-tags.outputs.arm64_tags }}
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           VERSION=${{ inputs.version }}
         cache-from: type=gha
         cache-to: type=gha,mode=min
+
+    # Create multi-platform manifest
+    - name: Create multi-platform manifest
+      if: inputs.push_image == true
+      run: |
+        echo "🔗 Creating multi-platform manifest..."
+
+        # Get the tags we need to create manifests for
+        FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
+
+        while IFS= read -r tag; do
+          if [ -n "$tag" ]; then
+            echo "Creating manifest for: $tag"
+
+            # Create manifest list combining both platform-specific images
+            docker manifest create "$tag" \
+              "${tag}-amd64" \
+              "${tag}-arm64"
+
+            # Annotate platforms (optional but good practice)
+            docker manifest annotate "$tag" "${tag}-amd64" --arch amd64 --os linux
+            docker manifest annotate "$tag" "${tag}-arm64" --arch arm64 --os linux
+
+            # Push the manifest
+            docker manifest push "$tag"
+
+            echo "✅ Multi-platform manifest created and pushed: $tag"
+          fi
+        done <<< "$FINAL_TAGS"
 
     - name: Emergency post-build cleanup
       if: always()
@@ -266,7 +324,7 @@ jobs:
         # Dynamic platform reporting
         if [ "${{ inputs.push_image }}" = "true" ]; then
           echo "- **Platforms**: \`linux/amd64, linux/arm64\` (sequential multi-platform)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Strategy**: Sequential platform builds with space recycling" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Strategy**: Sequential builds with manifest creation and space recycling" >> $GITHUB_STEP_SUMMARY
         else
           echo "- **Platforms**: \`linux/amd64\` (validation build)" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Strategy**: Single platform for faster PR feedback" >> $GITHUB_STEP_SUMMARY
