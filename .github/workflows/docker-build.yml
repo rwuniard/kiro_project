@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_url: ${{ steps.meta.outputs.tags }}
-      image_digest: ${{ steps.build-amd64.outputs.digest }}
+      image_digest: ${{ steps.final-digest.outputs.digest }}
 
     steps:
     - name: Checkout code
@@ -233,12 +233,14 @@ jobs:
 
     # Create multi-platform manifest
     - name: Create multi-platform manifest
+      id: manifest
       if: inputs.push_image == true
       run: |
         echo "🔗 Creating multi-platform manifest..."
 
         # Get the tags we need to create manifests for
         FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
+        MANIFEST_DIGEST=""
 
         while IFS= read -r tag; do
           if [ -n "$tag" ]; then
@@ -253,12 +255,48 @@ jobs:
             docker manifest annotate "$tag" "${tag}-amd64" --arch amd64 --os linux
             docker manifest annotate "$tag" "${tag}-arm64" --arch arm64 --os linux
 
-            # Push the manifest
-            docker manifest push "$tag"
+            # Push the manifest and capture digest
+            PUSH_OUTPUT=$(docker manifest push "$tag" 2>&1)
+
+            # Extract digest from push output (format: sha256:...)
+            TAG_DIGEST=$(echo "$PUSH_OUTPUT" | grep -o 'sha256:[a-f0-9]*' | head -n1)
+
+            if [ -n "$TAG_DIGEST" ] && [ -z "$MANIFEST_DIGEST" ]; then
+              MANIFEST_DIGEST="$TAG_DIGEST"
+              echo "📝 Captured manifest digest: $MANIFEST_DIGEST"
+            fi
 
             echo "✅ Multi-platform manifest created and pushed: $tag"
+
+            # Verify manifest creation
+            docker manifest inspect "$tag" > /dev/null 2>&1 && echo "✅ Manifest verification passed" || echo "⚠️ Manifest verification failed"
           fi
         done <<< "$FINAL_TAGS"
+
+        # Set the manifest digest as output for job
+        if [ -n "$MANIFEST_DIGEST" ]; then
+          echo "digest=$MANIFEST_DIGEST" >> $GITHUB_OUTPUT
+          echo "🎯 Multi-platform manifest digest set as output: $MANIFEST_DIGEST"
+        else
+          echo "⚠️ Warning: Could not capture manifest digest"
+        fi
+
+    # Determine final digest for workflow output
+    - name: Set final digest output
+      id: final-digest
+      run: |
+        if [ "${{ inputs.push_image }}" = "true" ] && [ -n "${{ steps.manifest.outputs.digest }}" ]; then
+          # Use multi-platform manifest digest for production builds
+          FINAL_DIGEST="${{ steps.manifest.outputs.digest }}"
+          echo "🎯 Using multi-platform manifest digest: $FINAL_DIGEST"
+        else
+          # Use AMD64 digest for single-platform builds or if manifest digest unavailable
+          FINAL_DIGEST="${{ steps.build-amd64.outputs.digest }}"
+          echo "🎯 Using AMD64 platform digest: $FINAL_DIGEST"
+        fi
+
+        echo "digest=$FINAL_DIGEST" >> $GITHUB_OUTPUT
+        echo "✅ Final digest set for workflow output: $FINAL_DIGEST"
 
     - name: Emergency post-build cleanup
       if: always()
