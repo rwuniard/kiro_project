@@ -239,16 +239,29 @@ jobs:
       if: inputs.push_image == true
       run: |
         echo "🏷️ Creating platform-specific tags for AMD64..."
-        AMD64_TAGS="${{ steps.platform-tags.outputs.amd64_tags }}"
         FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
 
-        # Re-tag each image with platform-specific suffix
+        # Pull, tag, and push each image with platform-specific suffix
         while IFS= read -r tag; do
           if [ -n "$tag" ]; then
             tag=$(echo "$tag" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [ -n "$tag" ]; then
-              echo "Tagging $tag as ${tag}-amd64"
-              docker buildx imagetools create --tag "${tag}-amd64" "$tag"
+              echo "Processing tag: $tag"
+
+              # Pull the image to local registry
+              echo "Pulling $tag..."
+              docker pull "$tag" --platform linux/amd64
+
+              # Tag with platform-specific suffix
+              echo "Tagging as ${tag}-amd64..."
+              docker tag "$tag" "${tag}-amd64"
+
+              # Push platform-specific tag
+              echo "Pushing ${tag}-amd64..."
+              docker push "${tag}-amd64"
+
+              # Clean up local image to save space
+              docker rmi "$tag" "${tag}-amd64" || true
             fi
           fi
         done <<< "$FINAL_TAGS"
@@ -287,16 +300,29 @@ jobs:
       if: inputs.push_image == true
       run: |
         echo "🏷️ Creating platform-specific tags for ARM64..."
-        ARM64_TAGS="${{ steps.platform-tags.outputs.arm64_tags }}"
         FINAL_TAGS="${{ steps.platform-tags.outputs.final_tags }}"
 
-        # Re-tag each image with platform-specific suffix
+        # Pull, tag, and push each image with platform-specific suffix
         while IFS= read -r tag; do
           if [ -n "$tag" ]; then
             tag=$(echo "$tag" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [ -n "$tag" ]; then
-              echo "Tagging $tag as ${tag}-arm64"
-              docker buildx imagetools create --tag "${tag}-arm64" "$tag"
+              echo "Processing tag: $tag"
+
+              # Pull the image to local registry
+              echo "Pulling $tag..."
+              docker pull "$tag" --platform linux/arm64
+
+              # Tag with platform-specific suffix
+              echo "Tagging as ${tag}-arm64..."
+              docker tag "$tag" "${tag}-arm64"
+
+              # Push platform-specific tag
+              echo "Pushing ${tag}-arm64..."
+              docker push "${tag}-arm64"
+
+              # Clean up local image to save space
+              docker rmi "$tag" "${tag}-arm64" || true
             fi
           fi
         done <<< "$FINAL_TAGS"
